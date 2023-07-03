@@ -43,29 +43,41 @@ class MiAttack(ABC):
     """
 
     # define initialization with specifying the model access and the auxiliary information
-    def __init__(self, model_access: ModelAccess, auxiliary_info: AuxiliaryInfo):
-        self.model_access = model_access
+    def __init__(self, target_model_access: ModelAccess, auxiliary_info: AuxiliaryInfo, target_data=None):
+        """
+        Initialize the attack with model access and auxiliary information.
+        :param target_model_access:
+        :param auxiliary_info:
+        :param target_data: if target_data is not None, the attack could be data dependent. The target data is used to
+        develop the attack model or classifier.
+        """
+        self.target_model_access = target_model_access
         self.auxiliary_info = auxiliary_info
+        self.target_data = target_data
+
         self.aux_sample_signals = None
         self.aux_member_labels = None
         self.aux_sample_weights = None
 
     @abstractmethod
-    def prepare(self):
+    def prepare(self, attack_config: dict):
         """
-        Prepare the attack. The main body of the attack implementation. This function is called before the attack. It
-        uses model access to get signals from auxiliary information, and then uses the signals to train the attack.
+        Prepare the attack. This function is called before the attack. It may use model access to get signals
+        from auxiliary information, and then uses the signals to train the attack.
         Use the auxiliary information to build shadow models/shadow data/or any auxiliary modes/information
         that are needed for building attack model or decision function.
         require set the following attributes:
         self.aux_sample_signals: the signals from the auxiliary information.
         self.aux_member_labels: the labels of the auxiliary information.
         self.aux_sample_weights: the sample weights of the auxiliary information.
+
+        :param attack_config: the configuration/hyperparameters of the attack. It is a dictionary containing the necessary
+        information. For example, the number of shadow models, the number of shadow data, etc.
         :return: everything that is needed for building attack model or decision function.
         """
         pass
 
-    def build_attack_classifier(self, config: dict) -> AttackClassifier:
+    def build_attack_classifier(self, classifer_config: dict) -> AttackClassifier:
         """
         Build the attack model. This function is called after the prepare method. It uses the signals from the
         auxiliary information to build the attack model.
@@ -74,15 +86,15 @@ class MiAttack(ABC):
         parameter grid for grid search, etc. see attack_classifier.py for more details.
         :return: the attack model.
         """
-        attack_classifier_type = config.get('attack_classifier_type')
+        attack_classifier_type = classifer_config.get('attack_classifier_type')
         if attack_classifier_type is None:
             raise ValueError("Attack classifier type is not specified.")
         if attack_classifier_type == AttackType.LOGISTIC_REGRESSION.value:
-            attack_classifier = LrAC(config)
+            attack_classifier = LrAC(classifer_config)
         elif attack_classifier_type == AttackType.MULTI_LAYERED_PERCEPTRON.value:
-            attack_classifier = MlpAC(config)
+            attack_classifier = MlpAC(classifer_config)
         elif attack_classifier_type == AttackType.RANDOM_FOREST.value:
-            attack_classifier = RandomForestAC(config)
+            attack_classifier = RandomForestAC(classifer_config)
         attack_classifier.build_classifier(self.aux_sample_signals, self.aux_member_labels, self.aux_sample_weights)
         self.attack_classifier = attack_classifier
         return attack_classifier
