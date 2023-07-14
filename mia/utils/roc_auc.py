@@ -12,12 +12,12 @@ def sweep(score: np.ndarray, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray, flo
     Compute a Receiver Operating Characteristic (ROC) curve.
 
     Args:
-    score (np.ndarray): The predicted scores.
-    x (np.ndarray): The ground truth labels.
+        score (np.ndarray): The predicted scores.
+        x (np.ndarray): The ground truth labels.
 
     Returns:
-    Tuple[np.ndarray, np.ndarray, float, float]: The False Positive Rate (FPR),
-    True Positive Rate (TPR), Area Under the Curve (AUC), and Accuracy.
+        Tuple[np.ndarray, np.ndarray, float, float]: The False Positive Rate (FPR),
+        True Positive Rate (TPR), Area Under the Curve (AUC), and Accuracy.
     """
     fpr, tpr, _ = roc_curve(x, -score)
     acc = np.max(1 - (fpr + (1 - tpr)) / 2)
@@ -33,13 +33,13 @@ def do_plot(prediction: np.ndarray,
     Generate the ROC curves.
 
     Args:
-    prediction (np.ndarray): The predicted scores.
-    answers (np.ndarray): The ground truth labels.
-    legend (str, optional): Legend for the plot. Defaults to ''.
-    sweep_fn (Callable, optional): Function used to compute the ROC curve. Defaults to sweep.
+        prediction (np.ndarray): The predicted scores.
+        answers (np.ndarray): The ground truth labels.
+        legend (str, optional): Legend for the plot. Defaults to ''.
+        sweep_fn (Callable, optional): Function used to compute the ROC curve. Defaults to sweep.
 
     Returns:
-    Tuple[float, float]: Accuracy and Area Under the Curve (AUC).
+        Tuple[float, float]: Accuracy and Area Under the Curve (AUC).
     """
     fpr, tpr, auc, acc = sweep_fn(np.array(prediction), np.array(answers, dtype=bool))
 
@@ -65,14 +65,14 @@ def fig_fpr_tpr(predictions: List[np.ndarray],
     legends.
 
     Args:
-    predictions (List[np.ndarray]): List of prediction arrays.
-    answers (List[np.ndarray]): Corresponding list of true answers arrays.
-    legends (List[str]): List of legends for each prediction-answer pair.
-    save_dir (str, optional): Directory where to save the plot. Defaults to None.
-    title (str, optional): Title of the plot. Defaults to "ROC AUC Plot".
+        predictions (List[np.ndarray]): List of prediction arrays.
+        answers (List[np.ndarray]): Corresponding list of true answers arrays.
+        legends (List[str]): List of legends for each prediction-answer pair.
+        save_dir (str, optional): Directory where to save the plot. Defaults to None.
+        title (str, optional): Title of the plot. Defaults to "ROC AUC Plot".
 
     Returns:
-    None
+        None
     """
     plt.figure(figsize=(6, 5))
     plt.title(title)
