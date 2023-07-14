@@ -1,6 +1,6 @@
 # A set of typical model candidates that can be trained for the inference attacks, including  KNN< randome forest, neural network,
 # logistic regression, decision tree, etc. This class is modified from the code from
-#     tensorflow_privacy/privacy/privacy_tests/membership_inference_attack/models.py
+#     tensorflow_privacy/privacy/privacy_tests/membership_inference_attack/sample_metrics_models.py
 from abc import ABC, abstractmethod
 import contextlib
 import logging
