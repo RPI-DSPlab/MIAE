@@ -46,7 +46,7 @@ class AttackClassifier(ABC):
         """
         Build the attack model.
         :param input_features: the input features.
-        :param member_labels: a vector of booleans indicating if a sample is a member of training dataset or not.
+        :param member_labels: a vector of booleans indicating if a sample is a member of training datasets or not.
         1-member 0-non-member.
         :param sample_weight: the sample weight.
         :return: the attack model. If it is a threshold based classifier, it returns a threshold function.
@@ -60,7 +60,7 @@ class AttackClassifier(ABC):
         """
         Predict the membership of the input features.
         :param input_features: the input features.
-        :return: a vector of binary or probabilities denoting whether an example belongs to the training dataset.
+        :return: a vector of binary or probabilities denoting whether an example belongs to the training datasets.
         """
         if self.model is None:
             raise ValueError('Model is not trained yet.')
