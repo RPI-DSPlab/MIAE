@@ -2,15 +2,15 @@ from abc import ABC, abstractmethod
 from torch.utils.data import DataLoader
 
 
-class AbstractAnomalyDetectionDataset(ABC):
+class AbstractGeneralDataset(ABC):
     """
-    Base class for anomaly detection datasets.
+    Base class datasets for general purpose.
     This class defines the basic structure for datasets to be used in anomaly detection tasks.
     """
 
     def __init__(self, root_directory: str):
         """
-        Initialize the AbstractAnomalyDetectionDataset instance.
+        Initialize the Dataset instance.
 
         Args:
             root_directory (str): The root directory path where the datasets is located.
@@ -26,11 +26,11 @@ class AbstractAnomalyDetectionDataset(ABC):
         self.testing_set = None  # must be of type torch.utils.data.Dataset
 
     @abstractmethod
-    def create_data_loaders(self,
-                            batch_size: int,
-                            shuffle_training_data=True,
-                            shuffle_testing_data=False,
-                            number_of_workers: int = 0) -> (DataLoader, DataLoader):
+    def loaders(self,
+                batch_size: int,
+                shuffle_training_data=True,
+                shuffle_testing_data=False,
+                number_of_workers: int = 0) -> (DataLoader, DataLoader):
         """
         Abstract method to implement data loaders of type torch.utils.data.DataLoader for the training and testing sets.
 

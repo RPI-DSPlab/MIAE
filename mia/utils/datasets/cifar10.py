@@ -1,4 +1,3 @@
-from torch.utils.data import Subset
 from PIL import Image
 from torchvision.datasets import CIFAR10
 from utils.datasets.torchvision_dataset import PredefinedTorchvisionDataset
@@ -19,11 +18,11 @@ class CIFAR10Dataset(PredefinedTorchvisionDataset):
         super().__init__(root_directory)
 
         # Create training set
-        self.train_set = IndexedCIFAR10(root=self.root, train=True, download=True,
-                                           transform=transform, target_transform=target_transform)
+        self.train_set = IndexedCIFAR10(root=root_directory, train=True, download=True,
+                                        transform=transform, target_transform=target_transform)
 
         # Create test set
-        self.test_set = IndexedCIFAR10(root=self.root, train=False, download=True,
+        self.test_set = IndexedCIFAR10(root=root_directory, train=False, download=True,
                                        transform=transform, target_transform=target_transform)
 
 

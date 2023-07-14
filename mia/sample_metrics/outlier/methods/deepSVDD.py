@@ -14,40 +14,6 @@ from torch.utils.data import Subset
 import torchvision.transforms as transforms
 
 
-def calculate_label_score(data, deep_svdd):
-    """
-    Calculate labels and scores for given data.
-
-    Parameters:
-    data (Tuple[torch.Tensor]): Tuple of inputs, labels and indices from the DataLoader.
-        inputs (torch.Tensor): Input data.
-        labels (torch.Tensor): Ground truth labels.
-        idx (torch.Tensor): Indices of the data.
-    deepSVDD (DeepSVDD): The neural network model to use for prediction.
-
-    Returns:
-    List[Tuple[int, int, float]]: List of tuples with indices, labels and calculated scores.
-    """
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    R = torch.tensor(deep_svdd.R, device=device)  # radius R initialized with 0 by default.
-    c = torch.tensor(deep_svdd.c, device=device) if deep_svdd.c is not None else None
-    nu = deep_svdd.nu
-
-    inputs, labels, idx = data
-    inputs = inputs.to(device)
-    net = deep_svdd.net.to(device)
-    outputs = net(inputs)
-    dist = torch.sum((outputs - c) ** 2, dim=1)
-
-    if deep_svdd.objective == 'soft-boundary':
-        scores = dist - R ** 2
-    else:
-        scores = dist
-
-    return idx.cpu().data.numpy().tolist(), labels.cpu().data.numpy().tolist(), scores.cpu().data.numpy().tolist()
-
-
 class DeepSVDD(OutlierDetectionMetric):
     """
     A class used to represent an Outlier Detection Metric using deep SVDD.
@@ -65,7 +31,6 @@ class DeepSVDD(OutlierDetectionMetric):
             config (dict): A dictionary containing the configuration parameters for deep SVDD.
         """
         super().__init__(config)
-        self.config = config
         self.deep_SVDD = None
 
         self.num_classes = 2  # 0: normal, 1: outlier
@@ -105,12 +70,38 @@ class DeepSVDD(OutlierDetectionMetric):
         normal_class_indices = find_target_label_indices(self.dataset.train_set.targets, self.normal_classes)
         self.dataset.train_set = Subset(self.dataset.train_set, normal_class_indices)
 
+    def calculate_label_score(self, data):
+        """
+        Calculate labels and scores for given data.
+
+        Parameters:
+        data (Tuple[torch.Tensor]): Tuple of inputs, labels and indices from the DataLoader.
+            inputs (torch.Tensor): Input data.
+            labels (torch.Tensor): Ground truth labels.
+            idx (torch.Tensor): Indices of the data.
+        net (BaseNet): The neural network model to use for prediction.
+
+        Returns:
+        List[Tuple[int, int, float]]: List of tuples with indices, labels and calculated scores.
+        """
+        inputs, labels, idx = data
+        inputs = inputs.to(self.config['device'])
+        outputs = self.deep_SVDD.net(inputs)
+        dist = torch.sum((outputs - torch.tensor(self.deep_SVDD.c).to(self.config['device'])) ** 2, dim=1)
+
+        if self.config['objective'] == 'soft-boundary':
+            scores = dist - self.deep_SVDD.R ** 2
+        else:
+            scores = dist
+
+        # Save triples of (idx, label, score) in a list
+        return idx.cpu().data.numpy().tolist(), \
+            labels.cpu().data.numpy().tolist(), \
+            scores.cpu().data.numpy().tolist()
+
     def fit(self):
         """
         Fit the model using data as training input.
-
-        Args:
-            data: Training data.
         """
 
         # Set up logging
@@ -207,9 +198,6 @@ class DeepSVDD(OutlierDetectionMetric):
         """
         Compute the outlier detection metric on the provided data.
 
-        Args:
-            data: The data on which to compute the outlier detection metric.
-
         Returns:
             np.array: Predicted values for the data.
         """
@@ -234,14 +222,14 @@ class DeepSVDD(OutlierDetectionMetric):
         all_scores = []
         with torch.no_grad():
             for data in train_loader:
-                index, label, score = calculate_label_score(data, self.deep_SVDD)
+                index, label, score = self.calculate_label_score(data)
                 # create a dictionary for each data instance
                 # value = data[0].reshape(data[0].shape[0], -1)
                 data_dict = {'Index': index[0], 'Label': label[0], 'Score': score[0]}
                 all_scores.append(data_dict)
 
             for data in test_loader:
-                index, label, score = calculate_label_score(data, self.deep_SVDD)
+                index, label, score = self.calculate_label_score(data)
                 # create a dictionary for each data instance
                 # value = data[0].reshape(data[0].shape[0], -1)
                 data_dict = {'Index': index[0], 'Label': label[0], 'Score': score[0]}
@@ -254,6 +242,24 @@ class DeepSVDD(OutlierDetectionMetric):
         logger.info("Anomaly scores saved to %s." % (self.config['save_path'] +
                                                      f"/class_{self.config['normal_class']}_outlier_scores.csv"))
 
+    def validate_config(self):
+        required_keys = ["dataset_name", "net_name", "load_model", "xp_path", "data_path", "objective", "nu",
+                         "device",
+                         "seed", "optimizer_name", "lr", "n_epochs", "lr_milestone", "batch_size",
+                         "weight_decay",
+                         "pretrain", "ae_optimizer_name", "ae_lr", "ae_n_epochs", "ae_lr_milestone",
+                         "ae_batch_size",
+                         "ae_weight_decay", "n_jobs_dataloader", "normal_class", "save_path"]
+
+        for key in required_keys:
+            if key not in self.config:
+                raise ValueError(f"Missing key in config: {key}")
+
+        # TODO: Further validation could be done here, such as checking the types of the values,
+        # TODO: or checking if the values fall within expected ranges.
+
+        return True
+
 
 if __name__ == "__main__":
     sample_config = {
@@ -265,22 +271,24 @@ if __name__ == "__main__":
         "objective": "one-class",
         "nu": 0.1,
         "device": "cuda",
-        "seed": -1,
+        "seed": 90,
         "optimizer_name": "adam",
         "lr": 0.001,
-        "n_epochs": 50,
+        "n_epochs": 2,
         "lr_milestone": [50],
         "batch_size": 128,
         "weight_decay": 1e-6,
         "pretrain": True,
         "ae_optimizer_name": "adam",
         "ae_lr": 0.001,
-        "ae_n_epochs": 100,
+        "ae_n_epochs": 1,
         "ae_lr_milestone": [0],
         "ae_batch_size": 128,
         "ae_weight_decay": 1e-6,
         "n_jobs_dataloader": 0,
-        "normal_class": 0
+        "normal_class": 0,
+        "save_path": "./"
     }
     deepSvdd = DeepSVDD(sample_config)
     deepSvdd.fit()
+    deepSvdd.compute_metric()

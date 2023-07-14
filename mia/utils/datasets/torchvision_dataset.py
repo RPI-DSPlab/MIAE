@@ -1,8 +1,8 @@
-from base import BaseADDataset
+from utils.datasets.base import AbstractGeneralDataset
 from torch.utils.data import DataLoader
 
 
-class PredefinedTorchvisionDataset(BaseADDataset):
+class PredefinedTorchvisionDataset(AbstractGeneralDataset):
     """
     Class for handling datasets predefined in torchvision.datasets.
     Extends the BaseADDataset class.

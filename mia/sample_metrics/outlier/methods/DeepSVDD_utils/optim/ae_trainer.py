@@ -1,5 +1,5 @@
 from base.base_trainer import BaseTrainer
-from base.base_dataset import BaseADDataset
+from utils.datasets.base import AbstractGeneralDataset
 from base.base_net import BaseNet
 from sklearn.metrics import roc_auc_score
 
@@ -17,7 +17,7 @@ class AETrainer(BaseTrainer):
         super().__init__(optimizer_name, lr, n_epochs, lr_milestones, batch_size, weight_decay, device,
                          n_jobs_dataloader)
 
-    def train(self, dataset: BaseADDataset, ae_net: BaseNet):
+    def train(self, dataset: AbstractGeneralDataset, ae_net: BaseNet):
         logger = logging.getLogger()
 
         # Set device for network
@@ -83,7 +83,7 @@ class AETrainer(BaseTrainer):
 
         return ae_net
 
-    def test(self, dataset: BaseADDataset, ae_net: BaseNet, is_during_train: bool):
+    def test(self, dataset: AbstractGeneralDataset, ae_net: BaseNet, is_during_train: bool):
         logger = logging.getLogger()
 
         # Set device for network

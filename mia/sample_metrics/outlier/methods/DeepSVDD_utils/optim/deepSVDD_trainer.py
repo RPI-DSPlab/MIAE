@@ -1,5 +1,5 @@
 from base.base_trainer import BaseTrainer
-from base.base_dataset import BaseADDataset
+from utils.datasets.base import AbstractGeneralDataset
 from base.base_net import BaseNet
 from torch.utils.data.dataloader import DataLoader
 from sklearn.metrics import roc_auc_score
@@ -36,7 +36,7 @@ class DeepSVDDTrainer(BaseTrainer):
         self.test_time = None
         self.test_scores = None
 
-    def train(self, dataset: BaseADDataset, net: BaseNet):
+    def train(self, dataset: AbstractGeneralDataset, net: BaseNet):
         logger = logging.getLogger()
 
         # Set device for network
@@ -147,7 +147,7 @@ class DeepSVDDTrainer(BaseTrainer):
 
         return idx_label_score
 
-    def test(self, dataset: BaseADDataset, net: BaseNet, is_during_train: bool):
+    def test(self, dataset: AbstractGeneralDataset, net: BaseNet, is_during_train: bool):
         """
         Test the model with the provided datasets.
 

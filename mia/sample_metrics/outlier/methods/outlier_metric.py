@@ -17,6 +17,8 @@ class OutlierDetectionMetric(ExampleMetric):
             config (dict): A dictionary containing the configuration parameters for OneClassSVM.
         """
         super().__init__()
+        self.config = config
+        self.validate_config()
 
     def fit(self):
         """
@@ -37,3 +39,13 @@ class OutlierDetectionMetric(ExampleMetric):
                                  OutlierDetectionMetric.
         """
         raise NotImplementedError("The 'compute_metric' method must be implemented by the subclass.")
+
+    def validate_config(self):
+        """
+        Check the validity of config files
+
+        Raises:
+            NotImplementedError: This method needs to be implemented by any class that inherits from
+                                 OutlierDetectionMetric.
+        """
+        raise NotImplementedError("The 'validate_config' method must be implemented by the subclass.")

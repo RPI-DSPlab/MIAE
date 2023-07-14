@@ -1,7 +1,7 @@
 import json
 import torch
 
-from base.base_dataset import BaseADDataset
+from utils.datasets.base import AbstractGeneralDataset
 from networks.main import build_network, build_autoencoder
 from optim.deepSVDD_trainer import DeepSVDDTrainer
 from optim.ae_trainer import AETrainer
@@ -57,7 +57,7 @@ class DeepSVDDNet(object):
         self.net_name = net_name
         self.net = build_network(net_name)
 
-    def train(self, dataset: BaseADDataset, optimizer_name: str = 'adam', lr: float = 0.001, n_epochs: int = 50,
+    def train(self, dataset: AbstractGeneralDataset, optimizer_name: str = 'adam', lr: float = 0.001, n_epochs: int = 50,
               lr_milestones: tuple = (), batch_size: int = 128, weight_decay: float = 1e-6, device: str = 'cuda',
               n_jobs_dataloader: int = 0):
         """Trains the Deep SVDD model on the training data."""
@@ -72,7 +72,7 @@ class DeepSVDDNet(object):
         self.c = self.trainer.c.cpu().data.numpy().tolist()  # get list
         self.results['train_time'] = self.trainer.train_time
 
-    def test(self, dataset: BaseADDataset, device: str = 'cuda', n_jobs_dataloader: int = 0):
+    def test(self, dataset: AbstractGeneralDataset, device: str = 'cuda', n_jobs_dataloader: int = 0):
         """Tests the Deep SVDD model on the test data."""
 
         if self.trainer is None:
@@ -85,7 +85,7 @@ class DeepSVDDNet(object):
         self.results['test_time'] = self.trainer.test_time
         self.results['test_scores'] = self.trainer.test_scores
 
-    def pretrain(self, dataset: BaseADDataset, optimizer_name: str = 'adam', lr: float = 0.001, n_epochs: int = 100,
+    def pretrain(self, dataset: AbstractGeneralDataset, optimizer_name: str = 'adam', lr: float = 0.001, n_epochs: int = 100,
                  lr_milestones: tuple = (), batch_size: int = 128, weight_decay: float = 1e-6, device: str = 'cuda',
                  n_jobs_dataloader: int = 0):
         """Pretrains the weights for the Deep SVDD network \phi via autoencoder."""
