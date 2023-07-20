@@ -27,3 +27,19 @@ and validation splits. This leads to two notions of computational difficulty:
 • The difficulty of making a prediction for an input, unseen in advance (from the validation split)
 We examine both notions of computational difficulty in this paper and use the distinction between them to
 describe different forms of example difficulty in Section 
+
+
+## Iteration Learned `iteration_learned.py`
+Link to the paper: [An Empirical Study of Example Forgetting during Deep Neural Network Learning](https://arxiv.org/abs/1812.05159)
+
+This metric is defined to help understand the iteration of training it takes for a model
+to learn an example in a dataset. It could also be used to measure the harness of an example. 
+The metric is defined as follows:
+
+> A data point is said to be learned by a classifier at training iteration $t = \tau$ if the predicted
+class at iteration $t = \tau − 1$ is different from the final prediction of the converged network and the
+predictions at all iterations $t ≥ \tau$ are equal to the final prediction of the converged network. Data
+points consistently classified after all training steps and at the moment of initialization, are said to be
+learned in step $t = 0$.
+
+
