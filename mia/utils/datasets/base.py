@@ -48,6 +48,15 @@ class AbstractGeneralDataset(ABC):
         """
         pass
 
+    def get_num_classes(self) -> int:
+        """
+        Get the number of classes in the datasets.
+
+        Returns:
+            int: The number of classes in the datasets.
+        """
+        return self.number_of_classes
+
     def __repr__(self) -> str:
         """
         String representation of the AbstractAnomalyDetectionDataset instance.

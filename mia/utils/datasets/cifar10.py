@@ -1,6 +1,6 @@
 from PIL import Image
 from torchvision.datasets import CIFAR10
-from utils.datasets.torchvision_dataset import PredefinedTorchvisionDataset
+from torchvision_dataset import PredefinedTorchvisionDataset
 
 
 class CIFAR10Dataset(PredefinedTorchvisionDataset):
