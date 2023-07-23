@@ -1,17 +1,16 @@
 import collections
 import copy
 import time
+from abc import ABC
+
 import torch.nn.functional as F
 from tqdm import tqdm
-
 from base import ExampleMetric
 import sys
 import torch
 import os
 import numpy as np
 import json
-import random
-import warnings
 
 sys.path.append("..")
 from ..utils import models as smmodels
@@ -19,20 +18,7 @@ from ..utils import datasets as smdatasets
 import sm_util
 
 
-def set_seed(seed=1234):
-    if seed is not None:
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        # torch.backends.cudnn.deterministic = True
-        warnings.warn('You have chosen to seed training. '
-                      'This will turn on the CUDNN deterministic setting, '
-                      'which can slow down your training considerably! '
-                      'You may see unexpected behavior when restarting '
-                      'from checkpoints.')
-
-
-class PdHardness(ExampleMetric):
+class PdHardness(ExampleMetric, ABC):
     """Compute the hardness of a dataset based on the prediction depth metric"""
 
     def __init__(self, config: dict, model: smmodels, dataset: smdatasets):
@@ -46,10 +32,6 @@ class PdHardness(ExampleMetric):
         self.testloader2 = None  # support dataset for prediction depth's KNN prediction
         self.ready = False  # whether the metric is ready to be used (True means it's trained or loaded from a checkpoint)
 
-        if "model" not in config:
-            raise ValueError("Model not specified")
-        if "dataset" not in config:
-            raise ValueError("Dataset not specified")
         if "crit" not in config:
             raise ValueError("Criterion not specified")
         if "optimizer" not in config:
@@ -89,10 +71,6 @@ class PdHardness(ExampleMetric):
         else:
             raise NotImplementedError("Optimizer {} not implemented".format(config.optimizer))
 
-        if torch.cuda.is_available():
-            self.device = torch.device('cuda')
-        else:
-            self.device = torch.device('cpu')
 
     def _knn_predict(self, feature, feature_bank, feature_labels, classes, knn_k, knn_t, rm_top1=True, dist='l2'):
         """
@@ -290,9 +268,7 @@ class PdHardness(ExampleMetric):
         seeds = self.config["seeds"]
         model_copy = copy.deepcopy(self.model)  # we need to copy the model because we will train it multiple times
         for seed in seeds:
-            set_seed(seed)
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            sm_util.set_seed(seed)
             model_copy = model_copy.to(self.device)
             # train the model
             model_copy, history = self._trainer(model_copy)

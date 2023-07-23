@@ -10,9 +10,4 @@ sys.path.append("..")
 from ..utils import models as smmodels
 from ..utils import datasets as smdatasets
 
-class IterHardness(ExampleMetric):
-    def __init__(self):
-        pass
 
-    def compute_metric(self):
-        pass

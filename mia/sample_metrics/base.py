@@ -24,7 +24,7 @@ class ExampleMetric(ABC):
         pass
 
     @abstractmethod
-    def load(self, path):
+    def load_metric(self, path):
         """
         load the metric from the path
         :param path: path to load the metric
