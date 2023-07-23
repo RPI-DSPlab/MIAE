@@ -1,3 +1,5 @@
+import torch
+
 from attack_classifier import *
 
 class ModelAccessType(Enum):
@@ -34,7 +36,16 @@ class ModelAccess(ABC):
         :param data:
         :return:
         """
-        pass
+        if self.access_type == ModelAccessType.BLACK_BOX:
+            with torch.no_grad():
+                return self.model(data)
+        elif self.access_type in [ModelAccessType.WHITE_BOX, ModelAccessType.GRAY_BOX]:
+            # Here, we assume that the white-box or gray-box access allows us to get
+            # additional information from the model. What information we get will depend
+            # on the specifics of the LIRA attack and the model.
+            raise NotImplementedError("White-box and gray-box access not implemented.")
+        else:
+            raise ValueError(f"Unknown access type: {self.access_type}")
 
 
 class MiAttack(ABC):
