@@ -7,9 +7,9 @@ from sample_metrics.outlier.methods.oneClassSVM import OneClassSVM
 class OutlierDetectionLoader:
     def __init__(self, model_type):
         self.model_type = model_type
-        self.config = self.generate_default_config()
+        self.config = self.use_default_config()
 
-    def generate_default_config(self):
+    def use_default_config(self):
         if self.model_type == 'OneClassSVM':
             return {
                 'nu': 0.1,
