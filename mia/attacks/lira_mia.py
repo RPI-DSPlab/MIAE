@@ -317,6 +317,8 @@ class LiraMiAttack(MiAttack):
         Implement the prepare method for Lira.
         """
         # 1. train the model and save them
+        # shadow model 可以保留
+        # 为达到效果： 允许user override该function
         LIRAUtil.train_models(info=self.auxiliary_info, is_shadow=True)
         LIRAUtil.train_models(info=self.auxiliary_info, is_shadow=False)
 

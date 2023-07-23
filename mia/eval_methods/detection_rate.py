@@ -8,10 +8,12 @@ from torch.utils.data import ConcatDataset
 from sample_metrics.base import ExampleMetric
 from utils.datasets.loader import load_dataset
 
+
 def _normalize(lst):
     min_val = min(lst)
     max_val = max(lst)
     return [(x - min_val) / (max_val - min_val) for x in lst]
+
 
 class DetectionRate(ExampleMetric):
     def __init__(self, config):
