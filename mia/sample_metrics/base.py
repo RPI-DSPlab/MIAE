@@ -1,12 +1,21 @@
+import pickle
 from abc import ABC, abstractmethod
 
 
 class ExampleMetric(ABC):
-    def __init__(self):
-        pass
+    def __init__(self, config):
+        """
+        Initialize the OutlierDetectionMetric instance by invoking the initialization method of the superclass.
+
+        Args:
+            config (dict): A dictionary containing the configuration parameters for OneClassSVM.
+        """
+        super().__init__()
+        self.config = config
+        self.validate_config()
 
     @abstractmethod
-    def get_score(self, idx: int, train: bool):
+    def get_score(self, idx: int):
         """
         get the score of the metric for the sample with index idx
         :param idx: index of the sample
@@ -30,3 +39,13 @@ class ExampleMetric(ABC):
         :param path: path to load the metric
         """
         pass
+
+    def validate_config(self):
+        """
+        Check the validity of config files
+
+        Raises:
+            NotImplementedError: This method needs to be implemented by any class that inherits from
+                                 OutlierDetectionMetric.
+        """
+        raise NotImplementedError("The 'validate_config' method must be implemented by the subclass.")
