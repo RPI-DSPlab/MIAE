@@ -12,16 +12,16 @@ import os
 import numpy as np
 import json
 
-sys.path.append("..")
-from ..utils import models as smmodels
-from ..utils import datasets as smdatasets
+from utils import models as smmodels
+from utils import datasets as smdatasets
+from sample_metrics.sample_metrics_config.prediction_depth_config import PredictionDepthConfig
 import sm_util
 
 
 class PdHardness(ExampleMetric, ABC):
     """Compute the hardness of a dataset based on the prediction depth metric"""
 
-    def __init__(self, config: dict, model: smmodels, dataset: smdatasets):
+    def __init__(self, config: PredictionDepthConfig, model: smmodels, dataset: smdatasets):
         """Initialize the metric with the configuration"""
         super().__init__()
         self.config = config
@@ -32,16 +32,7 @@ class PdHardness(ExampleMetric, ABC):
         self.testloader2 = None  # support dataset for prediction depth's KNN prediction
         self.ready = False  # whether the metric is ready to be used (True means it's trained or loaded from a checkpoint)
 
-        if "crit" not in config:
-            raise ValueError("Criterion not specified")
-        if "optimizer" not in config:
-            raise ValueError("Optimizer not specified")
-        if "lr" not in config:
-            raise ValueError("Learning rate not specified")
-        if "save_path" not in config:
-            raise ValueError("Save path not specified")
-
-        self.save_path = config["save_path"]  # path to save the model and results
+        self.save_path = config.save_path  # path to save the model and results
         if not os.path.exists(self.save_path):
             os.makedirs(self.save_path)
         self.modelckps = os.path.join(self.save_path, "modelckps")  # path to save the model checkpoints
@@ -55,18 +46,18 @@ class PdHardness(ExampleMetric, ABC):
             os.makedirs(self.result_avg_path)
 
         self.model = model
-        self.trainloader, self.testloader = dataset.loaders(batch_size=config["batch_size"], shuffle_train=True,
+        self.trainloader, self.testloader = dataset.loaders(batch_size=config.batch_size, shuffle_train=True,
                                                             shuffle_test=False)
-        self.trainloader2, self.testloader2 = dataset.loaders(batch_size=config["batch_size"], shuffle_train=True,
+        self.trainloader2, self.testloader2 = dataset.loaders(batch_size=config.batch_size, shuffle_train=True,
                                                               shuffle_test=False)
 
-        if config["crit"] == 'cross_entropy':
+        if config.crit == 'cross_entropy':
             self.criterion = torch.nn.CrossEntropyLoss()
         else:
             raise NotImplementedError("Criterion {} not implemented".format(config.crit))
 
-        if config["optimizer"] == 'sgd':
-            self.optimizer = torch.optim.SGD(self.model.parameters(), lr=config["lr"], momentum=0.9,
+        if config.optimizer == 'sgd':
+            self.optimizer = torch.optim.SGD(self.model.parameters(), lr=config.lr, momentum=0.9,
                                              weight_decay=5e-4)
         else:
             raise NotImplementedError("Optimizer {} not implemented".format(config.optimizer))
@@ -126,12 +117,13 @@ class PdHardness(ExampleMetric, ABC):
 
         return knn_scores
 
-    def _get_feature_bank_from_kth_layer(self, model, dataloader, k, args):
+    def _get_feature_bank_from_kth_layer(self, model, dataloader, k, config):
         """
         Get feature bank from kth layer of the model
         :param model: the model
         :param dataloader: the dataloader
         :param k: the kth layer
+        :param config: the configuration object
         :return: the feature bank (k-th layer feature for each datapoint) and
                 the all label bank (ground truth label for each datapoint)
         """
@@ -146,7 +138,7 @@ class PdHardness(ExampleMetric, ABC):
 
         return fms, all_label  # somehow, the shape of fms is (number of image) * (it's feature map size)
 
-    def _get_knn_prds_k_layer(self, model, evaloader, floader, k, args: dict, rm_top=True):
+    def _get_knn_prds_k_layer(self, model: smmodels, evaloader, floader, k, config: PredictionDepthConfig, rm_top=True):
         """
         Get the knn predictions for the kth layer
         :param model: the model
@@ -160,22 +152,16 @@ class PdHardness(ExampleMetric, ABC):
 
         f_bank, all_labels = self._get_feature_bank_from_kth_layer(model, floader,
                                                                    k,
-                                                                   args)  # get the feature bank and all labels for the support set
+                                                                   config)  # get the feature bank and all labels for the support set
         f_bank = f_bank.t().contiguous()
         with torch.no_grad():
             for j, ((imgs, labels), idx) in enumerate(evaloader):
                 imgs = imgs.cuda(non_blocking=True)
                 labels_b = labels.cuda(non_blocking=True)
-                nm_cls = args["num_classes"]
+                nm_cls = model.get_num_classes()
                 _, inp_f_curr = model(imgs, k, train=False)
-                """
-                Explanation of the following function:
-                knn_predict(inp_f_curr, f_bank, all_labels, classes=nm_cls, knn_k=args.knn_k, knn_t=1, rm_top1=train_split)
-                inp_f_curr is the feature of the image (batch of images) we want to predict it's label
-                f_bank is the feature bank of the support set, and we know its ground truth label given all_labels
-                We want to use information from the support set (f_bank) to predict the label of the image (inp_f_curr)
-                """
-                knn_scores = self._knn_predict(inp_f_curr, f_bank, all_labels, classes=nm_cls, knn_k=args["knn_k"],
+
+                knn_scores = self._knn_predict(inp_f_curr, f_bank, all_labels, classes=nm_cls, knn_k=config.knn_k,
                                                knn_t=1,
                                                rm_top1=rm_top)  # B x C
                 knn_probs = F.normalize(knn_scores, p=1, dim=1)
@@ -207,12 +193,12 @@ class PdHardness(ExampleMetric, ABC):
         criterion = self.criterion
         optimizer = self.optimizer
         device = self.device
-        args = self.config
+        config = self.config
         curr_iteration = 0
-        cos_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args["num_epochs"])
+        cos_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.num_epochs)
         history = {"train_loss": [], "train_acc": [], "test_loss": [], "test_acc": []}
-        print('------ Training started on {} with total number of {} epochs ------'.format(device, args["num_epochs"]))
-        for epoch in range(args["num_epochs"]):
+        print('------ Training started on {} with total number of {} epochs ------'.format(device, config.num_epochs))
+        for epoch in range(config.num_epochs):
             # time each epoch
             start_time_train = time.time()
             train_acc = 0
@@ -251,7 +237,7 @@ class PdHardness(ExampleMetric, ABC):
                 history["test_loss"].append(test_loss)
                 history["test_acc"].append(test_acc)
 
-            if curr_iteration > args["iterations"]:
+            if curr_iteration > config.num_iterations:
                 break
             end_time_after_inference = time.time()
             if epoch % 20 == 0:
@@ -265,7 +251,7 @@ class PdHardness(ExampleMetric, ABC):
 
     def train_metric(self):
         """NOTE that this function call is optional, you could also load a trained model from the checkpoint"""
-        seeds = self.config["seeds"]
+        seeds = self.config.seeds
         model_copy = copy.deepcopy(self.model)  # we need to copy the model because we will train it multiple times
         for seed in seeds:
             sm_util.set_seed(seed)
@@ -284,8 +270,8 @@ class PdHardness(ExampleMetric, ABC):
             knn_gt_conf_all_test = collections.defaultdict(list)
 
             # ------------------ training set pd ------------------
-            if not os.path.exists(os.path.join(self.config["result_dir"])):
-                os.makedirs(os.path.join(self.config["result_dir"]))
+            if not os.path.exists(os.path.join(self.result_path)):
+                os.makedirs(os.path.join(self.result_path))
             print("----- start obtaining training set pd -----")
             for k in tqdm(range(model_copy.get_num_layers())):
                 knn_labels, knn_conf_gt_all, indices_all = self._get_knn_prds_k_layer(model_copy, self.trainloader,
