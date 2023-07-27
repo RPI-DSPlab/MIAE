@@ -15,14 +15,14 @@ import json
 
 from utils import models as smmodels
 from utils import datasets as smdatasets
-from sample_metrics_config import iteration_learned_config
+from sample_metrics_config.iteration_learned_config import IterationLearnedConfig
 import sm_util
 
 
 class IlHardness(ExampleMetric, ABC):
     """Computer the hardness of a dtaset based on the iteration learned method."""
 
-    def __init__(self, config: iteration_learned_config, model: smmodels, dataset: smdatasets):
+    def __init__(self, config: IterationLearnedConfig, model: smmodels, dataset: smdatasets):
         """
         :param config: the configuration file
         :param model: the model
@@ -40,7 +40,7 @@ class IlHardness(ExampleMetric, ABC):
         self.ready = False  # whether the trainloader and testloader are ready
         self.trainset = None
 
-        self.save_path = config  # the path to save the results
+        self.save_path = config.save_path  # the path to save the results
         if not os.path.exists(self.save_path):
             os.makedirs(self.save_path)
 
@@ -70,7 +70,7 @@ class IlHardness(ExampleMetric, ABC):
             raise NotImplementedError("Optimizer {} not implemented".format(config.optimizer))
 
     def _trainer(self, trainloader, trainloader_inf, testloader_inf, model, optimizer, criterion, device,
-                 learning_history_train_dict, learning_history_test_dict, config: iteration_learned_config):
+                 learning_history_train_dict, learning_history_test_dict, config: IterationLearnedConfig):
         curr_iteration = 0
         cos_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.num_epochs)
         history = {"train_loss": [], "train_acc": [], "test_loss": [], "test_acc": []}
@@ -136,7 +136,7 @@ class IlHardness(ExampleMetric, ABC):
                             learning_history_test_dict[idx_inf[i].item()].append(
                                 labels_inf[i].item() == predicted_inf[i].item())
                 model.train()
-            if curr_iteration > config.iterations:
+            if curr_iteration > config.num_iterations:
                 break
             end_time_after_inference = time.time()
             if epoch % 20 == 0:
