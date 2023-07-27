@@ -13,16 +13,16 @@ import os
 import numpy as np
 import json
 
-sys.path.append("..")
-from ..utils import models as smmodels
-from ..utils import datasets as smdatasets
+from utils import models as smmodels
+from utils import datasets as smdatasets
+from sample_metrics_config import iteration_learned_config
 import sm_util
 
 
 class IlHardness(ExampleMetric, ABC):
     """Computer the hardness of a dtaset based on the iteration learned method."""
 
-    def __init__(self, config: dict, model: smmodels, dataset: smdatasets):
+    def __init__(self, config: iteration_learned_config, model: smmodels, dataset: smdatasets):
         """
         :param config: the configuration file
         :param model: the model
@@ -40,18 +40,7 @@ class IlHardness(ExampleMetric, ABC):
         self.ready = False  # whether the trainloader and testloader are ready
         self.trainset = None
 
-        if "crit" not in config:
-            raise ValueError("Criterion not specified")
-        if "optimizer" not in config:
-            raise ValueError("Optimizer not specified")
-        if "lr" not in config:
-            raise ValueError("Learning rate not specified")
-        if "save_path" not in config:
-            raise ValueError("Save path not specified")
-        if "learned_metric" not in config:
-            raise ValueError("Learned metric not specified, it should be either 'iteration' or 'epoch'")
-
-        self.save_path = config["save_path"]  # the path to save the results
+        self.save_path = config  # the path to save the results
         if not os.path.exists(self.save_path):
             os.makedirs(self.save_path)
 
@@ -65,28 +54,28 @@ class IlHardness(ExampleMetric, ABC):
 
         self.model = model
         self.trainloader, self.testloader = self.dataset.get_data_loaders(
-            batch_size=config["batch_size"], shuffle_train=True, shuffle_test=True)
+            batch_size=config.batch_size, shuffle_train=True, shuffle_test=True)
         self.trainloader2, self.testloader2 = self.dataset.get_data_loaders(
-            batch_size=config["batch_size"], shuffle_train=True, shuffle_test=True)
+            batch_size=config.batch_size, shuffle_train=True, shuffle_test=True)
 
-        if config["crit"] == 'cross_entropy':
+        if config.crit == 'cross_entropy':
             self.criterion = torch.nn.CrossEntropyLoss()
         else:
             raise NotImplementedError("Criterion {} not implemented".format(config.crit))
 
-        if config["optimizer"] == 'sgd':
-            self.optimizer = torch.optim.SGD(self.model.parameters(), lr=config["lr"], momentum=0.9,
+        if config.optimizer == 'sgd':
+            self.optimizer = torch.optim.SGD(self.model.parameters(), lr=config.lr, momentum=0.9,
                                              weight_decay=5e-4)
         else:
             raise NotImplementedError("Optimizer {} not implemented".format(config.optimizer))
 
     def _trainer(self, trainloader, trainloader_inf, testloader_inf, model, optimizer, criterion, device,
-                 learning_history_train_dict, learning_history_test_dict, args: dict):
+                 learning_history_train_dict, learning_history_test_dict, config: iteration_learned_config):
         curr_iteration = 0
-        cos_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.num_epochs)
+        cos_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.num_epochs)
         history = {"train_loss": [], "train_acc": [], "test_loss": [], "test_acc": []}
-        print('------ Training started on {} with total number of {} epochs ------'.format(device, args.num_epochs))
-        for epoch in range(args["num_epochs"]):
+        print('------ Training started on {} with total number of {} epochs ------'.format(device, config.num_epochs))
+        for epoch in range(config.num_epochs):
             # time each epoch
             start_time_train = time.time()
             train_acc = 0
@@ -102,7 +91,7 @@ class IlHardness(ExampleMetric, ABC):
                 train_acc += (predicted == labels).sum().item()
                 train_loss += loss.item()
                 curr_iteration += 1
-                if args["learned_metric"] == "iteration":  # if we are using iteration learned metric
+                if config.learned_metric == "iteration":  # if we are using iteration learned metric
                     model.eval()
                     with torch.no_grad():
                         for imgs_inf, labels_inf, idx_inf in trainloader_inf:
@@ -129,7 +118,7 @@ class IlHardness(ExampleMetric, ABC):
 
             end_time_train = time.time()
 
-            if args["learned_metric"] == "epoch":  # if we are using epoch learned metric
+            if config.learned_metric == "epoch":  # if we are using epoch learned metric
                 model.eval()
                 with torch.no_grad():
                     for imgs_inf, labels_inf, idx_inf in trainloader_inf:
@@ -147,7 +136,7 @@ class IlHardness(ExampleMetric, ABC):
                             learning_history_test_dict[idx_inf[i].item()].append(
                                 labels_inf[i].item() == predicted_inf[i].item())
                 model.train()
-            if curr_iteration > args["iterations"]:
+            if curr_iteration > config.iterations:
                 break
             end_time_after_inference = time.time()
             if epoch % 20 == 0:
@@ -189,7 +178,7 @@ class IlHardness(ExampleMetric, ABC):
             This function trains the model and determines the learned metric
             """
             # train the model
-            seeds = self.config["seeds"]
+            seeds = self.config.seeds
             model_copy = copy.deepcopy(self.model)  # we need to copy the model so that we can train it multiple times
 
             for seed in seeds:
@@ -210,7 +199,7 @@ class IlHardness(ExampleMetric, ABC):
                               self.config)
 
                 # save the partial results
-                if self.config["learned_metric"] == "iteration":
+                if self.config.learned_metric == "iteration":
                     with open(os.path.join(self.result_file_path,
                                            "{}-{}-learned_metric_iteration_seed{}_train.json".format(repr(self.dataset),
                                                                                                      repr(self.model),
@@ -221,7 +210,7 @@ class IlHardness(ExampleMetric, ABC):
                                                                                                     repr(self.model),
                                                                                                     seed), "w")) as f:
                         json.dump(learning_history_test_dict, f)
-                elif self.config["learned_metric"] == "epoch":
+                elif self.config.learned_metric == "epoch":
                     with open(os.path.join(self.result_file_path,
                                            "{}-{}-learned_metric_epoch_seed{}_train.json".format(repr(self.dataset),
                                                                                                  repr(self.model),
@@ -233,7 +222,7 @@ class IlHardness(ExampleMetric, ABC):
                                                                                                 seed), "w")) as f:
                         json.dump(learning_history_test_dict, f)
                 else:
-                    raise NotImplementedError("Learned metric {} not implemented".format(self.config["learned_metric"]))
+                    raise NotImplementedError("Learned metric {} not implemented".format(self.config.learned_metric))
 
             # average the results
             try:
@@ -243,7 +232,7 @@ class IlHardness(ExampleMetric, ABC):
                 raise Exception("No files found in the directory, please train the model first")
 
             # save the averaged results
-            if self.config["learned_metric"] == "iteration":
+            if self.config.learned_metric == "iteration":
                 with open(os.path.join(self.result_file_path_avg,
                                        "{}-{}-learned_metric_iteration_train.json".format(repr(self.dataset),
                                                                                           repr(self.model)), "w")) as f:
@@ -253,7 +242,6 @@ class IlHardness(ExampleMetric, ABC):
                                                                                          repr(self.model)), "w")) as f:
                     json.dump(self.test_avg_score, f)
             self.ready = True
-
 
         def load_metric(self):
             """
@@ -265,7 +253,6 @@ class IlHardness(ExampleMetric, ABC):
             except Exception as e:
                 raise Exception("No files found in the directory, please train the model first")
             self.ready = True
-
 
         def get_score(self, idx: int, train: bool):
             """
