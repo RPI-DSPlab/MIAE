@@ -40,8 +40,8 @@ class PredefinedTorchvisionDataset(AbstractGeneralDataset):
 
     def subset_loaders(self,
                 batch_size: int,
-                train_indices: list,
-                test_indices: list,
+                train_indices,
+                test_indices,
                 shuffle_training_data=True,
                 shuffle_testing_data=False,
                 number_of_workers: int = 0) -> (DataLoader, DataLoader):
