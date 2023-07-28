@@ -22,38 +22,4 @@ class IterationLearnedConfig(ExampleHardnessConfig, ABC):
     save_path = 'il_results'  # directory to save results
     save_result = True  # save results
 
-    def __init__(self, config=None):
-        """
-        Initialize the IterationLearnedConfig instance by providing a default configuration dictionary and updating it
-        with the provided config dictionary.
 
-        :param config: A dictionary containing the configuration parameters for IterationLearnedMetric.
-        """
-
-        """then we update the default configuration with the provided config dictionary"""
-        if config is None:
-            return
-
-        for key in config:
-            if key in self.__dict__:
-                self.__dict__[key] = config[key]
-            else:
-                raise ValueError("Invalid key in config: {}".format(key))
-
-    def __repr__(self):
-        """
-        String representation of the IterationLearnedConfig class.
-
-        :return: String representation of the IterationLearnedConfig class.
-        """
-
-        return "IterationLearnedConfig({})".format(self.__dict__)
-
-    def __str__(self):
-        """
-        String representation of the IterationLearnedConfig class.
-
-        :return: String representation of the IterationLearnedConfig class.
-        """
-
-        return self.__repr__()
