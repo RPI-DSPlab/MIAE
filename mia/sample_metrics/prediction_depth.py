@@ -22,7 +22,12 @@ class PdHardness(ExampleMetric, ABC):
     """Compute the hardness of a dataset based on the prediction depth metric"""
 
     def __init__(self, config: PredictionDepthConfig, model: smmodels, dataset: smdatasets):
-        """Initialize the metric with the configuration"""
+        """
+        Initialize the PredictionDepthMetric instance by providing a configuration object, a model, and a dataset.
+        :param config: A PredictionDepthConfig object
+        :param model: A model object, which should be an instance of utils.models
+        :param dataset: A dataset object, which should be an instance of utils.datasets
+        """
         super().__init__()
         self.config = config
         self.dataset = dataset

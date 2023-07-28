@@ -57,3 +57,4 @@ class IndexedCIFAR10(CIFAR10):
             target = self.target_transform(target)
 
         return image, target, index
+
