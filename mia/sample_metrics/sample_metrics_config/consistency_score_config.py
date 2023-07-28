@@ -25,8 +25,6 @@ class ConsistencyScoreConfig(ExampleHardnessConfig, ABC):
     ss_ratio = 0.9  # ratio of subset set ie: 0.9 means 90% of the data are in-data and 10% are out-data
     n_runs = 200  # number of runs
 
-
-
     def __init__(self, config=None):
         """
         Initialize the ConsistencyScoreConfig instance by providing a default configuration dictionary and updating it
