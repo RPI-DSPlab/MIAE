@@ -48,6 +48,44 @@ class AbstractGeneralDataset(ABC):
         """
         pass
 
+    @abstractmethod
+    def subset_loaders(self,
+                batch_size: int,
+                train_indices: list,
+                test_indices: list,
+                shuffle_training_data=True,
+                shuffle_testing_data=False,
+                number_of_workers: int = 0) -> (DataLoader, DataLoader):
+        """
+        Abstract method to implement data loaders of type torch.utils.data.DataLoader for the training and testing sets.
+        :param batch_size: The number of samples per batch.
+        :param train_indices: indices of the training set's subset
+        :param test_indices: indices of the testing set's subset
+        :param shuffle_training_data: Whether to shuffle the training data. Defaults to True.
+        :param shuffle_testing_data: Whether to shuffle the testing data. Defaults to False.
+        :param number_of_workers: The number of worker processes to use for data loading. Defaults to 0.
+        :return: DataLoader, DataLoader: A tuple containing the DataLoader instances for the training and testing sets.
+        """
+        pass
+
+    def get_training_set(self):
+        """
+        Get the training set.
+
+        Returns:
+            torch.utils.data.Dataset: The training set.
+        """
+        return self.training_set
+
+    def get_testing_set(self):
+        """
+        Get the testing set.
+
+        Returns:
+            torch.utils.data.Dataset: The testing set.
+        """
+        return self.testing_set
+
     def get_num_classes(self) -> int:
         """
         Get the number of classes in the datasets.
@@ -56,6 +94,8 @@ class AbstractGeneralDataset(ABC):
             int: The number of classes in the datasets.
         """
         return self.number_of_classes
+
+
 
     def __repr__(self) -> str:
         """
