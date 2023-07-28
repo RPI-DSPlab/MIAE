@@ -1,3 +1,4 @@
+import inspect
 from abc import ABC, abstractmethod
 
 
@@ -25,8 +26,25 @@ class ExampleHardnessConfig(ABC):
         # Use the update method to overwrite the default values with the provided values
         self.__dict__.update(config)
 
-    def __str__(self):
-        return str(self.__dict__)
-
     def __repr__(self):
-        return str(self.__dict__)
+        """
+        Return a string representation of the class attributes.
+        """
+        ret_builder = self.__class__.__name__ + ":\n"
+        for i in inspect.getmembers(self):
+
+            # to remove private and protected
+            # functions
+            if not i[0].startswith('_'):
+
+                # To remove other methods that
+                # doesnot start with an underscore
+                if not inspect.ismethod(i[1]):
+                    ret_builder += f"{i[0]} = {i[1]}\n"
+        return str(ret_builder)
+
+    def __str__(self):
+        """
+        Return the type of the configuration.
+        """
+        return self.__class__.__name__
