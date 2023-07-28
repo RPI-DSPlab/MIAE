@@ -42,4 +42,15 @@ predictions at all iterations $t ≥ \tau$ are equal to the final prediction of 
 points consistently classified after all training steps and at the moment of initialization, are said to be
 learned in step $t = 0$.
 
+## Consistency Score `consistency_score.py`
+Link to the paper: [Characterizing Structural Regularities of Labeled Data in Overparameterized Models](https://arxiv.org/abs/2002.03206)
 
+This metric is defined to help understand how an example in a dataset is consistent with the
+rest of the dataset. It could also be used to measure the harness of an example.
+The metric is defined as follows:
+
+>  estimate the consistency profile
+with the following empirical consistency profile:
+$\hat{C}_{\hat{D}, n}(x,y) = \hat{\mathbb{E}}^r_{D \sim \hat{D}}[\mathbb{P}(f(x; D \slash \{(x,y)\}) = y)]$
+where $n = 0, 1, . . . , N − 1$, $D$ is a subset of size $n$ uniformly sampled from $\hat{D}$ excluding $(x, y)$, and $Eˆr$ denotes
+empirical averaging with $r$ i.i.d. samples of such subsets
