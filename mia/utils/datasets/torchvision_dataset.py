@@ -55,11 +55,18 @@ class PredefinedTorchvisionDataset(AbstractGeneralDataset):
         :param number_of_workers: The number of worker processes to use for data loading. Defaults to 0.
         :return: DataLoader, DataLoader: A tuple containing the DataLoader instances for the training and testing sets.
         """
-        subset_train = Subset(self.train_set, train_indices)
-        subset_test = Subset(self.test_set, test_indices)
-        trainloader = DataLoader(subset_train, batch_size=batch_size, shuffle=shuffle_training_data,
-                                 num_workers=number_of_workers)
-        testloader = DataLoader(subset_test, batch_size=batch_size, shuffle=shuffle_testing_data,
-                                num_workers=number_of_workers)
+        if len(train_indices) != 0:
+            subset_train = Subset(self.train_set, train_indices)
+            trainloader = DataLoader(subset_train, batch_size=batch_size, shuffle=shuffle_training_data,
+                                     num_workers=number_of_workers)
+        else:
+            trainloader = None
+
+        if len(test_indices) != 0:
+            subset_test = Subset(self.test_set, test_indices)
+            testloader = DataLoader(subset_test, batch_size=batch_size, shuffle=shuffle_testing_data,
+                                    num_workers=number_of_workers)
+        else:
+            testloader = None
         return trainloader, testloader
 
