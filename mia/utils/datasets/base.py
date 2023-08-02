@@ -22,8 +22,8 @@ class AbstractGeneralDataset(ABC):
         self.normal_class_labels = None  # tuple with original class labels that define the normal class
         self.outlier_class_labels = None  # tuple with original class labels that define the outlier class
 
-        self.training_set = None  # must be of type torch.utils.data.Dataset
-        self.testing_set = None  # must be of type torch.utils.data.Dataset
+        self.train_set = None  # must be of type torch.utils.data.Dataset
+        self.test_set = None  # must be of type torch.utils.data.Dataset
 
     @abstractmethod
     def loaders(self,
@@ -50,12 +50,12 @@ class AbstractGeneralDataset(ABC):
 
     @abstractmethod
     def subset_loaders(self,
-                batch_size: int,
-                train_indices: list,
-                test_indices: list,
-                shuffle_training_data=True,
-                shuffle_testing_data=False,
-                number_of_workers: int = 0) -> (DataLoader, DataLoader):
+                       batch_size: int,
+                       train_indices: list,
+                       test_indices: list,
+                       shuffle_training_data=True,
+                       shuffle_testing_data=False,
+                       number_of_workers: int = 0) -> (DataLoader, DataLoader):
         """
         Abstract method to implement data loaders of type torch.utils.data.DataLoader for the training and testing sets.
         :param batch_size: The number of samples per batch.
@@ -75,7 +75,7 @@ class AbstractGeneralDataset(ABC):
         Returns:
             torch.utils.data.Dataset: The training set.
         """
-        return self.training_set
+        return self.train_set
 
     def get_testing_set(self):
         """
@@ -84,7 +84,7 @@ class AbstractGeneralDataset(ABC):
         Returns:
             torch.utils.data.Dataset: The testing set.
         """
-        return self.testing_set
+        return self.test_set
 
     def get_num_classes(self) -> int:
         """
@@ -94,8 +94,6 @@ class AbstractGeneralDataset(ABC):
             int: The number of classes in the datasets.
         """
         return self.number_of_classes
-
-
 
     def __repr__(self) -> str:
         """

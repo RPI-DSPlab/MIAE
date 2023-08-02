@@ -1,5 +1,7 @@
 import inspect
+import json
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 
 class ExampleHardnessConfig(ABC):
@@ -33,12 +35,10 @@ class ExampleHardnessConfig(ABC):
         ret_builder = self.__class__.__name__ + ":\n"
         for i in inspect.getmembers(self):
 
-            # to remove private and protected
-            # functions
+            # to remove private and protected functions
             if not i[0].startswith('_'):
 
-                # To remove other methods that
-                # doesnot start with an underscore
+                # To remove other methods that does not start with an underscore
                 if not inspect.ismethod(i[1]):
                     ret_builder += f"{i[0]} = {i[1]}\n"
         return str(ret_builder)
@@ -48,3 +48,40 @@ class ExampleHardnessConfig(ABC):
         Return the type of the configuration.
         """
         return self.__class__.__name__
+
+    def save(self, path, name=None):
+        """
+        Save the configuration to a json file.
+
+        :param path: The path to the file to save the configuration to.
+        :param name: The name of the file to save the configuration to. If None, the name of the file is the name of the
+        class concatenated with the current date and time.
+        """
+        if name is not None:
+            fn = self.__class__.__name__ + "_" + name
+        else:
+            fn = self.__class__.__name__ + datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # save all class attributes to a dictionary
+        config = {}
+        for i in inspect.getmembers(self):
+
+            # to remove private and protected functions
+            if not i[0].startswith('_'):
+
+                # To remove other methods that does not start with an underscore
+                if not inspect.ismethod(i[1]):
+                    config[i[0]] = i[1]
+
+        with open(path + fn + ".json", "w") as f:
+            json.dump(config, f, indent=4)
+
+    def load(self, path):
+        """
+        Load the configuration from a json file.
+
+        :param path: The path to the file to load the configuration from.
+        """
+        with open(path, "r") as f:
+            config = json.load(f)
+        self.update(config)
