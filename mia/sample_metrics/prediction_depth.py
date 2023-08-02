@@ -5,7 +5,7 @@ from abc import ABC
 
 import torch.nn.functional as F
 from tqdm import tqdm
-from base import ExampleMetric
+from sample_metrics.base import ExampleMetric
 import sys
 import torch
 import os
@@ -15,7 +15,7 @@ import json
 from utils import models as smmodels
 from utils import datasets as smdatasets
 from sample_metrics.sample_metrics_config.prediction_depth_config import PredictionDepthConfig
-import sm_util
+from sample_metrics import sm_util
 
 
 class PdHardness(ExampleMetric, ABC):
@@ -321,11 +321,11 @@ class PdHardness(ExampleMetric, ABC):
             json.dump(self.test_avg_score, f)
         self.ready = True
 
-    def load_metric(self):
+    def load_metric(self, path: str):
         """Load the trained metric from a checkpoint"""
         try:
-            self.train_avg_score = sm_util.avg_result(self.result_path, file_suf="_trainpd.json", roundToInt=False)
-            self.test_avg_score = sm_util.avg_result(self.result_path, file_suf="_testpd.json", roundToInt=False)
+            self.train_avg_score = sm_util.avg_result(path, file_suf="_trainpd.json", roundToInt=False)
+            self.test_avg_score = sm_util.avg_result(path, file_suf="_testpd.json", roundToInt=False)
         except:
             raise ValueError(
                 "train_avg_score or test_avg_score not found in the checkpoint, please train the metric first")

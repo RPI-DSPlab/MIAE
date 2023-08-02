@@ -6,7 +6,7 @@ from abc import ABC
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from base import ExampleMetric
+from sample_metrics.base import ExampleMetric
 import sys
 import torch
 import os
@@ -15,8 +15,8 @@ import json
 
 from utils import models as smmodels
 from utils import datasets as smdatasets
-from sample_metrics_config.iteration_learned_config import IterationLearnedConfig
-import sm_util
+from sample_metrics.sample_metrics_config import IterationLearnedConfig
+from sample_metrics import sm_util
 
 
 class IlHardness(ExampleMetric, ABC):
@@ -173,109 +173,113 @@ class IlHardness(ExampleMetric, ABC):
 
             return learned_metric_dict
 
-        def train_metric(self):
-            """
-            This function trains the model and determines the learned metric
-            """
+    def train_metric(self):
+        """
+        This function trains the model and determines the learned metric
+        """
+        # train the model
+        seeds = self.config.seeds
+        model_copy = copy.deepcopy(self.model)  # we need to copy the model so that we can train it multiple times
+
+        for seed in seeds:
+            sm_util.set_seed(seed)
+            model_copy = model_copy.to(self.device)
+
+            learning_history_train_dict = {}
+            for _, idx in self.trainloader_inf:
+                for i in idx:
+                    learning_history_train_dict[i.item()] = list()
+            learning_history_test_dict = {}
+            for _, idx in self.testloader_inf:
+                for i in idx:
+                    learning_history_test_dict[i.item()] = list()
             # train the model
-            seeds = self.config.seeds
-            model_copy = copy.deepcopy(self.model)  # we need to copy the model so that we can train it multiple times
+            self._trainer(self.trainloader, self.trainloader_inf, self.testloader_inf, model_copy, self.optimizer,
+                          self.criterion, self.device, learning_history_train_dict, learning_history_test_dict,
+                          self.config)
 
-            for seed in seeds:
-                sm_util.set_seed(seed)
-                model_copy = model_copy.to(self.device)
-
-                learning_history_train_dict = {}
-                for _, idx in self.trainloader_inf:
-                    for i in idx:
-                        learning_history_train_dict[i.item()] = list()
-                learning_history_test_dict = {}
-                for _, idx in self.testloader_inf:
-                    for i in idx:
-                        learning_history_test_dict[i.item()] = list()
-                # train the model
-                self._trainer(self.trainloader, self.trainloader_inf, self.testloader_inf, model_copy, self.optimizer,
-                              self.criterion, self.device, learning_history_train_dict, learning_history_test_dict,
-                              self.config)
-
-                # save the partial results
-                if self.config.learned_metric == "iteration":
-                    with open(os.path.join(self.result_file_path,
-                                           "{}-{}-learned_metric_iteration_seed{}_train.json".format(repr(self.dataset),
-                                                                                                     repr(self.model),
-                                                                                                     seed), "w")) as f:
-                        json.dump(learning_history_train_dict, f)
-                    with open(os.path.join(self.result_file_path,
-                                           "{}-{}-learned_metric_iteration_seed{}_test.json".format(repr(self.dataset),
-                                                                                                    repr(self.model),
-                                                                                                    seed), "w")) as f:
-                        json.dump(learning_history_test_dict, f)
-                elif self.config.learned_metric == "epoch":
-                    with open(os.path.join(self.result_file_path,
-                                           "{}-{}-learned_metric_epoch_seed{}_train.json".format(repr(self.dataset),
+            # save the partial results
+            if self.config.learned_metric == "iteration":
+                with open(os.path.join(self.result_file_path,
+                                       "{}-{}-learned_metric_iteration_seed{}_train.json".format(repr(self.dataset),
                                                                                                  repr(self.model),
                                                                                                  seed), "w")) as f:
-                        json.dump(learning_history_train_dict, f)
-                    with open(os.path.join(self.result_file_path,
-                                           "{}-{}-learned_metric_epoch_seed{}_test.json".format(repr(self.dataset),
+                    json.dump(learning_history_train_dict, f)
+                with open(os.path.join(self.result_file_path,
+                                       "{}-{}-learned_metric_iteration_seed{}_test.json".format(repr(self.dataset),
                                                                                                 repr(self.model),
                                                                                                 seed), "w")) as f:
-                        json.dump(learning_history_test_dict, f)
-                else:
-                    raise NotImplementedError("Learned metric {} not implemented".format(self.config.learned_metric))
-
-            # average the results
-            try:
-                self.train_avg_score = sm_util.avg_result(self.result_file_path, file_suf="train.json")
-                self.test_avg_score = sm_util.avg_result(self.result_file_path, file_suf="test.json")
-            except Exception as e:
-                raise Exception("No files found in the directory, please train the model first")
-
-            # save the averaged results
-            if self.config.learned_metric == "iteration":
-                with open(os.path.join(self.result_file_path_avg,
-                                       "{}-{}-learned_metric_iteration_train.json".format(repr(self.dataset),
-                                                                                          repr(self.model)), "w")) as f:
-                    json.dump(self.train_avg_score, f)
-                with open(os.path.join(self.result_file_path_avg,
-                                       "{}-{}-learned_metric_iteration_test.json".format(repr(self.dataset),
-                                                                                         repr(self.model)), "w")) as f:
-                    json.dump(self.test_avg_score, f)
-            self.ready = True
-
-        def load_metric(self):
-            """
-            This function loads the learned metric from the saved files
-            """
-            try:
-                self.train_avg_score = sm_util.avg_result(self.result_file_path_avg, file_suf="train.json")
-                self.test_avg_score = sm_util.avg_result(self.result_file_path_avg, file_suf="test.json")
-            except Exception as e:
-                raise Exception("No files found in the directory, please train the model first")
-            self.ready = True
-
-        def get_score(self, idx: int, train: bool):
-            """
-            This function returns the learned metric of a datapoint
-            :param idx: the index of the datapoint
-            :param train: whether the datapoint is in the training set or not
-            :return: the learned metric of the datapoint
-            """
-            if not self.ready:
-                raise Exception("Please train the model first")
-            if train:
-                return self.train_avg_score[str(idx)]
+                    json.dump(learning_history_test_dict, f)
+            elif self.config.learned_metric == "epoch":
+                with open(os.path.join(self.result_file_path,
+                                       "{}-{}-learned_metric_epoch_seed{}_train.json".format(repr(self.dataset),
+                                                                                             repr(self.model),
+                                                                                             seed), "w")) as f:
+                    json.dump(learning_history_train_dict, f)
+                with open(os.path.join(self.result_file_path,
+                                       "{}-{}-learned_metric_epoch_seed{}_test.json".format(repr(self.dataset),
+                                                                                            repr(self.model),
+                                                                                            seed), "w")) as f:
+                    json.dump(learning_history_test_dict, f)
             else:
-                return self.test_avg_score[str(idx)]
+                raise NotImplementedError("Learned metric {} not implemented".format(self.config.learned_metric))
 
-        def __repr__(self):
-            ret = (f"Iteration learned metric:\n"
-                   f"model: {repr(self.model)}\n"
-                   f"dataset: {repr(self.dataset)}\n"
-                   f"config: {self.config}\n"
-                   f"ready: {self.ready}\n"
-                   )
-            if self.ready:
-                ret += (f"train_avg_score: {self.train_avg_score}\n"
-                        f"test_avg_score: {self.test_avg_score}\n")
-            return ret
+        # average the results
+        try:
+            self.train_avg_score = sm_util.avg_result(self.result_file_path, file_suf="train.json")
+            self.test_avg_score = sm_util.avg_result(self.result_file_path, file_suf="test.json")
+        except Exception as e:
+            raise Exception("No files found in the directory, please train the model first")
+
+        # save the averaged results
+        if self.config.learned_metric == "iteration":
+            with open(os.path.join(self.result_file_path_avg,
+                                   "{}-{}-learned_metric_iteration_train.json".format(repr(self.dataset),
+                                                                                      repr(self.model)), "w")) as f:
+                json.dump(self.train_avg_score, f)
+            with open(os.path.join(self.result_file_path_avg,
+                                   "{}-{}-learned_metric_iteration_test.json".format(repr(self.dataset),
+                                                                                     repr(self.model)), "w")) as f:
+                json.dump(self.test_avg_score, f)
+        self.ready = True
+
+    def load_metric(self, path: str):
+        """
+        This function loads the learned metric from the saved files
+        """
+        try:
+            self.train_avg_score = sm_util.avg_result(path, file_suf="train.json")
+            self.test_avg_score = sm_util.avg_result(path, file_suf="test.json")
+        except Exception as e:
+            raise Exception("No files found in the directory, please train the model first")
+        self.ready = True
+
+    def get_score(self, idx: int, train: bool):
+        """
+        This function returns the learned metric of a datapoint
+        :param idx: the index of the datapoint
+        :param train: whether the datapoint is in the training set or not
+        :return: the learned metric of the datapoint
+        """
+        if not self.ready:
+            raise Exception("Please train the model first")
+        if train:
+            return self.train_avg_score[str(idx)]
+        else:
+            return self.test_avg_score[str(idx)]
+
+    def __repr__(self):
+        ret = (f"Iteration learned metric:\n"
+               f"model: {repr(self.model)}\n"
+               f"dataset: {repr(self.dataset)}\n"
+               f"config: {self.config}\n"
+               f"ready: {self.ready}\n"
+               )
+        if self.ready:
+            ret += (f"train_avg_score: {self.train_avg_score}\n"
+                    f"test_avg_score: {self.test_avg_score}\n")
+        return ret
+
+    def __str__(self):
+        """Return a string representation of the object."""
+        return repr(self)

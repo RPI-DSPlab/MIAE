@@ -2,7 +2,7 @@ import copy
 from abc import ABC
 
 from tqdm import tqdm
-from base import ExampleMetric
+from mia.sample_metrics.base import ExampleMetric
 import torch
 import os
 import numpy as np
@@ -26,10 +26,10 @@ class CSHardness(ExampleMetric, ABC):
         super().__init__()
         self.config = config
         self.dataset = dataset
-        self.model = model
+        self.model = copy.deepcopy(model)
         self.ready = False  # flag to indicate whether the model has been trained
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.num_train_total = len(self.dataset.get_trainset())
+        self.num_train_total = len(self.dataset.train_set)
         self.cscores = None
 
         if config.crit == 'cross_entropy':
@@ -178,14 +178,17 @@ class CSHardness(ExampleMetric, ABC):
             self.cscores = json.load(f)
         self.ready = True
 
-    def get_score(self, idx):
+    def get_score(self, idx: int, train: bool = True):
         """
         Get the consistency score of an example.
         :param idx: The index of the example to get the consistency score of.
+        :param train: Whether to get the consistency score of the training set or the testing set.
         :return: The consistency score of the example.
         """
         if not self.ready:
             raise ValueError("ConsistencyScoreMetric not ready. Call train_metric() or load_metric() first.")
+        if train == False:
+            raise NotImplementedError("ConsistencyScoreMetric only supports train=True.")
         return self.cscores[idx]
 
     def __repr__(self):
