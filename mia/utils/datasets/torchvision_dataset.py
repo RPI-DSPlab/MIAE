@@ -1,4 +1,4 @@
-from base import AbstractGeneralDataset
+from utils.datasets.base import AbstractGeneralDataset
 from torch.utils.data import DataLoader, Subset
 
 

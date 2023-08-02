@@ -1,6 +1,6 @@
 from PIL import Image
 from torchvision.datasets import CIFAR10
-from torchvision_dataset import PredefinedTorchvisionDataset
+from utils.datasets.torchvision_dataset import PredefinedTorchvisionDataset
 
 
 class CIFAR10Dataset(PredefinedTorchvisionDataset):
@@ -8,7 +8,7 @@ class CIFAR10Dataset(PredefinedTorchvisionDataset):
     A class that represents a custom CIFAR10 datasets.
     """
 
-    def __init__(self, root_directory: str, transform, target_transform):
+    def __init__(self, root_directory: str, train_transform, test_transform, target_transform):
         """
         Initialize the CustomCIFAR10Dataset.
 
@@ -19,11 +19,11 @@ class CIFAR10Dataset(PredefinedTorchvisionDataset):
 
         # Create training set
         self.train_set = IndexedCIFAR10(root=root_directory, train=True, download=True,
-                                        transform=transform, target_transform=target_transform)
+                                        transform=train_transform, target_transform=target_transform)
 
         # Create test set
         self.test_set = IndexedCIFAR10(root=root_directory, train=False, download=True,
-                                       transform=transform, target_transform=target_transform)
+                                       transform=test_transform, target_transform=target_transform)
 
 
 class IndexedCIFAR10(CIFAR10):
@@ -57,4 +57,3 @@ class IndexedCIFAR10(CIFAR10):
             target = self.target_transform(target)
 
         return image, target, index
-
