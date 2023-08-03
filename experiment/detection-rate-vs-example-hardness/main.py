@@ -5,12 +5,14 @@ import torchvision.transforms as T
 from mia import sample_metrics, attacks, eval_methods
 from mia.sample_metrics import sample_metrics_config
 from mia.utils import datasets, models
+from utils.datasets.loader import load_dataset
 
 dataset_dir = "datasets"
 model_dir = "models"
 metric_save_dir = "metrics"
 result_dir = "results"
 configs_dir = "configs"
+dataset_name = "cifar10"
 
 
 def main():
@@ -47,8 +49,7 @@ def main():
     test_transform = T.Compose([T.ToTensor(),
                                 T.Normalize(mean=[0.4914, 0.4822, 0.4465], std=(0.247, 0.243, 0.261))
                                 ])
-    dataset = datasets.CIFAR10Dataset(dataset_dir, train_transform=train_transform, test_transform=test_transform,
-                                      target_transform=None)
+    dataset = load_dataset(dataset_name, dataset_dir, train_transform, test_transform)
 
     # define model
     model = models.VGG16()
