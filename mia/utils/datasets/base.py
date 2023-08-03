@@ -27,10 +27,10 @@ class AbstractGeneralDataset(ABC):
 
     @abstractmethod
     def loaders(self,
-                batch_size: int,
-                shuffle_training_data=True,
-                shuffle_testing_data=False,
-                number_of_workers: int = 0) -> (DataLoader, DataLoader):
+                         batch_size: int,
+                         shuffle_training_data=True,
+                         shuffle_testing_data=False,
+                         number_of_workers: int = 0) -> (DataLoader, DataLoader):
         """
         Abstract method to implement data loaders of type torch.utils.data.DataLoader for the training and testing sets.
 

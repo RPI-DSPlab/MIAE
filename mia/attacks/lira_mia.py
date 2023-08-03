@@ -89,6 +89,12 @@ def _split_data(fullset, expid, iteration_range, is_shadow):
 class LIRAUtil:
     @classmethod
     def _prepare_data(cls, info: LiraAuxiliaryInfo):
+        """
+        Prepares the data by loading the dataset and applying transformations.
+
+        Args:
+        info (LiraAuxiliaryInfo): The auxiliary info instance containing all the necessary information.
+        """
         # Constants
         DATA_TRANSFORM = transforms.Compose([
             transforms.RandomCrop(32, padding=(4, 4), padding_mode='reflect'),
@@ -106,11 +112,24 @@ class LIRAUtil:
 
     @classmethod
     def _make_directory_if_not_exists(cls, dir_path):
+        """
+        Checks if a directory exists and, if not, creates it.
+
+        Args:
+        dir_path (str): The path of the directory to be checked/created.
+        """
         if not os.path.exists(dir_path):
             os.makedirs(dir_path)
 
     @classmethod
     def train_models(cls, info: LiraAuxiliaryInfo, is_shadow=True):
+        """
+        Trains the models (either shadow or target models).
+
+        Args:
+        info (LiraAuxiliaryInfo): The auxiliary info instance containing all the necessary information.
+        is_shadow (bool): If true, shadow models are trained. Otherwise, target models are trained.
+        """
         # init
         mode = "shadow" if is_shadow else "target"
         iteration_range = info.num_shadow_models if is_shadow else info.num_target_models
@@ -167,6 +186,18 @@ class LIRAUtil:
     @classmethod
     def lira_mia(cls, keep, scores, check_keep, check_scores, in_size=100000, out_size=100000,
                  fix_variance=False):
+        """
+        Implements the core logic of the LIRA membership inference attack.
+
+        Args:
+        keep (np.ndarray): An array indicating which samples to keep.
+        scores (np.ndarray): An array containing the scores of the samples.
+        check_keep (np.ndarray): An array containing which samples to keep for target model.
+        check_scores (np.ndarray): An array containing the scores of the samples for target model.
+        in_size (int): The number of samples to keep from the input.
+        out_size (int): The number of samples to keep from the output.
+        fix_variance (bool): If true, the variance is fixed.
+        """
         dat_in = []
         dat_out = []
 
@@ -208,6 +239,14 @@ class LIRAUtil:
 
     @classmethod
     def _generate_logits(cls, model, data_loader, device):
+        """
+        Generates logits for a dataset given a model.
+
+        Args:
+        model (torch.nn.Module): The PyTorch model to generate logits.
+        data_loader (torch.utils.data.DataLoader): The DataLoader for the dataset.
+        device (str): The device (cpu or cuda) where the computations will take place.
+        """
         model.eval()
         logits = []
 
@@ -231,6 +270,14 @@ class LIRAUtil:
 
     @classmethod
     def process_models(cls, info: LiraAuxiliaryInfo, is_shadow=True, threshold_acc=0.5):
+        """
+        Loads the models and calculates the scores for each model.
+
+        Args:
+        info (LiraAuxiliaryInfo): The auxiliary info instance containing all the necessary information.
+        is_shadow (bool): If true, shadow models are processed. Otherwise, target models are processed.
+        threshold_acc (float): The accuracy threshold for skipping records.
+        """
         dataset = cls._prepare_data(info)
         fullset = ConcatDataset([dataset.train_set, dataset.test_set])
         fullsetloader = torch.utils.data.DataLoader(fullset, batch_size=20, shuffle=False, num_workers=8)
@@ -269,6 +316,13 @@ class LIRAUtil:
 
     @classmethod
     def _calculate_score(cls, predictions: torch.Tensor, labels: torch.Tensor):
+        """
+        Calculates the score for each prediction.
+
+        Args:
+        predictions (torch.Tensor): The tensor of model predictions.
+        labels (torch.Tensor): The tensor of true labels.
+        """
         # Ensure we're using float64 for numerical stability
         # predictions = predictions.to(dtype=torch.float64)
         opredictions = predictions
@@ -314,7 +368,10 @@ class LiraMiAttack(MiAttack):
 
     def prepare(self, attack_config: dict):
         """
-        Implement the prepare method for Lira.
+        Prepares for the attack by training models and generating the score and kept index data.
+
+        Args:
+        attack_config (dict): The attack configuration dictionary.
         """
         # 1. train the model and save them
         # shadow model 可以保留
@@ -334,7 +391,10 @@ class LiraMiAttack(MiAttack):
 
     def infer(self, target_data):
         """
-        Implement the infer method for Lira.
+        Infers whether a data point is in the training set by using the LIRA membership inference attack.
+
+        Args:
+        target_data (torch.utils.data.Dataset): The target dataset.
         """
         if self.shadow_scores is None or \
                 self.shadow_keeps is None or \

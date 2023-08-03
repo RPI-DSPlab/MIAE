@@ -53,9 +53,9 @@ class IlHardness(ExampleMetric, ABC):
         self.result_file_path_avg = os.path.join(self.save_path, "result_avg")
 
         self.model = model
-        self.trainloader, self.testloader = self.dataset.get_data_loaders(
+        self.trainloader, self.testloader = self.dataset.loaders(
             batch_size=config.batch_size, shuffle_train=True, shuffle_test=True)
-        self.trainloader2, self.testloader2 = self.dataset.get_data_loaders(
+        self.trainloader2, self.testloader2 = self.dataset.loaders(
             batch_size=config.batch_size, shuffle_train=True, shuffle_test=True)
 
         if config.crit == 'cross_entropy':

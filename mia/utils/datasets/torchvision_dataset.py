@@ -18,7 +18,7 @@ class PredefinedTorchvisionDataset(AbstractGeneralDataset):
         super().__init__(root_directory)
 
     def loaders(self, batch_size: int, shuffle_train: bool = True, shuffle_test: bool = False,
-                num_workers: int = 0) -> (DataLoader, DataLoader):
+                         num_workers: int = 0) -> (DataLoader, DataLoader):
         """
         Generates DataLoader instances for the training and testing sets.
 
