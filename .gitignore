@@ -160,5 +160,6 @@ cython_debug/
 .idea/
 
 # project files
-# store all results here for demonstration only
+# something to do with data
+experiment/detection-rate-vs-example-hardness/datasets/
 mia/samples/
