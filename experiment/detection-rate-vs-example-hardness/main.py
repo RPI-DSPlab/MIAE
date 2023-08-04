@@ -60,15 +60,18 @@ def main():
 
     # load metrics if there's saved files in the result directory
     if len(os.listdir(metric_save_dir)) != 0:
-        cs_metric_fn = [fn for fn in os.listdir(metric_save_dir + "/cs_results") if fn.startswith("cs")][0]
-        consistency_score.load_metric(metric_save_dir + "/cs_results" + cs_metric_fn)
-        iteration_learned.load_metric(metric_save_dir + "/il_results" + "result_avg")
-        prediction_depth.load_metric(metric_save_dir + "/pd_results " + "result_avg")
-    else:
-        # train the metrics
-        consistency_score.train_metric()
-        iteration_learned.train_metric()
-        prediction_depth.train_metric()
+
+        if len([fn for fn in os.listdir(metric_save_dir + "/cs_results") if fn.startswith("cs")]) > 0:
+            cs_metric_fn = [fn for fn in os.listdir(metric_save_dir + "/cs_results") if fn.startswith("cs")][0]
+            consistency_score.load_metric(metric_save_dir + "/cs_results" + cs_metric_fn)
+        if len(os.listdir(metric_save_dir + "/il_results"+"/results_avg")) > 0:
+            iteration_learned.load_metric(metric_save_dir + "/il_results" + "result_avg")
+        if len(os.listdir(metric_save_dir + "/pd_results"+"/results_avg")) > 0:
+            prediction_depth.load_metric(metric_save_dir + "/pd_results " + "result_avg")
+
+    consistency_score.train_metric() if not consistency_score.ready else None
+    iteration_learned.train_metric() if not iteration_learned.ready else None
+    prediction_depth.train_metric() if not prediction_depth.ready else None
 
 
 if __name__ == "__main__":
