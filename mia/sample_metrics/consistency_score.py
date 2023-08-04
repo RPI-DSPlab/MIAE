@@ -60,7 +60,7 @@ class CSHardness(ExampleMetric, ABC):
             torch.manual_seed(seed)
             np.random.seed(seed)
 
-            num_train_total = len(self.dataset.trainset)
+            num_train_total = len(self.dataset.train_set)
             num_train = int(num_train_total * subset_ratio)
 
             indices = torch.randperm(num_train_total)
@@ -82,7 +82,7 @@ class CSHardness(ExampleMetric, ABC):
             training_acc = []
 
             for epoch in tqdm(range(config.num_epochs), desc="Epochs"):
-                for (imgs, labels), idx in train_loader:
+                for imgs, labels, idx in train_loader:
                     imgs, labels = imgs.cuda(non_blocking=True), labels.cuda(non_blocking=True)
                     self.optimizer.zero_grad()
                     outputs = model(imgs)

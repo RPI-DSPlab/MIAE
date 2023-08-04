@@ -18,7 +18,7 @@ class AbstractGeneralDataset(ABC):
         super().__init__()
         self.root_directory = root_directory  # root path to data
 
-        self.number_of_classes = 2  # 0: normal, 1: outlier
+        self.number_of_classes = None  # number of classes in the datasets
         self.normal_class_labels = None  # tuple with original class labels that define the normal class
         self.outlier_class_labels = None  # tuple with original class labels that define the outlier class
 

@@ -44,13 +44,13 @@ class IlHardness(ExampleMetric, ABC):
         if not os.path.exists(self.save_path):
             os.makedirs(self.save_path)
 
-        if not os.path.exists(os.path.join(self.save_path, "result")):
-            os.makedirs(os.path.join(self.save_path, "result"))
-        self.result_file_path = os.path.join(self.save_path, "result")
+        if not os.path.exists(os.path.join(self.save_path, "results")):
+            os.makedirs(os.path.join(self.save_path, "results"))
+        self.result_file_path = os.path.join(self.save_path, "results")
 
-        if not os.path.exists(os.path.join(self.save_path, "result_avg")):
-            os.makedirs(os.path.join(self.save_path, "result_avg"))
-        self.result_file_path_avg = os.path.join(self.save_path, "result_avg")
+        if not os.path.exists(os.path.join(self.save_path, "results_avg")):
+            os.makedirs(os.path.join(self.save_path, "results_avg"))
+        self.result_file_path_avg = os.path.join(self.save_path, "results_avg")
 
         self.model = model
         self.trainloader, self.testloader = self.dataset.loaders(
