@@ -50,10 +50,10 @@ class IndexedCIFAR10(CIFAR10):
         # Convert to PIL Image for consistency with other datasets
         image = Image.fromarray(image)
 
-        if self.transform is not None:
+        if self.transform is not None and self.train:
             image = self.transform(image)
 
-        if self.target_transform is not None:
-            target = self.target_transform(target)
+        if self.target_transform is not None and not self.train:
+            image = self.transform(image)
 
         return image, target, index
