@@ -31,6 +31,7 @@ class PdHardness(ExampleMetric, ABC):
         super().__init__()
         self.config = config
         self.dataset = dataset
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.trainloader = None  # for training
         self.testloader = None  # for testing during training
         self.trainloader2 = None  # support dataset for training depth's KNN prediction
@@ -134,7 +135,7 @@ class PdHardness(ExampleMetric, ABC):
         """
         # NOTE: dataloader now has the return format of '(img, target), index'
         with torch.no_grad():
-            for (img, all_label), idx in dataloader:
+            for img, all_label, idx in dataloader:
                 img = img.cuda(non_blocking=True)  # an image from the dataset
                 all_label = all_label.cuda(non_blocking=True)
 
@@ -160,10 +161,10 @@ class PdHardness(ExampleMetric, ABC):
                                                                    config)  # get the feature bank and all labels for the support set
         f_bank = f_bank.t().contiguous()
         with torch.no_grad():
-            for j, ((imgs, labels), idx) in enumerate(evaloader):
+            for j, (imgs, labels, idx) in enumerate(evaloader):
                 imgs = imgs.cuda(non_blocking=True)
                 labels_b = labels.cuda(non_blocking=True)
-                nm_cls = model.get_num_classes()
+                nm_cls = self.dataset.get_num_classes()
                 _, inp_f_curr = model(imgs, k, train=False)
 
                 knn_scores = self._knn_predict(inp_f_curr, f_bank, all_labels, classes=nm_cls, knn_k=config.knn_k,

@@ -70,3 +70,12 @@ class PredefinedTorchvisionDataset(AbstractGeneralDataset):
             testloader = None
         return trainloader, testloader
 
+    def get_num_classes(self) -> int:
+        """
+        Get the number of classes in the datasets.
+
+        Returns:
+            int: The number of classes in the datasets.
+        """
+        return len(self.train_set.classes)
+
