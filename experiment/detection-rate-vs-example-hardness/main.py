@@ -49,7 +49,11 @@ def main():
     test_transform = T.Compose([T.ToTensor(),
                                 T.Normalize(mean=[0.4914, 0.4822, 0.4465], std=(0.247, 0.243, 0.261))
                                 ])
-    dataset = load_dataset(dataset_name, dataset_dir, train_transform, test_transform)
+    dataset = load_dataset(dataset_name,
+                           dataset_dir,
+                           train_transform=train_transform, 
+                           test_transform=test_transform,
+                           target_transform=None)
 
     # define model
     model = models.VGG16()
