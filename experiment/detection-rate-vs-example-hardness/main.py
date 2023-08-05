@@ -2,6 +2,9 @@ import os
 import torch
 import torchvision.transforms as T
 
+import sys
+sys.path.append('/home/wangz56/MIAE/mia')
+sys.path.append('/home/wangz56/MIAE')
 from mia import sample_metrics, attacks, eval_methods
 from mia.sample_metrics import sample_metrics_config
 from mia.utils import datasets, models
@@ -89,4 +92,4 @@ def main(testing=False):
 
 
 if __name__ == "__main__":
-    main(testing=True)
+    main(testing=False)
