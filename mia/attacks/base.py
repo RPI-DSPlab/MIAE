@@ -23,7 +23,7 @@ class ModelAccess(ABC):
     def __init__(self, model, access_type: ModelAccessType):
         """
         Initialize model access with a model handler.
-        :param model: the model handler to be used, which can be a model object (whilte box) or a model api(black box).
+        :param model: the model handler to be used, which can be a model object (white box) or a model api(black box).
         :param type: the type of model access, which can be "white_box" or "black_box" or "gray_box"
         """
         self.model = model

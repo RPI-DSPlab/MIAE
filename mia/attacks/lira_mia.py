@@ -56,24 +56,6 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
         self.target_path = config.get('target_path', f"./weights/target/{self.arch}/")
 
 
-class LiraModelAccess(ModelAccess):
-    """
-    Your implementation of ModelAccess for Lira.
-    """
-
-    def __init__(self, model, access_type: ModelAccessType):
-        """
-        Initialize LiraModelAccess.
-        """
-        super().__init__(model, access_type)
-
-    def get_signal(self, data):
-        """
-        Implement the get_signal method.
-        """
-        # Your code here
-
-
 def _split_data(fullset, expid, iteration_range, is_shadow):
     if is_shadow:  # case: for shadow model
         keep = np.random.uniform(0, 1, size=(iteration_range, len(fullset)))
@@ -105,7 +87,7 @@ class LIRAUtil:
 
         # Prepare the data
         dataset = load_dataset(dataset_name=info.dataset_name, data_path=info.dataset_dir,
-                               transform=DATA_TRANSFORM, target_transform=DATA_TRANSFORM)
+                               train_transform=DATA_TRANSFORM, test_transform=DATA_TRANSFORM, target_transform=None)
 
         # Combine trainset and testset
         return dataset
