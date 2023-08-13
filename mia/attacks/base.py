@@ -42,7 +42,7 @@ class ModelAccess(ABC):
         elif self.access_type in [ModelAccessType.WHITE_BOX, ModelAccessType.GRAY_BOX]:
             # Here, we assume that the white-box or gray-box access allows us to get
             # additional information from the model. What information we get will depend
-            # on the specifics of the LIRA attack and the model.
+            # on the specifics of the MIA attack and the model.
             raise NotImplementedError("White-box and gray-box access not implemented.")
         else:
             raise ValueError(f"Unknown access type: {self.access_type}")
