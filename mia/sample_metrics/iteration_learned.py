@@ -55,7 +55,7 @@ class IlHardness(ExampleMetric, ABC):
         self.model = model
         self.trainloader, self.testloader = self.dataset.loaders(
             batch_size=config.batch_size, shuffle_train=True, shuffle_test=True)
-        self.trainloader2, self.testloader2 = self.dataset.loaders(
+        self.trainloader_inf, self.testloader_inf = self.dataset.loaders(
             batch_size=config.batch_size, shuffle_train=True, shuffle_test=True)
 
         if config.crit == 'cross_entropy':
@@ -145,33 +145,33 @@ class IlHardness(ExampleMetric, ABC):
                     '{:.6f}'.format(epoch, train_loss, train_acc, end_time_train - start_time_train,
                                     end_time_after_inference - end_time_train))
 
-        def _determine_learned_metric(learning_history_dict):
-            """
-            This function determines the learned metric for the model, it finds the iteration or epoch which the model has
-            learned a datapoint
-            :param learning_history_dict: dictionary containing the learning history of the model, if -1, then the model can't learn
-                this datapoint
-            """
-            learned_metric_dict = {}
-            for i in learning_history_dict:
-                learned_itr = 0
-                learned_bool = False
-                curr_itr = 0
-                for j in learning_history_dict[i]:
-                    if j == True:  # if the model has learned this datapoint
-                        if learned_bool == False:
-                            learned_itr = curr_itr
-                        learned_bool = True
-                    else:  # if the model has not learned this datapoint or has forgotten it
-                        learned_bool = False
-                    curr_itr += 1
+    def _determine_learned_metric(self, learning_history_dict):
+        """
+        This function determines the learned metric for the model, it finds the iteration or epoch which the model has
+        learned a datapoint
+        :param learning_history_dict: dictionary containing the learning history of the model, if -1, then the model can't learn
+            this datapoint
+        """
+        learned_metric_dict = {}
+        for i in learning_history_dict:
+            learned_itr = 0
+            learned_bool = False
+            curr_itr = 0
+            for j in learning_history_dict[i]:
+                if j == True:  # if the model has learned this datapoint
+                    if learned_bool == False:
+                        learned_itr = curr_itr
+                    learned_bool = True
+                else:  # if the model has not learned this datapoint or has forgotten it
+                    learned_bool = False
+                curr_itr += 1
 
-                if learned_bool == True:
-                    learned_metric_dict[i] = learned_itr
-                else:
-                    learned_metric_dict[i] = -1
+            if learned_bool == True:
+                learned_metric_dict[i] = learned_itr
+            else:
+                learned_metric_dict[i] = -1
 
-            return learned_metric_dict
+        return learned_metric_dict
 
     def train_metric(self):
         """
@@ -186,11 +186,11 @@ class IlHardness(ExampleMetric, ABC):
             model_copy = model_copy.to(self.device)
 
             learning_history_train_dict = {}
-            for _, idx in self.trainloader_inf:
+            for _, _, idx in self.trainloader_inf:
                 for i in idx:
                     learning_history_train_dict[i.item()] = list()
             learning_history_test_dict = {}
-            for _, idx in self.testloader_inf:
+            for _, _, idx in self.testloader_inf:
                 for i in idx:
                     learning_history_test_dict[i.item()] = list()
             # train the model
@@ -198,29 +198,32 @@ class IlHardness(ExampleMetric, ABC):
                           self.criterion, self.device, learning_history_train_dict, learning_history_test_dict,
                           self.config)
 
+            learned_metric_train = self._determine_learned_metric(learning_history_train_dict)
+            learned_metric_test = self._determine_learned_metric(learning_history_test_dict)
+
             # save the partial results
-            if self.config.learned_metric == "iteration":
+            if self.config.learned_metric == "iteration_learned":
                 with open(os.path.join(self.result_file_path,
                                        "{}-{}-learned_metric_iteration_seed{}_train.json".format(repr(self.dataset),
                                                                                                  repr(self.model),
-                                                                                                 seed), "w")) as f:
-                    json.dump(learning_history_train_dict, f)
+                                                                                                 seed)), "w") as f:
+                    json.dump(learned_metric_train, f)
                 with open(os.path.join(self.result_file_path,
                                        "{}-{}-learned_metric_iteration_seed{}_test.json".format(repr(self.dataset),
                                                                                                 repr(self.model),
-                                                                                                seed), "w")) as f:
-                    json.dump(learning_history_test_dict, f)
-            elif self.config.learned_metric == "epoch":
+                                                                                                seed)), "w") as f:
+                    json.dump(learned_metric_test, f)
+            elif self.config.learned_metric == "epoch_learned":
                 with open(os.path.join(self.result_file_path,
                                        "{}-{}-learned_metric_epoch_seed{}_train.json".format(repr(self.dataset),
                                                                                              repr(self.model),
-                                                                                             seed), "w")) as f:
-                    json.dump(learning_history_train_dict, f)
+                                                                                             seed)), "w") as f:
+                    json.dump(learned_metric_train, f)
                 with open(os.path.join(self.result_file_path,
                                        "{}-{}-learned_metric_epoch_seed{}_test.json".format(repr(self.dataset),
                                                                                             repr(self.model),
-                                                                                            seed), "w")) as f:
-                    json.dump(learning_history_test_dict, f)
+                                                                                            seed)), "w") as f:
+                    json.dump(learned_metric_test, f)
             else:
                 raise NotImplementedError("Learned metric {} not implemented".format(self.config.learned_metric))
 
@@ -232,14 +235,23 @@ class IlHardness(ExampleMetric, ABC):
             raise Exception("No files found in the directory, please train the model first")
 
         # save the averaged results
-        if self.config.learned_metric == "iteration":
+        if self.config.learned_metric == "iteration_learned":
             with open(os.path.join(self.result_file_path_avg,
-                                   "{}-{}-learned_metric_iteration_train.json".format(repr(self.dataset),
-                                                                                      repr(self.model)), "w")) as f:
+                                   "{}-{}-learned_metric_iteration_avg_train.json".format(repr(self.dataset),
+                                                                                      repr(self.model))), "w") as f:
                 json.dump(self.train_avg_score, f)
             with open(os.path.join(self.result_file_path_avg,
-                                   "{}-{}-learned_metric_iteration_test.json".format(repr(self.dataset),
-                                                                                     repr(self.model)), "w")) as f:
+                                   "{}-{}-learned_metric_iteration_avg_test.json".format(repr(self.dataset),
+                                                                                     repr(self.model))), "w") as f:
+                json.dump(self.test_avg_score, f)
+        elif self.config.learned_metric == "epoch_learned":
+            with open(os.path.join(self.result_file_path_avg,
+                                   "{}-{}-learned_metric_epoch_avg_train.json".format(repr(self.dataset),
+                                                                                      repr(self.model))), "w") as f:
+                json.dump(self.train_avg_score, f)
+            with open(os.path.join(self.result_file_path_avg,
+                                   "{}-{}-learned_metric_epoch_avg_test.json".format(repr(self.dataset),
+                                                                                     repr(self.model))), "w") as f:
                 json.dump(self.test_avg_score, f)
         self.ready = True
 

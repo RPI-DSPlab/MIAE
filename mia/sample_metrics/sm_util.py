@@ -1,7 +1,7 @@
 import json
 import os
 import warnings
-from random import random
+import random
 import numpy as np
 import torch
 
@@ -12,11 +12,6 @@ def set_seed(seed=1234):
         np.random.seed(seed)
         torch.manual_seed(seed)
         # torch.backends.cudnn.deterministic = True
-        warnings.warn('You have chosen to seed training. '
-                      'This will turn on the CUDNN deterministic setting, '
-                      'which can slow down your training considerably! '
-                      'You may see unexpected behavior when restarting '
-                      'from checkpoints.')
 
 
 def avg_result(dir, file_suf='.json', roundToInt=False):

@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 
 
 class ExampleMetric(ABC):
+    @abstractmethod
     def __init__(self):
         """
         Initialize the OutlierDetectionMetric instance by invoking the initialization method of the superclass.
@@ -10,7 +11,6 @@ class ExampleMetric(ABC):
         Args:
             config (dict): A dictionary containing the configuration parameters for OneClassSVM.
         """
-
 
     @abstractmethod
     def get_score(self, idx: int, train: bool = True):

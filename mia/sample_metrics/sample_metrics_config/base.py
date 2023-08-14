@@ -57,24 +57,10 @@ class ExampleHardnessConfig(ABC):
         :param name: The name of the file to save the configuration to. If None, the name of the file is the name of the
         class concatenated with the current date and time.
         """
-        if name is not None:
-            fn = self.__class__.__name__ + "_" + name
-        else:
-            fn = self.__class__.__name__ + datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        # save all class attributes to a dictionary
-        config = {}
-        for i in inspect.getmembers(self):
-
-            # to remove private and protected functions
-            if not i[0].startswith('_'):
-
-                # To remove other methods that does not start with an underscore
-                if not inspect.ismethod(i[1]):
-                    config[i[0]] = i[1]
-
-        with open(path + fn + ".json", "w") as f:
-            json.dump(config, f, indent=4)
+        if name is None:
+            name = self.__class__.__name__ + "_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".json"
+        with open(path + name, "w") as f:
+            json.dump(self.__dict__, f)
 
     def load(self, path):
         """

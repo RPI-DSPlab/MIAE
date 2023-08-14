@@ -94,7 +94,7 @@ class CSHardness(ExampleMetric, ABC):
                 with torch.no_grad():
                     correct = 0
                     total = 0
-                    for (imgs, labels), idx in train_loader:
+                    for imgs, labels, idx in train_loader:
                         imgs, labels = imgs.cuda(non_blocking=True), labels.cuda(non_blocking=True)
                         outputs = model(imgs)
                         _, predicted = torch.max(outputs.data, 1)
@@ -112,7 +112,7 @@ class CSHardness(ExampleMetric, ABC):
             with torch.no_grad():
                 for idx in test_subset_indices:
                     trainset_correctness[idx.item()] = 0
-                for (imgs, labels), idx in test_loader:
+                for imgs, labels, idx in test_loader:
                     imgs, labels = imgs.cuda(non_blocking=True), labels.cuda(non_blocking=True)
                     outputs = model(imgs)
                     _, predicted = torch.max(outputs.data, 1)
