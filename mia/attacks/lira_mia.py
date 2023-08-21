@@ -31,12 +31,36 @@ class LiraModelAccess(ModelAccess):
         Initialize LiraModelAccess.
         """
         super().__init__(model, access_type)
+        self.model = model
+        self.model.eval()
 
     def get_signal(self, data):
         """
-        Implement the get_signal method.
+        Generates logits for a dataset given a model.
+
+        Args:
+        model (torch.nn.Module): The PyTorch model to generate logits.
+        data: a data point
         """
-        # Your code here
+        logits = []
+
+        with torch.no_grad():
+            images, _ = data
+            images = images
+
+            batch_logits = []
+            for aug in [images, images.flip(2)]:
+                pad = torch.nn.ReflectionPad2d(2)
+                aug_pad = pad(aug)
+                this_x = aug_pad[:, :, :32, :32]
+
+                outputs = self.model(this_x)
+                batch_logits.append(outputs)
+
+            logits.append(torch.stack(batch_logits).permute(1, 0, 2))
+
+        return torch.cat(logits).unsqueeze(1)  # should be [num_samples, 2, num_classes]
+
 
 class LiraAuxiliaryInfo(AuxiliaryInfo):
     """
@@ -183,7 +207,7 @@ class LIRAUtil:
             np.save(f"{dir_path}/keep.npy", is_in_train)
 
     @classmethod
-    def lira_mia(cls, keep, scores, check_keep, check_scores, in_size=100000, out_size=100000,
+    def lira_mia(cls, keep, scores, check_scores, in_size=100000, out_size=100000,
                  fix_variance=False):
         """
         Implements the core logic of the LIRA membership inference attack.
@@ -191,7 +215,6 @@ class LIRAUtil:
         Args:
         keep (np.ndarray): An array indicating which samples to keep.
         scores (np.ndarray): An array containing the scores of the samples.
-        check_keep (np.ndarray): An array containing which samples to keep for target model.
         check_scores (np.ndarray): An array containing the scores of the samples for target model.
         in_size (int): The number of samples to keep from the input.
         out_size (int): The number of samples to keep from the output.
@@ -224,17 +247,15 @@ class LIRAUtil:
             std_out = np.std(dat_out, 1)
 
         prediction = []
-        answers = []
 
-        for ans, sc in zip(check_keep, check_scores):
+        for sc in check_scores:
             pr_in = -scipy.stats.norm.logpdf(sc, mean_in, std_in + 1e-30)
             pr_out = -scipy.stats.norm.logpdf(sc, mean_out, std_out + 1e-30)
             score = pr_in - pr_out
 
             prediction.extend(score.mean(1))
-            answers.extend(ans)
 
-        return prediction, answers
+        return prediction
 
     @classmethod
     def _generate_logits(cls, model, data_loader, device):
@@ -268,7 +289,8 @@ class LIRAUtil:
         return torch.cat(logits).unsqueeze(1)  # should be [num_samples, 2, num_classes]
 
     @classmethod
-    def process_models(cls, info: LiraAuxiliaryInfo, is_shadow=True, threshold_acc=0.5):
+    def process_models(cls, info: LiraAuxiliaryInfo, target_model_access: ModelAccess,
+                       is_shadow=True, threshold_acc=0.5):
         """
         Loads the models and calculates the scores for each model.
 
@@ -297,9 +319,9 @@ class LIRAUtil:
                     print(f"load model [{index}/{len(model_locations)}]: {model_path}")
                     model = load_model(info.arch, path=model_path).to(info.device)
                     scores, mean_acc = cls._calculate_score(cls._generate_logits(model,
-                                                                                fullsetloader,
-                                                                                info.device).cpu().numpy(),
-                                                           fullset_targets)
+                                                                                 fullsetloader,
+                                                                                 info.device).cpu().numpy(),
+                                                            fullset_targets)
                     if mean_acc < threshold_acc: continue  # model is too bad, skip this record
 
                     # Convert the numpy array to a PyTorch tensor and add a new dimension
@@ -372,17 +394,12 @@ class LiraMiAttack(MiAttack):
         Args:
         attack_config (dict): The attack configuration dictionary.
         """
-        # 1. train the model and save them
-        # shadow model 可以保留
-        # 为达到效果： 允许user override该function
         LIRAUtil.train_models(info=self.auxiliary_info, is_shadow=True)
-        LIRAUtil.train_models(info=self.auxiliary_info, is_shadow=False)
 
         # given the model, calculate the score and generate the kept index data
         self.shadow_scores, self.shadow_keeps = LIRAUtil.process_models(self.auxiliary_info.shadow_path,
+                                                                        self.target_model_access,
                                                                         is_shadow=True)
-        self.target_scores, self.target_keeps = LIRAUtil.process_models(self.auxiliary_info.target_path,
-                                                                        is_shadow=False)
 
         # Convert the list of tensors to a single tensor
         self.shadow_scores = torch.cat(self.shadow_scores, dim=0)  # (20, 60000, 2)
@@ -401,5 +418,4 @@ class LiraMiAttack(MiAttack):
                 self.target_keeps is None:
             raise "You should init the model by calling prepare() first"
 
-        return LIRAUtil.lira_mia(np.array(self.shadow_scores), np.array(self.shadow_keeps),
-                                 np.array(self.target_scores), np.array(self.target_keeps))
+        return LIRAUtil.lira_mia(np.array(self.shadow_scores), np.array(self.shadow_keeps), target_data)
