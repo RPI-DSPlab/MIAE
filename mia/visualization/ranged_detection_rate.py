@@ -146,7 +146,6 @@ class DetectionRate(BaseVisualization):
         metric_total_df = pd.concat([train_df, test_df])
         metric_total_df.reset_index(drop=True, inplace=True)
 
-
         scores = []
         for epoch, in range(10, self.epoch, self.interval):
             with open(f'../exp/{self.arch}/{self.epoch}/lira_stats_{self.num_targets}_target.pkl', 'rb') as f:
