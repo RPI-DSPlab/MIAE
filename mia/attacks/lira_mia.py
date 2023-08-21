@@ -21,6 +21,23 @@ from utils.set_seed import set_seed
 
 # from attack_classifier import AttackClassifier # no classifer needed for LIRA
 
+class LiraModelAccess(ModelAccess):
+    """
+    Your implementation of ModelAccess for Lira.
+    """
+
+    def __init__(self, model, access_type: ModelAccessType):
+        """
+        Initialize LiraModelAccess.
+        """
+        super().__init__(model, access_type)
+
+    def get_signal(self, data):
+        """
+        Implement the get_signal method.
+        """
+        # Your code here
+
 class LiraAuxiliaryInfo(AuxiliaryInfo):
     """
     Implementation of AuxiliaryInfo for Lira.
