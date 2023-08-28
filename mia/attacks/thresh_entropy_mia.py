@@ -1,3 +1,7 @@
+# This code implements "Systematic evaluation of privacy risks of machine learning models", USENIX Security 2021
+# The code is based on the code from
+# https://github.com/inspire-group/membership-inference-evaluation
+
 import torch
 from matplotlib import pyplot as plt
 
@@ -5,7 +9,7 @@ from attack_classifier import *
 from attacks.base import MiAttack, AuxiliaryInfo, ModelAccessType, ModelAccess
 
 
-class MetricMiaAuxiliaryInfo(AuxiliaryInfo):
+class ThreshEntropyMiaAuxiliaryInfo(AuxiliaryInfo):
     """
     Base class for all auxiliary information.
     """
@@ -62,7 +66,7 @@ def compute_distributions(tr_values, te_values, tr_labels, te_labels, num_bins=3
     return tr_distrs, te_distrs, all_bins
 
 
-class MetricMiaModelAccess(ModelAccess):
+class ThreshEntropyMiaModelAccess(ModelAccess):
     """
     Base class for all types of model access.
     """
@@ -85,13 +89,13 @@ class MetricMiaModelAccess(ModelAccess):
         return confidences, entr, m_entr
 
 
-class MetricMia(MiAttack):
+class ThreshEntropyMia(MiAttack):
     """
     Base class for all attacks.
     """
 
     # define initialization with specifying the model access and the auxiliary information
-    def __init__(self, target_model_access: ModelAccess, auxiliary_info: MetricMiaAuxiliaryInfo, target_data=None):
+    def __init__(self, target_model_access: ModelAccess, auxiliary_info: ThreshEntropyMiaAuxiliaryInfo, target_data=None):
         """
         Initialize the attack with model access and auxiliary information.
         :param target_model_access:
@@ -117,7 +121,7 @@ class MetricMia(MiAttack):
 
     def prepare(self, auxiliary_info: AuxiliaryInfo):
         # Logic to setup the attack, including determining optimal thresholds
-        s_tr_conf, s_te_conf = auxiliary_info  # For simplicity, we assume auxiliary_info contains confidences for shadow train and test
+        s_tr_conf, s_te_conf = auxiliary_info
         self.thresholds = [self._thre_setting(s_tr_conf[i], s_te_conf[i]) for i in range(self.num_classes)]
 
     def build_attack_classifier(self, classifer_config: dict):
