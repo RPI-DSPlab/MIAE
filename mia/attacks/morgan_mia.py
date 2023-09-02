@@ -1,12 +1,17 @@
 # This code implements "Revisiting Membership Inference Under Realistic Assumptions", PETs 2021
 # The code is based on the code from
 # https://github.com/bargavj/EvaluatingDPML
+import os
+
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import roc_curve
 
 from mia.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
+from mia.utils import datasets
+from mia.utils import models
+from mia.utils.set_seed import set_seed
 
 
 class MerlinAuxiliaryInfo(AuxiliaryInfo):
@@ -27,8 +32,16 @@ class MerlinAuxiliaryInfo(AuxiliaryInfo):
         self.attack_noise_type = 'gaussian'
         self.attack_noise_coverage = 'full'
         self.attack_noise_magnitude = 0.01
+        self.attack_fpr_threshold = 0.05
 
-        # --
+        # -- target model parameters --
+
+        # -- update auxiliary information with configuration --
+        for key, value in config.items():
+            if key in self.__dict__:
+                self.__dict__[key] = value
+            else:
+                raise ValueError(f"Unknown configuration: {key}")
 
 
 class MerlinModelAccess(ModelAccess):
@@ -48,8 +61,6 @@ class MerlinModelAccess(ModelAccess):
 class MerlinUtil:
     # To avoid numerical inconsistency in calculating log_loss
     SMALL_VALUE = 1e-6
-
-
 
     @classmethod
     def generate_noise(cls, shape, dtype, noise_params):
@@ -72,6 +83,102 @@ class MerlinUtil:
         else:
             noise[:, attr] = np.array(np.random.normal(0, noise_magnitude, size=shape[0]), dtype=dtype)
         return noise
+
+    @classmethod
+    def train_shadow_model(cls, info: MerlinAuxiliaryInfo, dataset: datasets.AbstractGeneralDataset,
+                           model: models.BaseModel):
+        """
+        Train a shadow model. This is used to prepare the Decision Threshold for the Merlin attack.
+        if the model is found in the shadow_save_dir, then load the model from the save_dir.
+
+        :param info: auxiliary information for the attack.
+        :param access: model access for the attack.
+        :param dataset: the dataset for training the shadow model. It should be a subset of the target dataset distribution
+        :param model: the initialized shadow model.
+
+        :return: the shadow model.
+        """
+
+        @classmethod
+        def train_shadow_model(cls, info: MerlinAuxiliaryInfo, dataset: datasets.AbstractGeneralDataset,
+                               model: models.BaseModel):
+            """
+            Train a shadow model. This is used to prepare the Decision Threshold for the Merlin attack.
+            if the model is found in the shadow_save_dir, then load the model from the save_dir.
+
+            :param info: auxiliary information for the attack.
+            :param access: model access for the attack.
+            :param dataset: the dataset for training the shadow model. It should be a subset of the target dataset distribution
+            :param model: the initialized shadow model.
+
+            :return: attack_x, attack_y, classes, model, aux
+            """
+
+            set_seed(info.shadow_seed)
+            epochs = info.shadow_epochs
+            batch_size = info.shadow_batch_size
+            lr = info.shadow_lr
+            save_dir = info.shadow_save_dir
+            save_name = f"shadow_model_{info.shadow_seed}_ep{epochs}.pt"
+
+            if save_name in os.listdir(save_dir):
+                model.load_state_dict(torch.load(os.path.join(save_dir, save_name)))
+
+            else:
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+                # Create a DataLoader from the dataset
+                # TODO: in what way should the dataset be loaded:
+                #  1. user provides a dataset object and we make a loader from it
+                #  2. user provides a dataset name and we load the dataset from @Yuetian's Loader
+                data_loader = datasets.load_dataset(dataset, batch_size=batch_size, shuffle=True)
+
+                # Train the model
+                model.train()
+                model.to(device)
+                optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+                criterion = torch.nn.CrossEntropyLoss()
+
+                for epoch in range(epochs):
+                    for image, target, index in data_loader:
+                        image, target = image.to(device), target.to(device)
+                        optimizer.zero_grad()
+                        output = model(image)
+                        loss = criterion(output, target)
+                        loss.backward()
+                        optimizer.step()
+
+                # Save the trained model
+                torch.save(model.state_dict(), os.path.join(save_dir, save_name))
+
+            attack_x, attack_y = [], []
+
+            # Data used in training, label is 1
+            pred_input_tensor = torch.tensor(dataset.train_set, dtype=torch.float32)
+            with torch.no_grad():
+                # TODO: the model should return np.array(pred_y), np.array(pred_scores): both the prediction and the scores
+                # TODO: the implementation is on EvaluatingDPML/core/attack.py, line 27
+                pred_scores = model(pred_input_tensor)
+            pred_scores = pred_scores.cpu().numpy()
+            attack_x.append(pred_scores)
+            attack_y.append(np.ones(dataset.train_set.shape[0]))
+
+            # Data not used in training, label is 0
+            pred_input_tensor = torch.tensor(dataset.test_set, dtype=torch.float32)
+            with torch.no_grad():
+                pred_scores = model(pred_input_tensor)
+            pred_scores = pred_scores.cpu().numpy()
+            attack_x.append(pred_scores)
+            attack_y.append(np.zeros(dataset.test_set.shape[0]))
+
+            attack_x = np.vstack(attack_x)
+            attack_y = np.concatenate(attack_y)
+            attack_x = attack_x.astype('float32')
+            attack_y = attack_y.astype('int32')
+
+            classes = np.concatenate([dataset.train_set, dataset.test_set])
+
+            return attack_x, attack_y, classes, model, None
 
     @classmethod
     def log_loss(cls, a, b):
@@ -153,7 +260,7 @@ class MerlinUtil:
         return alpha_thresh
 
     @classmethod
-    def merlin_mia(cls, true_x, true_y, classifier, per_instance_loss, noise_params, max_t, fpr_threshold=None, per_class_thresh=False):
+    def merlin_mia(cls, true_x, true_y, classifier, per_instance_loss, noise_params, max_t, fpr_threshold=None):
         """
         Implementation of the Merlin attack.
         :param true_x: the true input (batched).
@@ -164,14 +271,14 @@ class MerlinUtil:
                             This is passed to MorganUtil.generate_noise.
         :param max_t: maximum number of iterations.
         :param fpr_threshold: fpr_threshold for the Merlin attack.
-        :param per_class_thresh: whether to use per-class threshold.
         """
         # obtain the merlin ratio
         merlin_ratio = cls.get_merlin_ratio(true_x, true_y, classifier, per_instance_loss, noise_params, max_t)
         # obtain the inference threshold
-
-
-        return
+        threshold = cls.get_inference_threshold(merlin_ratio, true_y, fpr_threshold)
+        # obtain the predicted output
+        pred_y = np.where(merlin_ratio > threshold, 1, 0)
+        return pred_y
 
 
 class MerlinAttack(MiAttack):
@@ -194,7 +301,17 @@ class MerlinAttack(MiAttack):
 
     def prepare(self, attack_config: dict):
         """
-        Prepare the attack with attack configuration.
+        Prepare the Merlin attack. This function is called before the attack. It may use model access to get signals
+        from the target model.
         :param attack_config: a dictionary containing the configuration for the attack.
+        :return: None.
         """
-        super().prepare(attack_config)
+
+    def infer(self, target_data):
+        """
+        Infers the membership of target data with the Merlin attack.
+        :param target_data: the target data.
+        :return: the inferred membership.
+        """
+
+        # obtain the per-instance loss of the target data
