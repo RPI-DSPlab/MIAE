@@ -12,6 +12,8 @@ class AuxiliaryInfo(ABC):
     """
     Base class for all auxiliary information.
     """
+
+    #TODO: add shadow dataset here
     pass
 
 

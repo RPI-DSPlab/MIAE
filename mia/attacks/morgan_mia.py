@@ -99,86 +99,8 @@ class MerlinUtil:
         :return: the shadow model.
         """
 
-        @classmethod
-        def train_shadow_model(cls, info: MerlinAuxiliaryInfo, dataset: datasets.AbstractGeneralDataset,
-                               model: models.BaseModel):
-            """
-            Train a shadow model. This is used to prepare the Decision Threshold for the Merlin attack.
-            if the model is found in the shadow_save_dir, then load the model from the save_dir.
-
-            :param info: auxiliary information for the attack.
-            :param access: model access for the attack.
-            :param dataset: the dataset for training the shadow model. It should be a subset of the target dataset distribution
-            :param model: the initialized shadow model.
-
-            :return: attack_x, attack_y, classes, model, aux
-            """
-
-            set_seed(info.shadow_seed)
-            epochs = info.shadow_epochs
-            batch_size = info.shadow_batch_size
-            lr = info.shadow_lr
-            save_dir = info.shadow_save_dir
-            save_name = f"shadow_model_{info.shadow_seed}_ep{epochs}.pt"
-
-            if save_name in os.listdir(save_dir):
-                model.load_state_dict(torch.load(os.path.join(save_dir, save_name)))
-
-            else:
-                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-                # Create a DataLoader from the dataset
-                # TODO: in what way should the dataset be loaded:
-                #  1. user provides a dataset object and we make a loader from it
-                #  2. user provides a dataset name and we load the dataset from @Yuetian's Loader
-                data_loader = datasets.load_dataset(dataset, batch_size=batch_size, shuffle=True)
-
-                # Train the model
-                model.train()
-                model.to(device)
-                optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-                criterion = torch.nn.CrossEntropyLoss()
-
-                for epoch in range(epochs):
-                    for image, target, index in data_loader:
-                        image, target = image.to(device), target.to(device)
-                        optimizer.zero_grad()
-                        output = model(image)
-                        loss = criterion(output, target)
-                        loss.backward()
-                        optimizer.step()
-
-                # Save the trained model
-                torch.save(model.state_dict(), os.path.join(save_dir, save_name))
-
-            attack_x, attack_y = [], []
-
-            # Data used in training, label is 1
-            pred_input_tensor = torch.tensor(dataset.train_set, dtype=torch.float32)
-            with torch.no_grad():
-                # TODO: the model should return np.array(pred_y), np.array(pred_scores): both the prediction and the scores
-                # TODO: the implementation is on EvaluatingDPML/core/attack.py, line 27
-                pred_scores = model(pred_input_tensor)
-            pred_scores = pred_scores.cpu().numpy()
-            attack_x.append(pred_scores)
-            attack_y.append(np.ones(dataset.train_set.shape[0]))
-
-            # Data not used in training, label is 0
-            pred_input_tensor = torch.tensor(dataset.test_set, dtype=torch.float32)
-            with torch.no_grad():
-                pred_scores = model(pred_input_tensor)
-            pred_scores = pred_scores.cpu().numpy()
-            attack_x.append(pred_scores)
-            attack_y.append(np.zeros(dataset.test_set.shape[0]))
-
-            attack_x = np.vstack(attack_x)
-            attack_y = np.concatenate(attack_y)
-            attack_x = attack_x.astype('float32')
-            attack_y = attack_y.astype('int32')
-
-            classes = np.concatenate([dataset.train_set, dataset.test_set])
-
-            return attack_x, attack_y, classes, model, None
+    @classmethod
+    def train_target_model(cls):
 
     @classmethod
     def log_loss(cls, a, b):
