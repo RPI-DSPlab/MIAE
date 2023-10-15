@@ -57,6 +57,40 @@ class MerlinModelAccess(ModelAccess):
         """
         super().__init__(model, access_type)
 
+    def classify(self, data):
+        """
+        Classify the input x with the target model.
+        :param data: the input data.
+        :return: the output of the target model.
+        """
+        return self.model(data)
+
+    def get_signal(self, data):
+        """
+        obtain the logit of the input data with the target model.
+        :param data: the input data.
+        :return: the logit of the input data.
+        """
+        logits = []
+
+        with torch.no_grad():
+            images, _ = data
+            images = images
+
+            batch_logits = []
+            for aug in [images, images.flip(2)]:
+                pad = torch.nn.ReflectionPad2d(2)
+                aug_pad = pad(aug)
+                this_x = aug_pad[:, :, :32, :32]
+
+                outputs = self.model(this_x)
+                batch_logits.append(outputs)
+
+            logits.append(torch.stack(batch_logits).permute(1, 0, 2))
+
+        return torch.cat(logits).unsqueeze(1)
+
+
 
 class MerlinUtil:
     # To avoid numerical inconsistency in calculating log_loss
@@ -99,8 +133,6 @@ class MerlinUtil:
         :return: the shadow model.
         """
 
-    @classmethod
-    def train_target_model(cls):
 
     @classmethod
     def log_loss(cls, a, b):
@@ -179,6 +211,7 @@ class MerlinUtil:
             if a > fpr_threshold:
                 break
             alpha_thresh = b
+
         return alpha_thresh
 
     @classmethod
@@ -210,7 +243,7 @@ class MerlinAttack(MiAttack):
 
     def __init__(self, target_model_access: MerlinModelAccess, auxiliary_info: MerlinAuxiliaryInfo, target_data=None):
         """
-        Initialize the Morgan attack with target model access and auxiliary information.
+        Initialize the Merlin attack with target model access and auxiliary information.
         :param target_model_access: the target model access.
         :param auxiliary_info: the auxiliary information.
         """
@@ -228,6 +261,7 @@ class MerlinAttack(MiAttack):
         :param attack_config: a dictionary containing the configuration for the attack.
         :return: None.
         """
+
 
     def infer(self, target_data):
         """
