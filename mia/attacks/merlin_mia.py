@@ -1,6 +1,7 @@
 # This code implements "Revisiting Membership Inference Under Realistic Assumptions", PETs 2021
 # The code is based on the code from
 # https://github.com/bargavj/EvaluatingDPML
+import copy
 import os
 
 import numpy as np
@@ -12,6 +13,7 @@ from mia.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAtta
 from mia.utils import datasets
 from mia.utils import models
 from mia.utils.set_seed import set_seed
+from utils.datasets import AbstractGeneralDataset
 
 
 class MerlinAuxiliaryInfo(AuxiliaryInfo):
@@ -29,19 +31,23 @@ class MerlinAuxiliaryInfo(AuxiliaryInfo):
         # ---- initialize auxiliary information with default values ----
         # -- Morgan attack parameters --
         self.max_t = 100  # maximum number of iterations for obtaining the merlin ratio
-        self.attack_noise_type = 'gaussian'
-        self.attack_noise_coverage = 'full'
-        self.attack_noise_magnitude = 0.01
-        self.attack_fpr_threshold = 0.05
+        self.attack_noise_type = config.get("attack_noise_type", 'gaussian')
+        self.attack_noise_coverage = config.get("attack_noise_coverage", 'full')
+        self.attack_noise_magnitude = config.get("attack_noise_magnitude", 0.01)
+        self.attack_fpr_threshold = config.get("attack_fpr_threshold", 0.05)
 
-        # -- target model parameters --
+        # Model saving and loading parameters
+        self.path = config.get('path', None)
 
-        # -- update auxiliary information with configuration --
-        for key, value in config.items():
-            if key in self.__dict__:
-                self.__dict__[key] = value
-            else:
-                raise ValueError(f"Unknown configuration: {key}")
+        # -- shadow model parameters --
+        self.shadow_model_arch = config.get("shadow_model_arch", 'wrn28-2')
+        self.shadow_model_num_epochs = config.get("shadow_model_num_epochs", 140)
+        self.shadow_model_batch_size = config.get("shadow_model_batch_size", 128)
+        self.shadow_model_seed = config.get("shadow_model_seed", 0)
+        self.shadow_model_weight_decay = config.get('weight_decay', 0.01)
+        self.shadow_model_decay = config.get('decay', 0.9999)
+        self.device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+        self.shadow_path = config.get('shadow_path', f"./weights/shadow/{self.arch}/")
 
 
 class MerlinModelAccess(ModelAccess):
@@ -85,22 +91,45 @@ class MerlinUtil:
         return noise
 
     @classmethod
-    def train_shadow_model(cls, info: MerlinAuxiliaryInfo, dataset: datasets.AbstractGeneralDataset,
-                           model: models.BaseModel):
+    def train_shadow_model(cls, info: MerlinAuxiliaryInfo, v_dataset: AbstractGeneralDataset, model):
         """
         Train a shadow model. This is used to prepare the Decision Threshold for the Merlin attack.
         if the model is found in the shadow_save_dir, then load the model from the save_dir.
 
         :param info: auxiliary information for the attack.
-        :param access: model access for the attack.
-        :param dataset: the dataset for training the shadow model. It should be a subset of the target dataset distribution
+        :param v_dataset: the dataset for training the shadow model. It should be a subset of the target dataset distribution
         :param model: the initialized shadow model.
 
-        :return: the shadow model.
+        :return: the shadow model, the training data loader and the testing data loader.
         """
 
-    @classmethod
-    def train_target_model(cls):
+        v_classifier = copy.deepcopy(model)
+        v_classifier.to(info.device)
+        # if the shadow model is available, load the shadow model from the shadow_save_dir
+        if os.path.exists(info.shadow_path):
+            v_classifier.load_state_dict(torch.load(info.shadow_path))
+            return v_classifier
+
+        # if the shadow model is not available, train the shadow model
+        set_seed(info.shadow_model_seed)
+        v_classifier.train()
+        v_optimizer = torch.optim.Adam(v_classifier.parameters(), lr=0.001, weight_decay=info.shadow_model_weight_decay)
+        v_scheduler = torch.optim.lr_scheduler.ExponentialLR(v_optimizer, gamma=info.shadow_model_decay)
+        v_criterion = torch.nn.CrossEntropyLoss()
+
+        v_train_loader, v_test_loader = v_dataset.loaders(info.shadow_model_batch_size, shuffle_training_data=True)
+        for epoch in range(info.shadow_model_num_epochs):
+            for inputs, labels in v_train_loader:
+                inputs, labels = inputs.to(info.device), labels.to(info.device)
+                v_optimizer.zero_grad()
+                outputs = v_classifier(inputs)
+                loss = v_criterion(outputs, labels)
+                loss.backward()
+                v_optimizer.step()
+            v_scheduler.step()
+        torch.save(v_classifier.state_dict(), info.shadow_path)
+
+        return v_classifier, v_train_loader, v_test_loader
 
     @classmethod
     def log_loss(cls, a, b):
@@ -182,6 +211,36 @@ class MerlinUtil:
         return alpha_thresh
 
     @classmethod
+    def generate_logits(cls, model, data_loader, device):
+        """
+        Generate logits for the Merlin attack.
+        :param model:
+        :param data_loader: a data loader for the target data.
+        :param device: the device to use.
+        :return: logits for the Merlin attack.
+        """
+        model.eval()
+        logits = []
+
+        with torch.no_grad():
+            for batch in data_loader:
+                images, _ = batch
+                images = images.to(device)
+
+                batch_logits = []
+                for aug in [images, images.flip(2)]:
+                    pad = torch.nn.ReflectionPad2d(2)
+                    aug_pad = pad(aug)
+                    this_x = aug_pad[:, :, :32, :32]
+
+                    outputs = model(this_x)
+                    batch_logits.append(outputs)
+
+                logits.append(torch.stack(batch_logits).permute(1, 0, 2))
+
+        return torch.cat(logits).unsqueeze(1)  # should be [num_samples, 2, num_classes]
+
+    @classmethod
     def merlin_mia(cls, true_x, true_y, classifier, per_instance_loss, noise_params, max_t, fpr_threshold=None):
         """
         Implementation of the Merlin attack.
@@ -215,19 +274,56 @@ class MerlinAttack(MiAttack):
         :param auxiliary_info: the auxiliary information.
         """
         super().__init__(target_model_access, auxiliary_info, target_data)
+        self.v_test_loader = None
+        self.v_train_loader = None
+        self.merlin_ratio = None
+        self.v_merlin_ratio = None
         self.auxiliary_info = auxiliary_info
         self.target_model_access = target_model_access
         self.noise_params = (self.auxiliary_info.attack_noise_type,
                              self.auxiliary_info.attack_noise_coverage,
                              self.auxiliary_info.attack_noise_magnitude)
 
-    def prepare(self, attack_config: dict):
+        self.shadow_model = None  # the shadow model, not prepared yet
+
+        self.prepared = False
+
+    def prepare(self, attack_config: dict, v_dataset=None, shadow_model=None):
         """
         Prepare the Merlin attack. This function is called before the attack. It may use model access to get signals
         from the target model.
         :param attack_config: a dictionary containing the configuration for the attack.
+        :param v_dataset: the shadow dataset
+        :param shadow_model: the shadow model
         :return: None.
         """
+
+        self.shadow_model, self.v_train_loader, self.v_test_loader = MerlinUtil.train_shadow_model(self.auxiliary_info, v_dataset, shadow_model)
+        v_pred_y = self.shadow_model(v_dataset.data)
+        v_per_instance_loss = np.array(MerlinUtil.log_loss(v_dataset.targets, v_pred_y))
+        nose_params = (self.auxiliary_info.attack_noise_type,
+                       self.auxiliary_info.attack_noise_coverage,
+                       self.auxiliary_info.attack_noise_magnitude)
+        self.v_merlin_ratio = MerlinUtil.get_merlin_ratio(v_dataset.data, v_dataset.targets, self.shadow_model,
+                                                          v_per_instance_loss, nose_params, self.auxiliary_info.max_t)
+
+        # prepare the shadow model's logits
+
+        self.v_logits = []  # the logits of the shadow set
+        self.v_y = []  # the membership of the shadow set
+        # train dataset is in-sample
+        train_logits = MerlinUtil.generate_logits(self.shadow_model, self.v_train_loader, self.auxiliary_info.device)
+        self.v_logits.append(train_logits)
+        self.v_y.append(torch.ones(train_logits.shape[0], dtype=torch.long, device=self.auxiliary_info.device))
+        # test dataset is out-sample
+        test_logits = MerlinUtil.generate_logits(self.shadow_model, self.v_test_loader, self.auxiliary_info.device)
+        self.v_logits.append(test_logits)
+        self.v_y.append(torch.zeros(test_logits.shape[0], dtype=torch.long, device=self.auxiliary_info.device))
+
+
+
+        self.prepared = True
+
 
     def infer(self, target_data):
         """
@@ -235,5 +331,13 @@ class MerlinAttack(MiAttack):
         :param target_data: the target data.
         :return: the inferred membership.
         """
+        target_x, target_y = target_data
+        target_per_instance_loss = np.array(MerlinUtil.log_loss(target_y, self.target_model_access.model(target_x)))
+        merlin_ratio = MerlinUtil.get_merlin_ratio(target_x, target_y, self.target_model_access.model,
+                                                   target_per_instance_loss, self.noise_params,
+                                                   self.auxiliary_info.max_t)
 
-        # obtain the per-instance loss of the target data
+        thresh = MerlinUtil.get_inference_threshold(self.v_merlin_ratio, self.v_y, self.auxiliary_info.attack_fpr_threshold)
+        pred_membership = np.zeros(len(target_x))
+        pred_membership[np.where(merlin_ratio > thresh)] = 1
+        return pred_membership
