@@ -6,7 +6,7 @@ from torchvision.models import vgg16
 from mia.utils.models.base import BaseModel
 
 
-class VGG16(BaseModel):
+class VGG(BaseModel):
     """
     VGG model for computing Prediction Depth
     """
@@ -20,7 +20,7 @@ class VGG16(BaseModel):
         :param encoder: the encoder of the VGG model, should be passed when an instance of VGG16 is created
         :param num_classes: number of classes
         """
-        super(VGG16, self).__init__()
+        super(VGG, self).__init__()
         self.encoder = encoder
         self.classifier = nn.Sequential(nn.Flatten(),
                                         nn.Linear(512, num_classes))
