@@ -288,17 +288,17 @@ class MerlinAttack(MiAttack):
 
         self.prepared = False
 
-    def prepare(self, attack_config: dict, v_dataset=None, shadow_model=None):
+    def prepare(self, v_dataset):
         """
         Prepare the Merlin attack. This function is called before the attack. It may use model access to get signals
         from the target model.
-        :param attack_config: a dictionary containing the configuration for the attack.
         :param v_dataset: the shadow dataset
-        :param shadow_model: the shadow model
         :return: None.
         """
 
-        self.shadow_model, self.v_train_loader, self.v_test_loader = MerlinUtil.train_shadow_model(self.auxiliary_info, v_dataset, shadow_model)
+        self.shadow_model, self.v_train_loader, self.v_test_loader = MerlinUtil.train_shadow_model(self.auxiliary_info,
+                                                                                                   v_dataset,
+                                                                                                   shadow_model)
         v_pred_y = self.shadow_model(v_dataset.data)
         v_per_instance_loss = np.array(MerlinUtil.log_loss(v_dataset.targets, v_pred_y))
         nose_params = (self.auxiliary_info.attack_noise_type,
@@ -320,10 +320,7 @@ class MerlinAttack(MiAttack):
         self.v_logits.append(test_logits)
         self.v_y.append(torch.zeros(test_logits.shape[0], dtype=torch.long, device=self.auxiliary_info.device))
 
-
-
         self.prepared = True
-
 
     def infer(self, target_data):
         """
@@ -337,7 +334,8 @@ class MerlinAttack(MiAttack):
                                                    target_per_instance_loss, self.noise_params,
                                                    self.auxiliary_info.max_t)
 
-        thresh = MerlinUtil.get_inference_threshold(self.v_merlin_ratio, self.v_y, self.auxiliary_info.attack_fpr_threshold)
+        thresh = MerlinUtil.get_inference_threshold(self.v_merlin_ratio, self.v_y,
+                                                    self.auxiliary_info.attack_fpr_threshold)
         pred_membership = np.zeros(len(target_x))
         pred_membership[np.where(merlin_ratio > thresh)] = 1
         return pred_membership
