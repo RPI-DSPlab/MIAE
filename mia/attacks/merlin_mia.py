@@ -267,7 +267,7 @@ class MerlinAttack(MiAttack):
     Implementation of the Merlin attack.
     """
 
-    def __init__(self, target_model_access: MerlinModelAccess, auxiliary_info: MerlinAuxiliaryInfo, target_data=None):
+    def __init__(self, target_model_access: MerlinModelAccess, auxiliary_info: MerlinAuxiliaryInfo, target_data, shadow_model):
         """
         Initialize the Morgan attack with target model access and auxiliary information.
         :param target_model_access: the target model access.
@@ -284,7 +284,7 @@ class MerlinAttack(MiAttack):
                              self.auxiliary_info.attack_noise_coverage,
                              self.auxiliary_info.attack_noise_magnitude)
 
-        self.shadow_model = None  # the shadow model, not prepared yet
+        self.shadow_model = copy.deepcopy(shadow_model)
 
         self.prepared = False
 
@@ -298,7 +298,7 @@ class MerlinAttack(MiAttack):
 
         self.shadow_model, self.v_train_loader, self.v_test_loader = MerlinUtil.train_shadow_model(self.auxiliary_info,
                                                                                                    v_dataset,
-                                                                                                   shadow_model)
+                                                                                                   self.shadow_model)
         v_pred_y = self.shadow_model(v_dataset.data)
         v_per_instance_loss = np.array(MerlinUtil.log_loss(v_dataset.targets, v_pred_y))
         nose_params = (self.auxiliary_info.attack_noise_type,

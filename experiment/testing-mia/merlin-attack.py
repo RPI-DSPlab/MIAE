@@ -124,7 +124,7 @@ def main(testing=False):
     attack.prepare(shadow_set)
 
     # attack the target model
-    attack_test = ConcatDataset([training_set, training_set])
+    attack_test = ConcatDataset([training_set, testset])
     y_membership = np.concatenate((np.ones(len(training_set)), np.zeros(len(training_set))))
 
     pred_membership = attack.infer(attack_test)
