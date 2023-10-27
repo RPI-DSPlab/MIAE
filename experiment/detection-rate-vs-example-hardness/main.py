@@ -69,7 +69,7 @@ def main(testing=False):
 
     # define model
     ecd = vgg16().features
-    model = models.VGG16(ecd, 10)
+    model = models.VGG(ecd, 10)
 
     consistency_score = sample_metrics.CSHardness(cs_config, model, dataset)
     iteration_learned = sample_metrics.IlHardness(il_config, model, dataset)
