@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import roc_curve
+from tqdm import tqdm
 
 from mia.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
 from mia.utils import datasets
@@ -106,8 +107,8 @@ class MerlinUtil:
         v_classifier.to(info.device)
         v_train_loader, v_test_loader = DataLoader(v_dataset[0], batch_size=info.shadow_model_batch_size, shuffle=True), \
             DataLoader(v_dataset[1], batch_size=info.shadow_model_batch_size, shuffle=True)
-
         # if the shadow model is available, load the shadow model from the shadow_save_dir
+
         if os.path.exists(info.shadow_path):
             v_classifier.load_state_dict(torch.load(info.shadow_path))
             return v_classifier, v_train_loader, v_test_loader
@@ -142,14 +143,14 @@ class MerlinUtil:
         return v_classifier, v_train_loader, v_test_loader
 
     @classmethod
-    def log_loss(cls, a, b):
+    def log_loss(cls, true_y, pred_y):
         """
-        Compute the log loss between two distributions.
-        :param a: the first distribution.
-        :param b: the second distribution.
-        :return: the log loss between two distributions.
+        Compute the log loss between predictions and true labels.
+        :param true_y: true label of the data.
+        :param pred_y: predicted label of the data.
+        :return: the log loss between predictions and true labels.
         """
-        return [-np.log(max(b[i, int(a[i])], cls.SMALL_VALUE)) for i in range(len(a))]
+        return [-np.log(max(pred_y[i, int(true_y[i])], cls.SMALL_VALUE)) for i in range(len(true_y))]
 
     @classmethod
     def get_merlin_ratio(cls, true_x, true_y, classifier, per_instance_loss, noise_params, max_t):
@@ -173,9 +174,11 @@ class MerlinUtil:
         counts = np.zeros(len(true_x))
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        for t in range(max_t):
-            noisy_x = true_x + torch.tensor(cls.generate_noise(true_x.shape, true_x.dtype, noise_params), device=device)
-            noisy_x = noisy_x.to(torch.float32)  # Ensure the data type is float32
+        print("getting merlin ratio")
+        for t in tqdm(range(max_t)):
+            noise = torch.tensor(cls.generate_noise(true_x.shape, true_x.dtype, noise_params), device=device)
+            noisy_x = true_x + noise.cpu().numpy()
+            noisy_x = noisy_x.astype(np.float32)  # Ensure the data type is float32
 
             # Convert numpy arrays to PyTorch tensors
             noisy_x_tensor = torch.tensor(noisy_x, device=device)
@@ -183,15 +186,15 @@ class MerlinUtil:
 
             # Create a TensorDataset from the tensors with the added noise
             dataset = TensorDataset(noisy_x_tensor, true_y_tensor)
-            data_loader = DataLoader(dataset, batch_size=len(true_x))
+            data_loader = DataLoader(dataset, batch_size=128)
 
             # Store predictions for all instances
             pred_y = []
 
             with torch.no_grad():
                 for inputs, _ in data_loader:
-                    inputs = inputs.unsqueeze(1)  # Add a dummy dimension for the model
-                    predictions = classifier(inputs)
+                    permuted_input = inputs.permute(0, 3, 1, 2)
+                    predictions = classifier(permuted_input)
                     pred_y.extend(predictions.squeeze().cpu().numpy())
 
             pred_y = np.array(pred_y)
@@ -234,21 +237,12 @@ class MerlinUtil:
 
         with torch.no_grad():
             for batch in data_loader:
-                images, _ = batch
-                images = images.to(device)
+                inputs, _ = batch
+                inputs = inputs.to(device)
+                outputs = model(inputs)
+                logits.extend(outputs.squeeze().cpu().numpy())
 
-                batch_logits = []
-                for aug in [images, images.flip(2)]:
-                    pad = torch.nn.ReflectionPad2d(2)
-                    aug_pad = pad(aug)
-                    this_x = aug_pad[:, :, :32, :32]
-
-                    outputs = model(this_x)
-                    batch_logits.append(outputs)
-
-                logits.append(torch.stack(batch_logits).permute(1, 0, 2))
-
-        return torch.cat(logits).unsqueeze(1)  # should be [num_samples, 2, num_classes]
+        return np.array(logits)
 
     @classmethod
     def merlin_mia(cls, true_x, true_y, classifier, per_instance_loss, noise_params, max_t, fpr_threshold=None):
@@ -316,21 +310,28 @@ class MerlinAttack(MiAttack):
                                                                                                    v_dataset,
                                                                                                    self.shadow_model)
         # combine the train and test set
-        v_dataset_cat = torch.utils.data.ConcatDataset(v_dataset)
         v_train_set = v_dataset[0].dataset.dataset
         v_test_set = v_dataset[1].dataset.dataset
-        v_dataset_data = np.concatenate(v_train_set.data + v_test_set.data, axis=0)
+        v_dataset_data = np.concatenate([v_train_set.data, v_test_set.data], axis=0)
+        v_dataset_cat = torch.utils.data.ConcatDataset([v_train_set, v_test_set])
         v_dataset_targets = v_train_set.targets + v_test_set.targets
         # go through the shadow set to get the merlin ratio
         v_pred_y = MerlinUtil.generate_logits(self.shadow_model, DataLoader(v_dataset_cat, batch_size=128),
                                               self.auxiliary_info.device)
-
         v_per_instance_loss = np.array(MerlinUtil.log_loss(v_dataset_targets, v_pred_y))
         noise_params = (self.auxiliary_info.attack_noise_type,
-                       self.auxiliary_info.attack_noise_coverage,
-                       self.auxiliary_info.attack_noise_magnitude)
-        self.v_merlin_ratio = MerlinUtil.get_merlin_ratio(v_dataset_data, v_dataset_targets, self.shadow_model,
-                                                          v_per_instance_loss, noise_params, self.auxiliary_info.max_t)
+                        self.auxiliary_info.attack_noise_coverage,
+                        self.auxiliary_info.attack_noise_magnitude)
+
+        # check if the merlin ratio is already calculated
+        if os.path.exists(os.path.join(self.auxiliary_info.path, "merlin_ratio.npy")):
+            self.v_merlin_ratio = np.load(os.path.join(self.auxiliary_info.path, "merlin_ratio.npy"))
+        else:
+
+            self.v_merlin_ratio = MerlinUtil.get_merlin_ratio(v_dataset_data, v_dataset_targets, self.shadow_model,
+                                                              v_per_instance_loss, noise_params,
+                                                              self.auxiliary_info.max_t)
+            np.save(os.path.join(self.auxiliary_info.path, "merlin_ratio.npy"), self.v_merlin_ratio)
 
         # prepare the shadow model's logits
 

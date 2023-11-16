@@ -40,7 +40,7 @@ class TargetModel(torch.nn.Module):
         x = torch.nn.functional.relu(self.conv3(x))
         x = torch.nn.functional.relu(self.conv4(x))
         x = torch.nn.functional.max_pool2d(x, 2)
-        x = x.view(-1, 64 * 8 * 8)
+        x = x.reshape(-1, 64 * 8 * 8)
         x = torch.nn.functional.relu(self.fc1(x))
         x = self.fc2(x)
         return x
@@ -147,7 +147,7 @@ def main(testing=False):
     attack_test = ConcatDataset([training_set, testset])
     y_membership = np.concatenate((np.ones(len(training_set)), np.zeros(len(training_set))))
 
-    pred_membership = attack.infer(attack_test)
+    pred_membership = attack.infer((attack_test, y_membership))
 
     # calculate the accuracy
     accuracy = np.sum(y_membership == pred_membership) / len(y_membership)
