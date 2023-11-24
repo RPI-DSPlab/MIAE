@@ -22,6 +22,7 @@ shadow_split_ratio = 0.8  # meaning 20% of the shadow set is used for training t
 num_epochs = 250
 
 
+
 # define a model architecture
 class TargetModel(torch.nn.Module):
     def __init__(self):
@@ -145,8 +146,7 @@ def main(testing=False):
 
     # attack the target model
     attack_test = ConcatDataset([training_set, testset])
-    y_membership = np.concatenate((np.ones(len(training_set)), np.zeros(len(training_set))))
-
+    y_membership = np.concatenate((np.ones(len(training_set)), np.zeros(len(testset))))
     pred_membership = attack.infer((attack_test, y_membership))
 
     # calculate the accuracy

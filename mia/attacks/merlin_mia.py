@@ -16,6 +16,16 @@ from mia.utils import models
 from mia.utils.set_seed import set_seed
 from utils.datasets import AbstractGeneralDataset
 
+def get_total_elements(dataloader):
+    batch_size = dataloader.batch_size
+    num_batches = len(dataloader)
+    total_elements = batch_size * num_batches
+
+    # Adjust total_elements for the last batch if drop_last is False
+    if not dataloader.drop_last and len(dataloader.dataset) % batch_size != 0:
+        total_elements -= batch_size - (len(dataloader.dataset) % batch_size)
+
+    return total_elements
 
 class MerlinAuxiliaryInfo(AuxiliaryInfo):
     """
@@ -63,6 +73,9 @@ class MerlinModelAccess(ModelAccess):
         """
         super().__init__(model, access_type)
 
+    def to_device(self, device):
+        self.model.to(device)
+
 
 class MerlinUtil:
     # To avoid numerical inconsistency in calculating log_loss
@@ -103,10 +116,13 @@ class MerlinUtil:
         :return: the shadow model, the training data loader and the testing data loader.
         """
 
+
         v_classifier = copy.deepcopy(model)
         v_classifier.to(info.device)
-        v_train_loader, v_test_loader = DataLoader(v_dataset[0], batch_size=info.shadow_model_batch_size, shuffle=True), \
-            DataLoader(v_dataset[1], batch_size=info.shadow_model_batch_size, shuffle=True)
+        v_train_loader, v_test_loader = DataLoader(v_dataset[0].dataset.dataset, batch_size=info.shadow_model_batch_size, shuffle=True), \
+            DataLoader(v_dataset[1].dataset.dataset, batch_size=info.shadow_model_batch_size, shuffle=True)
+
+
         # if the shadow model is available, load the shadow model from the shadow_save_dir
 
         if os.path.exists(info.shadow_path):
@@ -193,8 +209,7 @@ class MerlinUtil:
 
             with torch.no_grad():
                 for inputs, _ in data_loader:
-                    permuted_input = inputs.permute(0, 3, 1, 2)
-                    predictions = classifier(permuted_input)
+                    predictions = classifier(inputs)
                     pred_y.extend(predictions.squeeze().cpu().numpy())
 
             pred_y = np.array(pred_y)
@@ -212,7 +227,9 @@ class MerlinUtil:
         :param fpr_threshold: fpr_threshold for the Merlin attack.
         :return: a threshold for the Merlin attack.
         """
-        fpr, tpr, thresholds = roc_curve(true_vector, pred_vector, pos_label=1)
+        pred_vector_cpu = torch.tensor(pred_vector, device='cpu')
+        true_vector_cpu = true_vector.cpu().numpy()
+        fpr, tpr, thresholds = roc_curve(true_vector_cpu, pred_vector_cpu.cpu(), pos_label=1)
         # return inference threshold corresponding to maximum advantage
         if fpr_threshold == None:
             return thresholds[np.argmax(tpr - fpr)]
@@ -291,6 +308,7 @@ class MerlinAttack(MiAttack):
 
         self.shadow_model = copy.deepcopy(shadow_model)  # copy the untrained shadow model
 
+        self.target_model_access.to_device(self.auxiliary_info.device)  # make sure the target model is on the right device
         self.prepared = False
 
     def prepare(self, v_dataset: list):
@@ -336,15 +354,14 @@ class MerlinAttack(MiAttack):
         # prepare the shadow model's logits
 
         self.v_logits = []  # the logits of the shadow set
-        self.v_y = []  # the membership of the shadow set
         # train dataset is in-sample
         train_logits = MerlinUtil.generate_logits(self.shadow_model, self.v_train_loader, self.auxiliary_info.device)
         self.v_logits.append(train_logits)
-        self.v_y.append(torch.ones(train_logits.shape[0], dtype=torch.long, device=self.auxiliary_info.device))
+        self.v_y = (torch.ones(train_logits.shape[0], dtype=torch.long, device=self.auxiliary_info.device))
         # test dataset is out-sample
         test_logits = MerlinUtil.generate_logits(self.shadow_model, self.v_test_loader, self.auxiliary_info.device)
         self.v_logits.append(test_logits)
-        self.v_y.append(torch.zeros(test_logits.shape[0], dtype=torch.long, device=self.auxiliary_info.device))
+        self.v_y = torch.cat((self.v_y, torch.zeros(test_logits.shape[0], dtype=torch.long, device=self.auxiliary_info.device)))
 
         self.prepared = True
 
@@ -355,8 +372,17 @@ class MerlinAttack(MiAttack):
         :return: the inferred membership.
         """
         target_x, target_y = target_data
-        target_per_instance_loss = np.array(MerlinUtil.log_loss(target_y, self.target_model_access.model(target_x)))
-        merlin_ratio = MerlinUtil.get_merlin_ratio(target_x, target_y, self.target_model_access.model,
+        if not self.prepared:
+            raise Exception("Merlin attack is not prepared. Call prepare() before calling infer().")
+
+        # obtain prediction on the target data with the target model
+        pred_y = MerlinUtil.generate_logits(self.target_model_access.model, DataLoader(target_x, batch_size=128),
+                                            self.auxiliary_info.device)
+        target_per_instance_loss = np.array(MerlinUtil.log_loss(target_y, pred_y))
+
+        target_x_arr = [image.numpy() for image, _ in target_x]
+        target_x_arr = np.array(target_x_arr)
+        merlin_ratio = MerlinUtil.get_merlin_ratio(target_x_arr, target_y, self.target_model_access.model,
                                                    target_per_instance_loss, self.noise_params,
                                                    self.auxiliary_info.max_t)
 
