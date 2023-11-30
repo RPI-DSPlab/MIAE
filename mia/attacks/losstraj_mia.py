@@ -2,6 +2,7 @@
 # Inference Attacks by Exploiting Loss Trajectory".
 # The code is based on the code from
 # https://github.com/DennisLiu2022/Membership-Inference-Attacks-by-Exploiting-Loss-Trajectory
+import copy
 
 import numpy as np
 import torch
@@ -22,6 +23,18 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         super().__init__(config)
         self.loss_trajectory = config
         self.device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+        self.seed = config.get('seed', 0)
+        self.batch_size = config.get('batch_size', 128)
+        self.num_workers = config.get('num_workers', 2)
+        self.num_epochs = config.get('num_epochs', 240)
+
+        # directories:
+        self.save_dir = config.get('save_dir', './results')
+        self.distill_models_
+
+
+
+
 
 
 class LosstrajModelAccess(ModelAccess):
@@ -36,96 +49,30 @@ class LosstrajModelAccess(ModelAccess):
         """
         super().__init__(model, model_type)
 
-    def get_loss_trajectory(self, input_signals):
+    def get_model_architecture(self):
         """
-        Get the loss trajectory of the target model.
-        :param input_signals: the input signals.
-        :return: the loss trajectory.
+        Get the un-initialized model architecture of the target model.
+        :return: the un-initialized model architecture.
         """
+        return copy.deepcopy(self.model).reset_parameters()
 
 class LosstrajUtil:
-
     @classmethod
-    def load_dataset(cls, x, y, aug: bool, train: bool) -> DataLoader:
+    def model_distillation(cls, target_model_access: LosstrajModelAccess, distillation_dataset: DataLoader, auxiliary_info: LosstrajAuxiliaryInfo):
         """
-        load the dataset with given x and y and return the dataloader.
+         with distillation_dataset.
+        :param target_model_access:
+        :param dataset:
+        :param auxiliary_info:
+        :return:
         """
-    @classmethod
-    def build_trajectory_membership_dataset(cls, args, target_model, dataset, device):
-        MODEL = target_model.to(device)
 
+        distilled_model = target_model_access.get_model_architecture()
+        distilled_model.to(auxiliary_info.device)
+        distilled_model.train()
 
-        if args.mode == 'target':
-            print('load target_dataset ... ')
-            train_loader = dataset.aug_target_train_loader
-            test_loader = dataset.aug_target_test_loader
-
-        elif args.mode == 'shadow':
-            print('load shadow_dataset ... ')
-            train_loader = dataset.aug_shadow_train_loader
-            test_loader = dataset.aug_shadow_test_loader
-
-        model_top1 = None
-        model_loss = None
-        orginal_labels = None
-        predicted_labels = None
-        predicted_status = None
-        member_status = None
-
-        def normalization(data):
-            _range = np.max(data) - np.min(data)
-            return (data - np.min(data)) / _range
-
-        MODEL.eval()
-
-        for loader_idx, data_loader in enumerate([train_loader, test_loader]):
-            top1 = DATA.AverageMeter()
-            for data_idx, (data, target, ori_idx) in enumerate(data_loader):
-                batch_trajectory = get_trajectory(data, target, args, ori_model_path, device)
-                data, target = data.to(device), target.to(device)
-                batch_logit_target = MODEL(data)
-
-                _, batch_predict_label = batch_logit_target.max(1)
-                batch_predicted_label = batch_predict_label.long().cpu().detach().numpy()
-                batch_original_label = target.long().cpu().detach().numpy()
-                batch_loss_target = [F.cross_entropy(batch_logit_target_i.unsqueeze(0), target_i.unsqueeze(0)) for
-                                     (batch_logit_target_i, target_i) in zip(batch_logit_target, target)]
-                batch_loss_target = np.array(
-                    [batch_loss_target_i.cpu().detach().numpy() for batch_loss_target_i in batch_loss_target])
-                batch_predicted_status = (
-                            torch.argmax(batch_logit_target, dim=1) == target).float().cpu().detach().numpy()
-                batch_predicted_status = np.expand_dims(batch_predicted_status, axis=1)
-                member = np.repeat(np.array(int(1 - loader_idx)), batch_trajectory.shape[0], 0)
-                batch_loss_ori = batch_loss_target
-
-                model_loss_ori = batch_loss_ori if loader_idx == 0 and data_idx == 0 else np.concatenate(
-                    (model_loss_ori, batch_loss_ori), axis=0)
-                model_trajectory = batch_trajectory if loader_idx == 0 and data_idx == 0 else np.concatenate(
-                    (model_trajectory, batch_trajectory), axis=0)
-                original_labels = batch_original_label if loader_idx == 0 and data_idx == 0 else np.concatenate(
-                    (original_labels, batch_original_label), axis=0)
-                predicted_labels = batch_predicted_label if loader_idx == 0 and data_idx == 0 else np.concatenate(
-                    (predicted_labels, batch_predicted_label), axis=0)
-                predicted_status = batch_predicted_status if loader_idx == 0 and data_idx == 0 else np.concatenate(
-                    (predicted_status, batch_predicted_status), axis=0)
-                member_status = member if loader_idx == 0 and data_idx == 0 else np.concatenate((member_status, member),
-                                                                                                axis=0)
-
-        print(f'------------Loading trajectory {args.mode} dataset successfully!---------')
-        data = {
-            'model_loss_ori': model_loss_ori,
-            'model_trajectory': model_trajectory,
-            'original_labels': original_labels,
-            'predicted_labels': predicted_labels,
-            'predicted_status': predicted_status,
-            'member_status': member_status,
-            'nb_classes': dataset.num_classes
-        }
-
-        dataset_type = 'trajectory_train_data' if args.mode == 'shadow' else 'trajectory_test_data'
-        utils.create_path(ori_model_path + f'/{args.mode}/{model_name}')
-        np.save(ori_model_path + f'/{args.mode}/{model_name}/{dataset_type}', data)
-
+        # obtain the distillation dataset from target model
+        distillation_loader = distillation_dataset
 
 class LosstrajAttack(MiAttack):
     """
