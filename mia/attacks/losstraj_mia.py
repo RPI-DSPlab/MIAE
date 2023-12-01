@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader, TensorDataset, Subset
 from torch._utils import _accumulate
 from tqdm import tqdm
 import torch.nn.functional as F
+from utils import set_seed
 
 from mia.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
 
@@ -20,7 +21,7 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
     The auxiliary information for the loss trajectory based membership inference attack.
     """
 
-    def __init__(self, config: dict):
+    def __init__(self, config):
         """
         Initialize the auxiliary information.
         :param config: the loss trajectory.
@@ -305,6 +306,12 @@ class LosstrajAttack(MiAttack):
         """
         Prepare the attack.
         """
+        if self.prepared:
+            print("the attack is already prepared!")
+            return
+
+        # set the seed
+        set_seed(self.auxiliary_info.seed)
         # determine the length of the distillation dataset and the shadow dataset
         distillation_train_len = int(len(auxiliary_dataset) * self.auxiliary_info.distillation_dataset_ratio)
         shadow_dataset_len = len(auxiliary_dataset) - distillation_train_len
