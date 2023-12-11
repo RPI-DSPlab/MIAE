@@ -1,6 +1,6 @@
 import torch
 
-from attack_classifier import *
+from attacks.attack_classifier import *
 
 class ModelAccessType(Enum):
     """ Enum class for model access type. """
@@ -13,8 +13,12 @@ class AuxiliaryInfo(ABC):
     Base class for all auxiliary information.
     """
 
-    #TODO: add shadow dataset here
-    pass
+    def __init__(self, auxiliary_info):
+        """
+        Initialize auxiliary information.
+        :param auxiliary_info: the auxiliary information.
+        """
+        pass
 
 
 class ModelAccess(ABC):

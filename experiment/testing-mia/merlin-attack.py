@@ -16,8 +16,11 @@ dataset_dir = "datasets"
 result_dir = "results"
 configs_dir = "configs"
 dataset_name = "cifar10"
-batch_size = 1000
+batch_size = 10000
 trainset_ratio = 0.5  # meaning 50% of the training set is used for training the target model
+shadow_split_ratio = 0.8  # meaning 20% of the shadow set is used for training the shadow model
+num_epochs = 250
+
 
 
 # define a model architecture
@@ -38,7 +41,7 @@ class TargetModel(torch.nn.Module):
         x = torch.nn.functional.relu(self.conv3(x))
         x = torch.nn.functional.relu(self.conv4(x))
         x = torch.nn.functional.max_pool2d(x, 2)
-        x = x.view(-1, 64 * 8 * 8)
+        x = x.reshape(-1, 64 * 8 * 8)
         x = torch.nn.functional.relu(self.fc1(x))
         x = self.fc2(x)
         return x
@@ -46,6 +49,12 @@ class TargetModel(torch.nn.Module):
 
 def main(testing=False):
     set_seed(0)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    # intialize the directories
+    for d in [dataset_dir, result_dir, configs_dir]:
+        if not os.path.exists(d):
+            os.makedirs(d)
 
     # initialize the dataset
     train_transform = T.Compose([T.RandomCrop(32, padding=4),
@@ -71,63 +80,74 @@ def main(testing=False):
                             shuffle=False, num_workers=2)
 
     # prepare the shadow set and target set and then train a target model
-
-    training_set, shadow_set = random_split(trainset, [trainset_ratio * len(trainset),
-                                                       len(trainset) - trainset_ratio * len(trainset)])
+    train_len = int(len(trainset) * trainset_ratio)
+    shadow_len = len(trainset) - train_len
+    training_set, shadow_set = random_split(trainset, [train_len, shadow_len])
 
     # defining a target model
-    """NOTE: again, we are allowing user to define their own target model"""
+
     target_model = TargetModel()
 
-    # training the target model
-    total_loss = 0
-    correct_predictions = 0
-    total_samples = 0
-    training_loader = DataLoader(training_set, batch_size=batch_size, shuffle=True, num_workers=2)
-    target_model.train()
-    optimizer = torch.optim.Adam(target_model.parameters(), lr=0.001)
-    criterion = torch.nn.CrossEntropyLoss()
-    for epoch in tqdm(range(100)):
-        for i, data in enumerate(training_loader):
-            inputs, labels = data
-            optimizer.zero_grad()
-            outputs = target_model(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+    if os.path.exists(os.path.join(result_dir, "target_model.pth")):
+        target_model.load_state_dict(torch.load(os.path.join(result_dir, "target_model.pth")))
+    else:
+        # training the target model
+        target_model.to(device)
+        total_loss = 0
+        correct_predictions = 0
+        total_samples = 0
+        training_loader = DataLoader(training_set, batch_size=batch_size, shuffle=True, num_workers=2)
+        target_model.train()
+        optimizer = torch.optim.Adam(target_model.parameters(), lr=0.005, weight_decay=0.0005)
+        criterion = torch.nn.CrossEntropyLoss()
 
-            # Calculate the accuracy for this batch
-            _, predicted = torch.max(outputs, 1)
-            correct_predictions += (predicted == labels).sum().item()
-            total_samples += labels.size(0)
+        for epoch in range(num_epochs):
+            for i, data in enumerate(training_loader):
+                inputs, labels = data
+                inputs, labels = inputs.to(device), labels.to(device)
+                optimizer.zero_grad()
+                outputs = target_model(inputs)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
 
-            # Print batch-level loss and accuracy
-            tqdm.write(
-                f"Epoch {epoch + 1}, Batch {i + 1}, Loss: {loss.item():.4f}, Accuracy: {(correct_predictions / total_samples) * 100:.2f}%")
+                # Calculate the accuracy for this batch
+                _, predicted = torch.max(outputs, 1)
+                correct_predictions += (predicted == labels).sum().item()
+                total_samples += labels.size(0)
+
+            accuracy = (correct_predictions / total_samples) * 100
+            if epoch % 20 == 0:
+                print(f"Epoch {epoch + 1},\tAccuracy: {accuracy:.2f}%,\tLoss: {loss.item():.4f}")
 
 
 
-    # Calculate and print the accuracy at the end of the epoch
-    accuracy = (correct_predictions / total_samples) * 100
-    print(f"End of Epoch {epoch + 1}, Accuracy: {accuracy:.2f}%")
+        # Calculate and print the accuracy at the end of the epoch
+        accuracy = (correct_predictions / total_samples) * 100
+        print(f"End of Epoch {epoch + 1}, Accuracy: {accuracy:.2f}%")
 
-    # save the target model
-    torch.save(target_model.state_dict(), os.path.join(result_dir, "target_model.pth"))
+        # save the target model
+        torch.save(target_model.state_dict(), os.path.join(result_dir, "target_model.pth"))
 
     # initialize the target model access
     target_model_access = merlin_mia.MerlinModelAccess(target_model, mia_base.ModelAccessType.GRAY_BOX)
 
     # initialize the attack
-    merlin_attack_config = merlin_mia.MerlinAuxiliaryInfo(None)  # None would result in default config
-    attack = merlin_mia.MerlinAttack(target_model_access, merlin_attack_config)
+    config = dict()
+    merlin_attack_config = merlin_mia.MerlinAuxiliaryInfo(config)  # None would result in default config
+    shadow_model = TargetModel()
+    attack = merlin_mia.MerlinAttack(target_model_access, merlin_attack_config, shadow_model)
 
-    attack.prepare(shadow_set)
+    # split shadow_set
+    shadow_train_len = int(len(shadow_set) * shadow_split_ratio)
+    shadow_test_len = len(shadow_set) - shadow_train_len
+    shadow_training_set, shadow_test_set = random_split(shadow_set, [shadow_train_len, shadow_test_len])
+    attack.prepare([shadow_training_set, shadow_test_set])
 
     # attack the target model
     attack_test = ConcatDataset([training_set, testset])
-    y_membership = np.concatenate((np.ones(len(training_set)), np.zeros(len(training_set))))
-
-    pred_membership = attack.infer(attack_test)
+    y_membership = np.concatenate((np.ones(len(training_set)), np.zeros(len(testset))))
+    pred_membership = attack.infer((attack_test, y_membership))
 
     # calculate the accuracy
     accuracy = np.sum(y_membership == pred_membership) / len(y_membership)
