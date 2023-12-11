@@ -6,15 +6,15 @@ from torch.utils.data import DataLoader, random_split, ConcatDataset
 from tqdm import tqdm
 import numpy as np
 
-from mia.attacks import merlin_mia, base as mia_base
+from mia.attacks import losstraj_mia, base as mia_base
 from utils.datasets.loader import load_dataset
 from utils.set_seed import set_seed
 
 
 
-dataset_dir = "merlin/datasets"
-result_dir = "merlin/results"
-configs_dir = "merlin/configs"
+dataset_dir = "datasets"
+result_dir = "results"
+configs_dir = "configs"
 dataset_name = "cifar10"
 batch_size = 1000
 trainset_ratio = 0.5  # meaning 50% of the training set is used for training the target model
@@ -71,9 +71,9 @@ def main(testing=False):
                             shuffle=False, num_workers=2)
 
     # prepare the shadow set and target set and then train a target model
-    target_train_set_len = int(trainset_ratio * len(trainset))
-    shadow_train_set_len = len(trainset) - target_train_set_len
-    training_set, shadow_set = random_split(trainset, [target_train_set_len, shadow_train_set_len])
+
+    training_set, shadow_set = random_split(trainset, [trainset_ratio * len(trainset),
+                                                       len(trainset) - trainset_ratio * len(trainset)])
 
     # defining a target model
     """NOTE: again, we are allowing user to define their own target model"""
@@ -115,11 +115,11 @@ def main(testing=False):
     torch.save(target_model.state_dict(), os.path.join(result_dir, "target_model.pth"))
 
     # initialize the target model access
-    target_model_access = merlin_mia.MerlinModelAccess(target_model, mia_base.ModelAccessType.GRAY_BOX)
+    target_model_access = losstraj_mia.LosstrajModelAccess(target_model, mia_base.ModelAccessType.WHITE_BOX)
 
     # initialize the attack
-    merlin_attack_config = merlin_mia.MerlinAuxiliaryInfo(None)  # None would result in default config
-    attack = merlin_mia.MerlinAttack(target_model_access, merlin_attack_config)
+    merlin_attack_config = losstraj_mia.LosstrajAuxiliaryInfo(None)  # None would result in default config
+    attack = losstraj_mia.LosstrajAttack(target_model_access, merlin_attack_config)
 
     attack.prepare(shadow_set)
 

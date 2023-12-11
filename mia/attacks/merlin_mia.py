@@ -78,8 +78,7 @@ class MerlinModelAccess(ModelAccess):
 
 
 class MerlinUtil:
-    # To avoid numerical inconsistency in calculating log_loss
-    SMALL_VALUE = 1e-6
+    SMALL_VALUE = 1e-6  # To avoid numerical inconsistency in calculating log_loss
 
     @classmethod
     def generate_noise(cls, shape, dtype, noise_params):
