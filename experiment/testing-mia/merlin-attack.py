@@ -12,9 +12,9 @@ from utils.set_seed import set_seed
 
 
 
-dataset_dir = "datasets"
-result_dir = "results"
-configs_dir = "configs"
+dataset_dir = "merlin/datasets"
+result_dir = "merlin/results"
+configs_dir = "merlin/configs"
 dataset_name = "cifar10"
 batch_size = 1000
 trainset_ratio = 0.5  # meaning 50% of the training set is used for training the target model
@@ -71,9 +71,9 @@ def main(testing=False):
                             shuffle=False, num_workers=2)
 
     # prepare the shadow set and target set and then train a target model
-
-    training_set, shadow_set = random_split(trainset, [trainset_ratio * len(trainset),
-                                                       len(trainset) - trainset_ratio * len(trainset)])
+    target_train_set_len = int(trainset_ratio * len(trainset))
+    shadow_train_set_len = len(trainset) - target_train_set_len
+    training_set, shadow_set = random_split(trainset, [target_train_set_len, shadow_train_set_len])
 
     # defining a target model
     """NOTE: again, we are allowing user to define their own target model"""
