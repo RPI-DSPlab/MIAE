@@ -1,6 +1,6 @@
 import torch
 
-from attack_classifier import *
+from attacks.attack_classifier import *
 
 class ModelAccessType(Enum):
     """ Enum class for model access type. """
