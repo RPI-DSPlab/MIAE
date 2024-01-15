@@ -53,6 +53,14 @@ class ModelAccess(ABC):
         else:
             raise ValueError(f"Unknown access type: {self.access_type}")
 
+    def to_device(self, device):
+        """
+        Move the model to the device.
+        :param device:
+        :return:
+        """
+        self.model.to(device)
+
 
 class MiAttack(ABC):
     """
