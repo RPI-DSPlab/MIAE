@@ -93,7 +93,6 @@ def main(testing=False):
     else:
         # training the target model
         target_model.to(device)
-        total_loss = 0
         correct_predictions = 0
         total_samples = 0
         training_loader = DataLoader(training_set, batch_size=batch_size, shuffle=True, num_workers=2)
