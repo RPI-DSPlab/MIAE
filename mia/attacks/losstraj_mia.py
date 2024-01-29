@@ -11,9 +11,28 @@ from torch.utils.data import DataLoader, TensorDataset, Subset
 from torch._utils import _accumulate
 from tqdm import tqdm
 import torch.nn.functional as F
-from utils import set_seed
+from utils.set_seed import set_seed
 
 from mia.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
+
+
+class AttackMLP(torch.nn.Module):
+    # default model for the attack
+    def __init__(self, dim_in):
+        super(AttackMLP, self).__init__()
+        self.dim_in = dim_in
+        self.fc1 = torch.nn.Linear(self.dim_in, 512)
+        self.fc2 = torch.nn.Linear(512, 128)
+        self.fc3 = torch.nn.Linear(128, 32)
+        self.fc4 = torch.nn.Linear(32, 2)
+
+    def forward(self, x):
+        x = x.view(-1, self.dim_in)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        x = F.softmax(self.fc4(x), dim=1)
+        return x
 
 
 class LosstrajAuxiliaryInfo(AuxiliaryInfo):
@@ -27,10 +46,9 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         :param config: the loss trajectory.
         """
         super().__init__(config)
-        self.loss_trajectory = config
         self.device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
         self.seed = config.get('seed', 0)
-        self.batch_size = config.get('batch_size', 128)
+        self.batch_size = config.get('batch_size', 500)
         self.num_workers = config.get('num_workers', 2)
         self.distillation_epochs = config.get('distillation_epochs', 240)
 
@@ -43,7 +61,7 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         self.distillation_dataset_ratio = config.get('distillation_dataset_ratio', 0.5)
         self.shadow_dataset_ratio = 1 - self.distillation_dataset_ratio
         # train/test split ratio of the shadow dataset
-        self.shadow_train_test_split_ratio = config.get('shadow_train_test_split_ratio', 0.7)
+        self.shadow_train_test_split_ratio = config.get('shadow_train_test_split_ratio', 0.5)
 
 
 class LosstrajModelAccess(ModelAccess):
@@ -64,7 +82,11 @@ class LosstrajModelAccess(ModelAccess):
         Get the un-initialized model architecture of the target model.
         :return: the un-initialized model architecture.
         """
-        return copy.deepcopy(self.model).reset_parameters()
+        model_copy = copy.deepcopy(self.model)
+        for layer in model_copy.children():
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
+        return model_copy
 
 
 class LosstrajUtil:
@@ -87,50 +109,76 @@ class LosstrajUtil:
         return all_data
 
     @classmethod
-    def model_distillation(cls, model_access: LosstrajModelAccess, distillation_dataset: DataLoader,
+    def model_distillation(cls, teacher_model_access: LosstrajModelAccess, distillation_dataset: DataLoader,
                            auxiliary_info: LosstrajAuxiliaryInfo, teacher_type="target"):
         """
          Distill a model with the given distillation dataset, and save the distilled model at each epoch.
-        :param model_access: the access to the teacher model
+        :param teacher_model_access: the access to the teacher model
         :param distillation_dataset: the dataset used to obtain the soft labels from the target model and train the distilled model.
         :param auxiliary_info: the auxiliary information.
         :param teacher_type: the type of the teacher model. It can be "target" or "shadow".
         :return: None
         """
-        distilled_model = model_access.get_model_architecture()
+        if os.path.exists(os.path.join(auxiliary_info.distill_models_path, teacher_type)) == False:
+            os.makedirs(os.path.join(auxiliary_info.distill_models_path, teacher_type))
+        elif len(os.listdir(
+                os.path.join(auxiliary_info.distill_models_path, teacher_type))) >= auxiliary_info.distillation_epochs:
+            return  # if the distilled models are already saved, return
+
+        distilled_model = teacher_model_access.get_model_architecture()
         distilled_model.to(auxiliary_info.device)
+        teacher_model_access.to_device(auxiliary_info.device)
         distilled_model.train()
         optimizer = torch.optim.Adam(distilled_model.parameters(), lr=0.001)
 
-        for epoch in tqdm(auxiliary_info.distillation_epochs):
-            for i, data in enumerate(distillation_dataset):
+        distill_train_loader = DataLoader(distillation_dataset, batch_size=auxiliary_info.batch_size, shuffle=True,
+                                          num_workers=auxiliary_info.num_workers)
+
+        for epoch in tqdm(range(auxiliary_info.distillation_epochs)):
+            for i, data in enumerate(distill_train_loader):
+                optimizer.zero_grad()
                 inputs, labels = data
                 inputs = inputs.to(auxiliary_info.device)
-                teacher_pred = model_access.model(inputs)  # teacher model
+                teacher_pred = teacher_model_access.model(inputs)  # teacher model
                 distilled_pred = distilled_model(inputs)  # student model
-                loss = torch.nn.KLDivLoss(reduction='batchmean')(F.log_softmax(teacher_pred, dim=1),
-                                                                 F.softmax(distilled_pred, dim=1))
+                loss = torch.nn.KLDivLoss(reduction='batchmean')(F.log_softmax(distilled_pred, dim=1),
+                                                                 F.softmax(teacher_pred, dim=1))
+
                 loss.backward()
                 optimizer.step()
 
             # Calculate the accuracy for this batch
             distilled_model.eval()
-            with torch.no_grad():
-                correct_predictions = 0
-                total_samples = 0
-                for i, data in enumerate(distillation_dataset):
-                    inputs, labels = data
-                    inputs = inputs.to(auxiliary_info.device)
-                    outputs = distilled_model(inputs)
-                    _, predicted = torch.max(outputs, 1)
-                    correct_predictions += (predicted == labels).sum().item()
-                    total_samples += labels.size(0)
-                accuracy = correct_predictions / total_samples
-                print('Epoch: {}, Accuracy: {}'.format(epoch, accuracy))
+            correct_predictions = 0
+            total_samples = 0
+            if epoch % 20 == 0 or epoch == auxiliary_info.distillation_epochs - 1:
+                with torch.no_grad():
+                    for i, data in enumerate(distill_train_loader):
+                        inputs, labels = data
+                        inputs = inputs.to(auxiliary_info.device)
+                        labels = labels.to(auxiliary_info.device)
+                        outputs = distilled_model(inputs)
+                        _, predicted = torch.max(outputs, 1)
+                        correct_predictions += (predicted == labels).sum().item()
+                        total_samples += labels.size(0)
+                    accuracy = correct_predictions / total_samples
+                    print(f"Epoch {epoch + 1}, Accuracy: {accuracy:.2f}%, Loss: {loss.item():.4f}")
 
             # save the distilled model at the end of each epoch
             torch.save(distilled_model.state_dict(), os.path.join(auxiliary_info.distill_models_path, teacher_type,
-                                                                  "distilled_model_ep" + epoch + ".pth"))
+                                                                  "distilled_model_ep" + str(epoch) + ".pth"))
+
+    @classmethod
+    def label_to_distribution(cls, label, num_classes):
+        """
+        Convert a label to a one-hot distribution.
+        :param label:
+        :param num_classes:
+        :return:
+        """
+        identity_matrix = torch.eye(num_classes, dtype=torch.float)
+        distribution = identity_matrix[label]
+        return distribution
 
     @classmethod
     def train_shadow_model(cls, shadow_model, shadow_train_dataset, shadow_test_dataset,
@@ -151,36 +199,43 @@ class LosstrajUtil:
         shadow_model.train()
         optimizer = torch.optim.Adam(shadow_model.parameters(), lr=0.001)
 
-        for epoch in tqdm(auxiliary_info.distillation_epochs):
-            for i, data in enumerate(shadow_train_dataset):
+        shadow_train_loader = DataLoader(shadow_train_dataset, batch_size=auxiliary_info.batch_size, shuffle=True,
+                                         num_workers=auxiliary_info.num_workers)
+        shadow_test_loader = DataLoader(shadow_test_dataset, batch_size=auxiliary_info.batch_size, shuffle=True,
+                                        num_workers=auxiliary_info.num_workers)
+
+        for epoch in tqdm(range(auxiliary_info.distillation_epochs)):
+            for i, data in enumerate(shadow_train_loader):
+                optimizer.zero_grad()
                 inputs, labels = data
-                inputs = inputs.to(auxiliary_info.device)
+                inputs, labels = inputs.to(auxiliary_info.device), labels.to(auxiliary_info.device)
                 outputs = shadow_model(inputs)
                 loss = torch.nn.CrossEntropyLoss()(outputs, labels)
                 loss.backward()
                 optimizer.step()
 
             # Calculate the accuracy for this batch
-            shadow_model.eval()
-            with torch.no_grad():
+            if epoch % 20 == 0 or epoch == auxiliary_info.distillation_epochs - 1:
+                shadow_model.eval()
                 correct_predictions = 0
                 total_samples = 0
-                for i, data in enumerate(shadow_test_dataset):
-                    inputs, labels = data
-                    inputs = inputs.to(auxiliary_info.device)
-                    outputs = shadow_model(inputs)
-                    _, predicted = torch.max(outputs, 1)
-                    correct_predictions += (predicted == labels).sum().item()
-                    total_samples += labels.size(0)
-                accuracy = correct_predictions / total_samples
-                print('Epoch: {}, Accuracy (test dataset): {}'.format(epoch, accuracy))
+                with torch.no_grad():
+                    for i, data in enumerate(shadow_test_loader):
+                        inputs, labels = data
+                        inputs, labels = inputs.to(auxiliary_info.device), labels.to(auxiliary_info.device)
+                        outputs = shadow_model(inputs)
+                        _, predicted = torch.max(outputs, 1)
+                        correct_predictions += (predicted == labels).sum().item()
+                        total_samples += labels.size(0)
+                    accuracy = correct_predictions / total_samples
+                    print(f"Epoch {epoch + 1}, Accuracy: {accuracy:.2f}%, Loss: {loss.item():.4f}")
 
         # save the model
         torch.save(shadow_model.state_dict(), auxiliary_info.shadow_model_path)
         return LosstrajModelAccess(shadow_model, ModelAccessType.BLACK_BOX)
 
     @classmethod
-    def get_loss_trajectory(cls, data: DataLoader, model, auxiliary_info: LosstrajAuxiliaryInfo, model_type="target"):
+    def get_loss_trajectory(cls, data, model, auxiliary_info: LosstrajAuxiliaryInfo, model_type="target"):
         """
         Get the loss trajectory of the model specified by model_type.
         :param data: the dataset to obtain the loss trajectory.
@@ -193,26 +248,60 @@ class LosstrajUtil:
         if model_type not in ["target", "shadow"]:
             raise ValueError("model_type should be either 'target' or 'shadow'!")
 
+        # create loader for the dataset
+        data_loader = DataLoader(data, batch_size=1, shuffle=False, num_workers=auxiliary_info.num_workers)
+
         # load each distilled model and record the loss trajectory
         loss_trajectory = []
-        for epoch in tqdm(auxiliary_info.distillation_epochs):
+        for epoch in tqdm(range(auxiliary_info.distillation_epochs)):
             distilled_model = model
             distilled_model.to(auxiliary_info.device)
             distilled_model.load_state_dict(
-                    torch.load(os.path.join(auxiliary_info.distill_models_path, model_type, "distilled_model_ep" + epoch + ".pth")))
+                torch.load(os.path.join(auxiliary_info.distill_models_path, model_type,
+                                        "distilled_model_ep" + str(epoch) + ".pth")))
             distilled_model.eval()
             with torch.no_grad():
-                for i, data in enumerate(data):
+                loss_array = []
+                for i, data in enumerate(data_loader):
                     inputs, labels = data
                     inputs = inputs.to(auxiliary_info.device)
+                    labels = labels.to(auxiliary_info.device)
                     outputs = distilled_model(inputs)
                     loss = torch.nn.CrossEntropyLoss()(outputs, labels)
-                    loss_trajectory.append(loss.item())
+                    loss_array.append(loss.item())
+                loss_trajectory.append(np.array(loss_array).flatten())
         return loss_trajectory
 
+    @classmethod
+    def get_loss(cls, data, model_access: LosstrajModelAccess, auxiliary_info: LosstrajAuxiliaryInfo):
+        """
+        Get the loss of model on given data.
+        :param data: the dataset to obtain the loss.
+        :param model_access: the model access.
+        :param auxiliary_info: the auxiliary information.
+        :return:
+        """
+
+        # create loader for the dataset
+        data_loader = DataLoader(data, batch_size=1, shuffle=False,
+                                 num_workers=auxiliary_info.num_workers)
+
+        model_access.to_device(auxiliary_info.device)
+        model_access.model.eval()
+        with torch.no_grad():
+            loss_array = []
+            for i, data in enumerate(data_loader):
+                inputs, labels = data
+                inputs = inputs.to(auxiliary_info.device)
+                labels = labels.to(auxiliary_info.device)
+                outputs = model_access.model(inputs)
+                loss = torch.nn.CrossEntropyLoss()(outputs, labels)
+                loss_array.append(loss.item())
+        return np.array(loss_array).flatten()
 
     @classmethod
-    def train_attack_model(cls, in_samples: list, out_samples: list, auxiliary_info: LosstrajAuxiliaryInfo, attack_model):
+    def train_attack_model(cls, in_samples: list, out_samples: list, auxiliary_info: LosstrajAuxiliaryInfo,
+                           attack_model):
         """
         train the attack model with the in-sample and out-of-sample trajectories.
         :param in_samples: list of in-sample trajectories ([traj_epoch1, traj_epoch2, ..., traj_epochN, traj_un-distilled])
@@ -230,7 +319,7 @@ class LosstrajUtil:
         all_samples = np.concatenate((in_samples, out_samples))
         all_labels = np.concatenate((in_labels, out_labels))
         all_samples = torch.tensor(all_samples, dtype=torch.float32)
-        all_labels = torch.tensor(all_labels, dtype=torch.float32)
+        all_labels = torch.tensor(all_labels, dtype=torch.long)
         attack_dataset = TensorDataset(all_samples, all_labels)
 
         # train the attack model
@@ -239,8 +328,11 @@ class LosstrajUtil:
         optimizer = torch.optim.Adam(attack_model.parameters(), lr=0.001)
         criterion = torch.nn.CrossEntropyLoss()
 
-        for epoch in tqdm(auxiliary_info.distillation_epochs):
-            for i, data in attack_dataset:
+        attack_loader = DataLoader(attack_dataset, batch_size=auxiliary_info.batch_size, shuffle=True,
+                                   num_workers=auxiliary_info.num_workers)
+
+        for epoch in tqdm(range(auxiliary_info.distillation_epochs)):
+            for data in attack_loader:
                 inputs, labels = data
                 inputs = inputs.to(auxiliary_info.device)
                 labels = labels.to(auxiliary_info.device)
@@ -250,26 +342,23 @@ class LosstrajUtil:
                 loss.backward()
                 optimizer.step()
 
-            # Calculate the accuracy for this batch
-            attack_model.eval()
-            with torch.no_grad():
-                correct_predictions = 0
-                total_samples = 0
-                for i, data in attack_dataset:
-                    inputs, labels = data
-                    inputs = inputs.to(auxiliary_info.device)
-                    labels = labels.to(auxiliary_info.device)
-                    outputs = attack_model(inputs)
-                    _, predicted = torch.max(outputs, 1)
-                    correct_predictions += (predicted == labels).sum().item()
-                    total_samples += labels.size(0)
-                accuracy = correct_predictions / total_samples
-                print('Epoch: {}, Accuracy: {}'.format(epoch, accuracy))
-
-
+            if epoch % 20 == 0 or epoch == auxiliary_info.distillation_epochs - 1:
+                attack_model.eval()
+                with torch.no_grad():
+                    correct_predictions = 0
+                    total_samples = 0
+                    for data in attack_loader:
+                        inputs, labels = data
+                        inputs = inputs.to(auxiliary_info.device)
+                        labels = labels.to(auxiliary_info.device)
+                        outputs = attack_model(inputs)
+                        _, predicted = torch.max(outputs, 1)
+                        correct_predictions += (predicted == labels).sum().item()
+                        total_samples += labels.size(0)
+                    accuracy = correct_predictions / total_samples
+                    print(f"Epoch {epoch + 1}, Accuracy: {accuracy:.2f}%, Loss: {loss.item():.4f}")
 
         return attack_model
-
 
 
 class LosstrajAttack(MiAttack):
@@ -302,9 +391,11 @@ class LosstrajAttack(MiAttack):
 
         self.prepared = False  # this flag indicates whether the attack is prepared
 
-    def prepare(self, auxiliary_dataset):
+    def prepare(self, auxiliary_dataset, attack_model=AttackMLP):
         """
         Prepare the attack.
+        :param auxiliary_dataset: the auxiliary dataset.
+        :param attack_model: the attack model.
         """
         if self.prepared:
             print("the attack is already prepared!")
@@ -322,22 +413,37 @@ class LosstrajAttack(MiAttack):
             auxiliary_dataset, [distillation_train_len, shadow_train_len, shadow_test_len])
 
         # step 1: train shadow model, distill the shadow model and save the distilled models at each epoch
+        print("PREPARE: Training shadow model...")
         self.shadow_model = self.target_model_access.get_model_architecture()
-        self.shadow_model_access = LosstrajUtil.train_shadow_model(self.shadow_model, self.shadow_train_dataset, self.shadow_test_dataset,
-                                        self.auxiliary_info)
-        LosstrajUtil.model_distillation(self.shadow_model_access, self.distillation_train_dataset, self.auxiliary_info, teacher_type="shadow")
+        self.shadow_model_access = LosstrajUtil.train_shadow_model(self.shadow_model, self.shadow_train_dataset,
+                                                                   self.shadow_test_dataset,
+                                                                   self.auxiliary_info)
+        LosstrajUtil.model_distillation(self.shadow_model_access, self.distillation_train_dataset, self.auxiliary_info,
+                                        teacher_type="shadow")
 
         # step 2: distill the target model and save the distilled models at each epoch
-        LosstrajUtil.model_distillation(self.target_model_access, auxiliary_dataset, self.distillation_train_dataset, teacher_type="target")
+        print("PREPARE: Distilling target model...")
+        LosstrajUtil.model_distillation(self.target_model_access, auxiliary_dataset, self.auxiliary_info,
+                                        teacher_type="target")
 
         # step 3: obtain the loss trajectory of the shadow model and train the attack model
-        shadow_train_loss_trajectory = LosstrajUtil.get_loss_trajectory(self.shadow_train_dataset, self.shadow_model, self.auxiliary_info, model_type="shadow")
-        shadow_train_loss_trajectory.append(self.shadow_model_access.model(self.shadow_train_dataset).item())
-        shadow_test_loss_trajectory = LosstrajUtil.get_loss_trajectory(self.shadow_test_dataset, self.shadow_model, self.auxiliary_info, model_type="shadow")
-        shadow_test_loss_trajectory.append(self.shadow_model_access.model(self.shadow_test_dataset).item())
+        print("PREPARE: Obtaining loss trajectory of the shadow model...")
+        shadow_train_loss_trajectory = LosstrajUtil.get_loss_trajectory(self.shadow_train_dataset, self.shadow_model,
+                                                                        self.auxiliary_info, model_type="shadow")
+        shadow_train_loss_trajectory.append(
+            LosstrajUtil.get_loss(self.shadow_train_dataset, self.shadow_model_access, self.auxiliary_info))
+        shadow_test_loss_trajectory = LosstrajUtil.get_loss_trajectory(self.shadow_test_dataset, self.shadow_model,
+                                                                       self.auxiliary_info, model_type="shadow")
+        shadow_test_loss_trajectory.append(
+            LosstrajUtil.get_loss(self.shadow_test_dataset, self.shadow_model_access, self.auxiliary_info))
 
-        self.attack_model = self.target_model_access.get_model_architecture()
-        self.attack_model = LosstrajUtil.train_attack_model(shadow_train_loss_trajectory, shadow_test_loss_trajectory, self.auxiliary_info, self.attack_model)
+        shadow_train_loss_trajectory = np.transpose(np.array(shadow_train_loss_trajectory))
+        shadow_test_loss_trajectory = np.transpose(np.array(shadow_test_loss_trajectory))
+
+        print("PREPARE: Training attack model...")
+        self.attack_model = attack_model(self.auxiliary_info.distillation_epochs + 1)
+        self.attack_model = LosstrajUtil.train_attack_model(shadow_train_loss_trajectory, shadow_test_loss_trajectory,
+                                                            self.auxiliary_info, self.attack_model)
 
         self.prepared = True
 
@@ -345,16 +451,24 @@ class LosstrajAttack(MiAttack):
         """
         Infer the membership of the dataset.
         :param dataset: the dataset to infer.
-        :return: the inferred membership.
+        :return: the inferred membership
         """
         if not self.prepared:
             raise ValueError("The attack is not prepared yet!")
 
+        set_seed(self.auxiliary_info.seed)
+
         # obtain the loss trajectory of the target model
-        target_loss_trajectory = LosstrajUtil.get_loss_trajectory(dataset, self.target_model_access.get_model_architecture(), self.auxiliary_info, model_type="target")
-        target_loss_trajectory.append(self.target_model_access.model(dataset).item())
+        print("INFER: Obtaining loss trajectory of the target model...")
+        target_loss_trajectory = LosstrajUtil.get_loss_trajectory(dataset,
+                                                                  self.target_model_access.get_model_architecture(),
+                                                                  self.auxiliary_info, model_type="target")
+        target_loss_trajectory.append(
+            LosstrajUtil.get_loss(dataset, self.target_model_access, self.auxiliary_info))
 
         # infer the membership
-        target_pred = self.attack_model(target_loss_trajectory)
+        data_to_infer = np.transpose(np.array(target_loss_trajectory))
+        data_to_infer = torch.tensor(data_to_infer, dtype=torch.float32)
+        target_pred = self.attack_model(data_to_infer.to(self.auxiliary_info.device))
 
         return target_pred
