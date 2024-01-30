@@ -1,12 +1,15 @@
+import numpy as np
 import torch
 
-from attacks.attack_classifier import *
+from mia.attacks.attack_classifier import *
+
 
 class ModelAccessType(Enum):
     """ Enum class for model access type. """
     WHITE_BOX = "white_box"
     BLACK_BOX = "black_box"
     GRAY_BOX = "gray_box"
+
 
 class AuxiliaryInfo(ABC):
     """
@@ -80,9 +83,7 @@ class MiAttack(ABC):
         self.auxiliary_info = auxiliary_info
         self.target_data = target_data
 
-        self.aux_sample_signals = None
-        self.aux_member_labels = None
-        self.aux_sample_weights = None
+        self.prepared = False
 
     @abstractmethod
     def prepare(self, attack_config: dict):
@@ -134,4 +135,3 @@ class MiAttack(ABC):
         :return: the inferred membership of the data.
         """
         pass
-

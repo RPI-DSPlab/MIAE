@@ -11,8 +11,9 @@ from torch.utils.data import DataLoader, TensorDataset, Subset
 from torch._utils import _accumulate
 from tqdm import tqdm
 import torch.nn.functional as F
-from utils.set_seed import set_seed
+from typing import List
 
+from mia.utils.set_seed import set_seed
 from mia.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
 
 
@@ -40,10 +41,11 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
     The auxiliary information for the loss trajectory based membership inference attack.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, attack_model=AttackMLP):
         """
         Initialize the auxiliary information.
         :param config: the loss trajectory.
+        :param attack_model: the attack model.
         """
         super().__init__(config)
         self.device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
@@ -56,6 +58,7 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         self.save_path = config.get('save_path', './losstraj_files')
         self.distill_models_path = self.save_path + '/distill_models'
         self.shadow_model_path = self.save_path + '/shadow_model.pth'
+        self.shadow_losstraj_path = self.save_path + '/shadow_losstraj'
 
         # dataset length: it should be given as the ratio of the training dataset length w.r.t. the whole auxiliary dataset
         self.distillation_dataset_ratio = config.get('distillation_dataset_ratio', 0.5)
@@ -63,13 +66,15 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         # train/test split ratio of the shadow dataset
         self.shadow_train_test_split_ratio = config.get('shadow_train_test_split_ratio', 0.5)
 
+        self.attack_model = attack_model
+
 
 class LosstrajModelAccess(ModelAccess):
     """
     The model access for the loss trajectory based membership inference attack.
     """
 
-    def __init__(self, model, model_type):
+    def __init__(self, model, model_type: ModelAccessType = ModelAccessType.BLACK_BOX):
         """
         Initialize the model access.
         :param model: the target model.
@@ -235,7 +240,7 @@ class LosstrajUtil:
         return LosstrajModelAccess(shadow_model, ModelAccessType.BLACK_BOX)
 
     @classmethod
-    def get_loss_trajectory(cls, data, model, auxiliary_info: LosstrajAuxiliaryInfo, model_type="target"):
+    def get_loss_trajectory(cls, data, model, auxiliary_info: LosstrajAuxiliaryInfo, model_type="target") -> np.ndarray:
         """
         Get the loss trajectory of the model specified by model_type.
         :param data: the dataset to obtain the loss trajectory.
@@ -270,7 +275,7 @@ class LosstrajUtil:
                     loss = torch.nn.CrossEntropyLoss()(outputs, labels)
                     loss_array.append(loss.item())
                 loss_trajectory.append(np.array(loss_array).flatten())
-        return loss_trajectory
+        return np.array(loss_trajectory)
 
     @classmethod
     def get_loss(cls, data, model_access: LosstrajModelAccess, auxiliary_info: LosstrajAuxiliaryInfo):
@@ -300,20 +305,18 @@ class LosstrajUtil:
         return np.array(loss_array).flatten()
 
     @classmethod
-    def train_attack_model(cls, in_samples: list, out_samples: list, auxiliary_info: LosstrajAuxiliaryInfo,
+    def train_attack_model(cls, in_samples: np.ndarray, out_samples: np.ndarray, auxiliary_info: LosstrajAuxiliaryInfo,
                            attack_model):
         """
         train the attack model with the in-sample and out-of-sample trajectories.
-        :param in_samples: list of in-sample trajectories ([traj_epoch1, traj_epoch2, ..., traj_epochN, traj_un-distilled])
-        :param out_samples: list of out-of-sample trajectories ([traj_epoch1, traj_epoch2, ..., traj_epochN, traj_un-distilled])
+        :param in_samples: arr of in-sample trajectories ([traj_epoch1 traj_epoch2 ... traj_epochN traj_un-distilled])
+        :param out_samples: arr of out-of-sample trajectories ([traj_epoch1 traj_epoch2 ..., traj_epochN traj_un-distilled])
         :param auxiliary_info: the auxiliary information.
         :param attack_model: the attack model.
         :return: the attack model trained.
         """
 
         # prepare the dataset
-        in_samples = np.array(in_samples)
-        out_samples = np.array(out_samples)
         in_labels = np.ones(len(in_samples))
         out_labels = np.zeros(len(out_samples))
         all_samples = np.concatenate((in_samples, out_samples))
@@ -391,16 +394,16 @@ class LosstrajAttack(MiAttack):
 
         self.prepared = False  # this flag indicates whether the attack is prepared
 
-    def prepare(self, auxiliary_dataset, attack_model=AttackMLP):
+    def prepare(self, auxiliary_dataset):
         """
         Prepare the attack.
         :param auxiliary_dataset: the auxiliary dataset.
-        :param attack_model: the attack model.
         """
         if self.prepared:
             print("the attack is already prepared!")
             return
 
+        attack_model = self.auxiliary_info.attack_model
         # set the seed
         set_seed(self.auxiliary_info.seed)
         # determine the length of the distillation dataset and the shadow dataset
@@ -428,17 +431,36 @@ class LosstrajAttack(MiAttack):
 
         # step 3: obtain the loss trajectory of the shadow model and train the attack model
         print("PREPARE: Obtaining loss trajectory of the shadow model...")
-        shadow_train_loss_trajectory = LosstrajUtil.get_loss_trajectory(self.shadow_train_dataset, self.shadow_model,
-                                                                        self.auxiliary_info, model_type="shadow")
-        shadow_train_loss_trajectory.append(
-            LosstrajUtil.get_loss(self.shadow_train_dataset, self.shadow_model_access, self.auxiliary_info))
-        shadow_test_loss_trajectory = LosstrajUtil.get_loss_trajectory(self.shadow_test_dataset, self.shadow_model,
-                                                                       self.auxiliary_info, model_type="shadow")
-        shadow_test_loss_trajectory.append(
-            LosstrajUtil.get_loss(self.shadow_test_dataset, self.shadow_model_access, self.auxiliary_info))
+        if os.path.exists(self.auxiliary_info.shadow_losstraj_path) == False:
+            os.makedirs(self.auxiliary_info.shadow_losstraj_path)
 
-        shadow_train_loss_trajectory = np.transpose(np.array(shadow_train_loss_trajectory))
-        shadow_test_loss_trajectory = np.transpose(np.array(shadow_test_loss_trajectory))
+        if not os.path.exists(self.auxiliary_info.shadow_losstraj_path + '/shadow_train_loss_traj.npy'):
+            shadow_train_loss_trajectory = LosstrajUtil.get_loss_trajectory(self.shadow_train_dataset, self.shadow_model,
+                                                                        self.auxiliary_info, model_type="shadow")
+            original_shadow_traj = LosstrajUtil.get_loss(self.shadow_train_dataset, self.shadow_model_access,
+                                                     self.auxiliary_info).reshape(1, -1)
+            print(f"dim shadow train loss shape: {original_shadow_traj.shape}, dim shadow train loss traj shape: {shadow_train_loss_trajectory.shape}")
+            shadow_train_loss_trajectory = np.r_[shadow_train_loss_trajectory, original_shadow_traj]
+            np.save(self.auxiliary_info.shadow_losstraj_path + '/shadow_train_loss_traj.npy',
+                    np.array(shadow_train_loss_trajectory))
+        else:
+            shadow_train_loss_trajectory = np.load(
+                self.auxiliary_info.shadow_losstraj_path + '/shadow_train_loss_traj.npy', allow_pickle=True)
+
+        if not os.path.exists(self.auxiliary_info.shadow_losstraj_path + '/shadow_test_loss_traj.npy'):
+            shadow_test_loss_trajectory = LosstrajUtil.get_loss_trajectory(self.shadow_test_dataset, self.shadow_model,
+                                                                       self.auxiliary_info, model_type="shadow")
+            original_shadow_traj = LosstrajUtil.get_loss(self.shadow_test_dataset, self.shadow_model_access,
+                                                     self.auxiliary_info).reshape(1, -1)
+            shadow_test_loss_trajectory = np.r_[shadow_test_loss_trajectory, original_shadow_traj]
+            np.save(self.auxiliary_info.shadow_losstraj_path + '/shadow_test_loss_traj.npy',
+                    np.array(shadow_test_loss_trajectory))
+        else:
+            shadow_test_loss_trajectory = np.load(
+                self.auxiliary_info.shadow_losstraj_path + '/shadow_test_loss_traj.npy', allow_pickle=True)
+
+        shadow_train_loss_trajectory = np.transpose(shadow_train_loss_trajectory)
+        shadow_test_loss_trajectory = np.transpose(shadow_test_loss_trajectory)
 
         print("PREPARE: Training attack model...")
         self.attack_model = attack_model(self.auxiliary_info.distillation_epochs + 1)
@@ -447,11 +469,11 @@ class LosstrajAttack(MiAttack):
 
         self.prepared = True
 
-    def infer(self, dataset):
+    def infer(self, dataset) -> np.ndarray:
         """
         Infer the membership of the dataset.
         :param dataset: the dataset to infer.
-        :return: the inferred membership
+        :return: the inferred membership of shape
         """
         if not self.prepared:
             raise ValueError("The attack is not prepared yet!")
@@ -463,12 +485,15 @@ class LosstrajAttack(MiAttack):
         target_loss_trajectory = LosstrajUtil.get_loss_trajectory(dataset,
                                                                   self.target_model_access.get_model_architecture(),
                                                                   self.auxiliary_info, model_type="target")
-        target_loss_trajectory.append(
-            LosstrajUtil.get_loss(dataset, self.target_model_access, self.auxiliary_info))
+
+        original_shadow_traj = LosstrajUtil.get_loss(dataset, self.shadow_model_access, self.auxiliary_info).reshape(1, -1)
+        target_loss_trajectory = np.r_[target_loss_trajectory, original_shadow_traj]
 
         # infer the membership
         data_to_infer = np.transpose(np.array(target_loss_trajectory))
         data_to_infer = torch.tensor(data_to_infer, dtype=torch.float32)
         target_pred = self.attack_model(data_to_infer.to(self.auxiliary_info.device))
 
+        target_pred = target_pred.detach().cpu().numpy()
+        target_pred = np.transpose(target_pred)[1]
         return target_pred
