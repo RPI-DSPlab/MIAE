@@ -7,6 +7,7 @@ from typing import List
 import numpy as np
 from tqdm import tqdm
 from copy import deepcopy
+from matplotlib import pyplot as plt
 
 # add mia to path
 import sys
@@ -20,6 +21,7 @@ from mia.utils import roc_auc
 batch_size = 1000
 trainset_ratio = 0.5  # percentage of training set to be used for training the target model
 train_test_ratio = 0.9  # percentage of training set to be used for training any model that uses a test set
+target_ratio = 0.7  # percentage of the dataset used for target (train/test) dataset
 
 target_train_epochs = 200
 
@@ -28,7 +30,6 @@ target_model_dir = os.path.join(current_dir,"target_model")
 attack_dir = os.path.join(current_dir,"attack")
 savedir = os.path.join(current_dir,"results")
 seed = 0
-
 
 
 class TargetModel(torch.nn.Module):
@@ -58,6 +59,21 @@ class TargetModel(torch.nn.Module):
         return x
 
 
+def print_key_stats(predictions: np.ndarray, attack_name: str, savedir: str):
+    """
+    print key stats of predictions including mean, std, min, max, and shape, then plot the histogram of predictions
+    :param predictions: predictions to print stats
+    :param attack_name: name of the attack
+    :param savedir: directory to save the histogram
+    :return: None
+    """
+
+    plt.hist(predictions)
+    plt.title(f"{attack_name} predictions")
+    plt.savefig(os.path.join(savedir, f"{attack_name}_predictions_stats.png"))
+    plt.close()
+
+
 def train_target_model(target_model_dir: str, device: torch.device, trainset: Dataset, testset: Dataset):
     """
     train a target model and save to target_model_dir
@@ -74,6 +90,9 @@ def train_target_model(target_model_dir: str, device: torch.device, trainset: Da
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(target_model.parameters(), lr=0.001)
 
+    # Create a learning rate scheduler
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+
     correct_predictions = 0
     total_samples = 0
 
@@ -89,6 +108,9 @@ def train_target_model(target_model_dir: str, device: torch.device, trainset: Da
             loss.backward()
             optimizer.step()
 
+        # Step the learning rate scheduler
+        scheduler.step()
+
         if epoch % 20 == 0 or epoch == target_train_epochs - 1:
             target_model.eval()
             for i, data in enumerate(testloader):
@@ -98,7 +120,7 @@ def train_target_model(target_model_dir: str, device: torch.device, trainset: Da
                 _, predicted = torch.max(outputs, 1)
                 correct_predictions += (predicted == labels).sum().item()
                 total_samples += labels.size(0)
-            print(f"Epoch {epoch} accuracy: {correct_predictions / total_samples} loss: {loss.item()}")
+            print(f"Epoch {epoch} accuracy: {correct_predictions / total_samples:.2f} loss: {loss.item():.4f}")
 
     # save the target model
     torch.save(target_model.state_dict(), os.path.join(target_model_dir, "target_model.pth"))
@@ -135,7 +157,9 @@ def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data, members
 
     membership_list = [membership for _ in range(len(attacks))]
 
-    print(predictions[0], predictions[0].shape)
+    # print key stats of predictions
+    for prediction, attack_name in zip(predictions, attacks_names):
+        print_key_stats(prediction, attack_name, savedir)
 
     roc_auc.fig_fpr_tpr(predictions, membership_list, attacks_names,savedir)
 
@@ -167,13 +191,14 @@ def main():
 
     # prepare the shadow set and target set and then train a target model
     dataset = ConcatDataset([trainset, testset])
-    train_len = int(len(dataset) * trainset_ratio)
-    shadow_len = len(dataset) - train_len
-    training_set, aux_set = random_split(dataset, [train_len, shadow_len])
-    training_set, aux_set = training_set.dataset, aux_set.dataset
+    target_len = int(len(dataset) * trainset_ratio)
+    shadow_len = len(dataset) - target_len
+    target_set, aux_set = random_split(dataset, [target_len, shadow_len])
+    training_set, aux_set = target_set.dataset, aux_set.dataset
 
-    target_trainset, target_testset = random_split(dataset, [int(len(dataset) * train_test_ratio),
-                                               len(dataset) - int(len(dataset) * train_test_ratio)])
+    target_trainset, target_testset = random_split(target_set, [int(len(target_set) * train_test_ratio),
+                                               len(target_set) - int(len(target_set) * train_test_ratio)])
+
 
     # -- STEP 1: train target model
     if not os.path.exists(os.path.join(target_model_dir, "target_model.pth")):
@@ -184,9 +209,9 @@ def main():
 
     # -- STEP 2: prepare the attacks
     losstraj_aux_info = losstraj_mia.LosstrajAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/losstraj'})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/losstraj', 'num_classes': 10, 'batch_size': 2000})
     merlin_aux_info = merlin_mia.MerlinAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin'})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': 2000})
 
     losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model))
     merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model))

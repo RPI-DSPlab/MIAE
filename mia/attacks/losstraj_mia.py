@@ -7,13 +7,13 @@ import os
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, TensorDataset, Subset
-from torch._utils import _accumulate
+from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 import torch.nn.functional as F
-from typing import List
+from typing import List, Optional, Union
 
 from mia.utils.set_seed import set_seed
+from mia.utils.dataset_utils import get_num_classes, dataset_split
 from mia.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
 
 
@@ -52,7 +52,7 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         self.seed = config.get('seed', 0)
         self.batch_size = config.get('batch_size', 500)
         self.num_workers = config.get('num_workers', 2)
-        self.distillation_epochs = config.get('distillation_epochs', 240)
+        self.distillation_epochs = config.get('distillation_epochs', 200)
 
         # directories:
         self.save_path = config.get('save_path', './losstraj_files')
@@ -65,6 +65,7 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         self.shadow_dataset_ratio = 1 - self.distillation_dataset_ratio
         # train/test split ratio of the shadow dataset
         self.shadow_train_test_split_ratio = config.get('shadow_train_test_split_ratio', 0.5)
+        self.num_classes = config.get('num_classes', 10)
 
         self.attack_model = attack_model
 
@@ -96,25 +97,7 @@ class LosstrajModelAccess(ModelAccess):
 
 class LosstrajUtil:
     @classmethod
-    def dataset_split(cls, dataset, lengths: list):
-        """
-        Split the dataset into subsets.
-        :param dataset: the dataset.
-        :param lengths: the lengths of each subset.
-        """
-        if sum(lengths) != len(dataset):
-            raise ValueError("Sum of input lengths does not equal the length of the input dataset!")
-
-        indices = list(range(sum(lengths)))
-        np.random.seed(1)
-        np.random.shuffle(indices)
-        return [Subset(dataset, indices[offset - length:offset]) for offset, length in
-                zip(_accumulate(lengths), lengths)]
-
-        return all_data
-
-    @classmethod
-    def model_distillation(cls, teacher_model_access: LosstrajModelAccess, distillation_dataset: DataLoader,
+    def model_distillation(cls, teacher_model_access: LosstrajModelAccess, distillation_dataset: TensorDataset,
                            auxiliary_info: LosstrajAuxiliaryInfo, teacher_type="target"):
         """
          Distill a model with the given distillation dataset, and save the distilled model at each epoch.
@@ -186,6 +169,60 @@ class LosstrajUtil:
         return distribution
 
     @classmethod
+    def to_categorical(cls, labels: Union[np.ndarray, List[float]], nb_classes: Optional[int] = None) -> np.ndarray:
+        """
+        Convert an array of labels to binary class matrix.
+
+        :param labels: An array of integer labels of shape `(nb_samples,)`.
+        :param nb_classes: The number of classes (possible labels).
+        :return: A binary matrix representation of `y` in the shape `(nb_samples, nb_classes)`.
+        """
+        labels = np.array(labels, dtype=np.int32)
+        if nb_classes is None:
+            nb_classes = np.max(labels) + 1
+        categorical = np.zeros((labels.shape[0], nb_classes), dtype=np.float32)
+        categorical[np.arange(labels.shape[0]), np.squeeze(labels)] = 1
+
+        return categorical
+
+    @classmethod
+    def check_and_transform_label_format(cls,
+                                         labels: np.ndarray, nb_classes: Optional[int] = None,
+                                         return_one_hot: bool = True
+                                         ) -> np.ndarray:
+        """
+        Check label format and transform to one-hot-encoded labels if necessary
+
+        :param labels: An array of integer labels of shape `(nb_samples,)`, `(nb_samples, 1)` or `(nb_samples, nb_classes)`.
+        :param nb_classes: The number of classes.
+        :param return_one_hot: True if returning one-hot encoded labels, False if returning index labels.
+        :return: Labels with shape `(nb_samples, nb_classes)` (one-hot) or `(nb_samples,)` (index).
+        """
+        if labels is not None:
+            if len(labels.shape) == 2 and labels.shape[1] > 1:
+                if not return_one_hot:
+                    labels = np.argmax(labels, axis=1)
+            elif len(labels.shape) == 2 and labels.shape[1] == 1 and nb_classes is not None and nb_classes > 2:
+                labels = np.squeeze(labels)
+                if return_one_hot:
+                    labels = cls.to_categorical(labels, nb_classes)
+            elif len(labels.shape) == 2 and labels.shape[1] == 1 and nb_classes is not None and nb_classes == 2:
+                pass
+            elif len(labels.shape) == 1:
+                if return_one_hot:
+                    if nb_classes == 2:
+                        labels = np.expand_dims(labels, axis=1)
+                    else:
+                        labels = cls.to_categorical(labels, nb_classes)
+            else:
+                raise ValueError(
+                    "Shape of labels not recognised."
+                    "Please provide labels in shape (nb_samples,) or (nb_samples, nb_classes)"
+                )
+
+        return labels
+
+    @classmethod
     def train_shadow_model(cls, shadow_model, shadow_train_dataset, shadow_test_dataset,
                            auxiliary_info: LosstrajAuxiliaryInfo) -> LosstrajModelAccess:
         """
@@ -204,6 +241,8 @@ class LosstrajUtil:
         shadow_model.train()
         optimizer = torch.optim.Adam(shadow_model.parameters(), lr=0.001)
 
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+
         shadow_train_loader = DataLoader(shadow_train_dataset, batch_size=auxiliary_info.batch_size, shuffle=True,
                                          num_workers=auxiliary_info.num_workers)
         shadow_test_loader = DataLoader(shadow_test_dataset, batch_size=auxiliary_info.batch_size, shuffle=True,
@@ -218,6 +257,9 @@ class LosstrajUtil:
                 loss = torch.nn.CrossEntropyLoss()(outputs, labels)
                 loss.backward()
                 optimizer.step()
+
+            # Step the learning rate scheduler
+            scheduler.step()
 
             # Calculate the accuracy for this batch
             if epoch % 20 == 0 or epoch == auxiliary_info.distillation_epochs - 1:
@@ -247,14 +289,15 @@ class LosstrajUtil:
         :param model: the model to load to.
         :param auxiliary_info: the auxiliary information.
         :param model_type: the type of the model. It can be "target" or "shadow".
-        :return: the loss trajectory, a list of loss values at each epoch.
+        :return: the loss trajectory, where each row is the loss trajectory of a sample.
         """
 
         if model_type not in ["target", "shadow"]:
             raise ValueError("model_type should be either 'target' or 'shadow'!")
 
         # create loader for the dataset
-        data_loader = DataLoader(data, batch_size=1, shuffle=False, num_workers=auxiliary_info.num_workers)
+        data_loader = DataLoader(data, batch_size=auxiliary_info.batch_size, shuffle=False,
+                                 num_workers=auxiliary_info.num_workers)
 
         # load each distilled model and record the loss trajectory
         loss_trajectory = []
@@ -272,10 +315,11 @@ class LosstrajUtil:
                     inputs = inputs.to(auxiliary_info.device)
                     labels = labels.to(auxiliary_info.device)
                     outputs = distilled_model(inputs)
-                    loss = torch.nn.CrossEntropyLoss()(outputs, labels)
-                    loss_array.append(loss.item())
-                loss_trajectory.append(np.array(loss_array).flatten())
-        return np.array(loss_trajectory)
+                    loss = torch.nn.CrossEntropyLoss(reduction='none')(outputs, labels)
+                    loss_array.append(loss.cpu().numpy())
+                loss_array = np.concatenate(loss_array, axis=0)
+                loss_trajectory.append(loss_array.flatten())
+        return np.array(loss_trajectory).transpose()
 
     @classmethod
     def get_loss(cls, data, model_access: LosstrajModelAccess, auxiliary_info: LosstrajAuxiliaryInfo):
@@ -288,7 +332,7 @@ class LosstrajUtil:
         """
 
         # create loader for the dataset
-        data_loader = DataLoader(data, batch_size=1, shuffle=False,
+        data_loader = DataLoader(data, batch_size=auxiliary_info.batch_size, shuffle=False,
                                  num_workers=auxiliary_info.num_workers)
 
         model_access.to_device(auxiliary_info.device)
@@ -300,19 +344,21 @@ class LosstrajUtil:
                 inputs = inputs.to(auxiliary_info.device)
                 labels = labels.to(auxiliary_info.device)
                 outputs = model_access.model(inputs)
-                loss = torch.nn.CrossEntropyLoss()(outputs, labels)
-                loss_array.append(loss.item())
-        return np.array(loss_array).flatten()
+                loss = torch.nn.CrossEntropyLoss(reduction='none')(outputs, labels)
+                loss_array.append(loss.cpu().numpy())
+            loss_array = np.concatenate(loss_array, axis=0)
+        return np.array(loss_array)
 
     @classmethod
     def train_attack_model(cls, in_samples: np.ndarray, out_samples: np.ndarray, auxiliary_info: LosstrajAuxiliaryInfo,
-                           attack_model):
+                           attack_model, num_classes: int):
         """
         train the attack model with the in-sample and out-of-sample trajectories.
         :param in_samples: arr of in-sample trajectories ([traj_epoch1 traj_epoch2 ... traj_epochN traj_un-distilled])
         :param out_samples: arr of out-of-sample trajectories ([traj_epoch1 traj_epoch2 ..., traj_epochN traj_un-distilled])
         :param auxiliary_info: the auxiliary information.
         :param attack_model: the attack model.
+        :param num_classes: the number of classes.
         :return: the attack model trained.
         """
 
@@ -359,8 +405,7 @@ class LosstrajUtil:
                         correct_predictions += (predicted == labels).sum().item()
                         total_samples += labels.size(0)
                     accuracy = correct_predictions / total_samples
-                    print(f"Epoch {epoch + 1}, Accuracy: {accuracy:.2f}%, Loss: {loss.item():.4f}")
-
+                    print(f"Epoch {epoch + 1}, Accuracy(on training set): {accuracy:.2f}%, Loss: {loss.item():.4f}")
         return attack_model
 
 
@@ -386,6 +431,7 @@ class LosstrajAttack(MiAttack):
         self.distillation_train_dataset = None
         self.auxiliary_info = auxiliary_info
         self.target_model_access = target_model_access
+        self.num_classes = auxiliary_info.num_classes
 
         # directories:
         for directory in [self.auxiliary_info.save_path, self.auxiliary_info.distill_models_path]:
@@ -403,6 +449,10 @@ class LosstrajAttack(MiAttack):
             print("the attack is already prepared!")
             return
 
+        if get_num_classes(auxiliary_dataset) != self.auxiliary_info.num_classes:
+            raise ValueError(
+                "The number of classes in the auxiliary dataset does not match the number of classes in the auxiliary information!")
+
         attack_model = self.auxiliary_info.attack_model
         # set the seed
         set_seed(self.auxiliary_info.seed)
@@ -412,7 +462,7 @@ class LosstrajAttack(MiAttack):
         shadow_train_len = int(shadow_dataset_len * self.auxiliary_info.shadow_train_test_split_ratio)
         shadow_test_len = shadow_dataset_len - shadow_train_len
 
-        self.distillation_train_dataset, self.shadow_train_dataset, self.shadow_test_dataset = LosstrajUtil.dataset_split(
+        self.distillation_train_dataset, self.shadow_train_dataset, self.shadow_test_dataset = dataset_split(
             auxiliary_dataset, [distillation_train_len, shadow_train_len, shadow_test_len])
 
         # step 1: train shadow model, distill the shadow model and save the distilled models at each epoch
@@ -426,7 +476,7 @@ class LosstrajAttack(MiAttack):
 
         # step 2: distill the target model and save the distilled models at each epoch
         print("PREPARE: Distilling target model...")
-        LosstrajUtil.model_distillation(self.target_model_access, auxiliary_dataset, self.auxiliary_info,
+        LosstrajUtil.model_distillation(self.target_model_access, self.distillation_train_dataset, self.auxiliary_info,
                                         teacher_type="target")
 
         # step 3: obtain the loss trajectory of the shadow model and train the attack model
@@ -435,12 +485,12 @@ class LosstrajAttack(MiAttack):
             os.makedirs(self.auxiliary_info.shadow_losstraj_path)
 
         if not os.path.exists(self.auxiliary_info.shadow_losstraj_path + '/shadow_train_loss_traj.npy'):
-            shadow_train_loss_trajectory = LosstrajUtil.get_loss_trajectory(self.shadow_train_dataset, self.shadow_model,
-                                                                        self.auxiliary_info, model_type="shadow")
+            shadow_train_loss_trajectory = LosstrajUtil.get_loss_trajectory(self.shadow_train_dataset,
+                                                                            self.shadow_model,
+                                                                            self.auxiliary_info, model_type="shadow")
             original_shadow_traj = LosstrajUtil.get_loss(self.shadow_train_dataset, self.shadow_model_access,
-                                                     self.auxiliary_info).reshape(1, -1)
-            print(f"dim shadow train loss shape: {original_shadow_traj.shape}, dim shadow train loss traj shape: {shadow_train_loss_trajectory.shape}")
-            shadow_train_loss_trajectory = np.r_[shadow_train_loss_trajectory, original_shadow_traj]
+                                                         self.auxiliary_info).reshape(-1, 1)
+            shadow_train_loss_trajectory = np.concatenate([shadow_train_loss_trajectory, original_shadow_traj], axis=1)
             np.save(self.auxiliary_info.shadow_losstraj_path + '/shadow_train_loss_traj.npy',
                     np.array(shadow_train_loss_trajectory))
         else:
@@ -449,23 +499,20 @@ class LosstrajAttack(MiAttack):
 
         if not os.path.exists(self.auxiliary_info.shadow_losstraj_path + '/shadow_test_loss_traj.npy'):
             shadow_test_loss_trajectory = LosstrajUtil.get_loss_trajectory(self.shadow_test_dataset, self.shadow_model,
-                                                                       self.auxiliary_info, model_type="shadow")
+                                                                           self.auxiliary_info, model_type="shadow")
             original_shadow_traj = LosstrajUtil.get_loss(self.shadow_test_dataset, self.shadow_model_access,
-                                                     self.auxiliary_info).reshape(1, -1)
-            shadow_test_loss_trajectory = np.r_[shadow_test_loss_trajectory, original_shadow_traj]
+                                                         self.auxiliary_info).reshape(-1, 1)
+            shadow_test_loss_trajectory = np.concatenate([shadow_test_loss_trajectory, original_shadow_traj], axis=1)
             np.save(self.auxiliary_info.shadow_losstraj_path + '/shadow_test_loss_traj.npy',
                     np.array(shadow_test_loss_trajectory))
         else:
             shadow_test_loss_trajectory = np.load(
                 self.auxiliary_info.shadow_losstraj_path + '/shadow_test_loss_traj.npy', allow_pickle=True)
 
-        shadow_train_loss_trajectory = np.transpose(shadow_train_loss_trajectory)
-        shadow_test_loss_trajectory = np.transpose(shadow_test_loss_trajectory)
-
         print("PREPARE: Training attack model...")
         self.attack_model = attack_model(self.auxiliary_info.distillation_epochs + 1)
         self.attack_model = LosstrajUtil.train_attack_model(shadow_train_loss_trajectory, shadow_test_loss_trajectory,
-                                                            self.auxiliary_info, self.attack_model)
+                                                            self.auxiliary_info, self.attack_model, self.num_classes)
 
         self.prepared = True
 
@@ -486,11 +533,12 @@ class LosstrajAttack(MiAttack):
                                                                   self.target_model_access.get_model_architecture(),
                                                                   self.auxiliary_info, model_type="target")
 
-        original_shadow_traj = LosstrajUtil.get_loss(dataset, self.shadow_model_access, self.auxiliary_info).reshape(1, -1)
-        target_loss_trajectory = np.r_[target_loss_trajectory, original_shadow_traj]
+        original_shadow_traj = LosstrajUtil.get_loss(dataset, self.shadow_model_access, self.auxiliary_info).reshape(-1,
+                                                                                                                     1)
+        target_loss_trajectory = np.concatenate([target_loss_trajectory, original_shadow_traj], axis=1)
 
         # infer the membership
-        data_to_infer = np.transpose(np.array(target_loss_trajectory))
+        data_to_infer = np.array(target_loss_trajectory)
         data_to_infer = torch.tensor(data_to_infer, dtype=torch.float32)
         target_pred = self.attack_model(data_to_infer.to(self.auxiliary_info.device))
 
