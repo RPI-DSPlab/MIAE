@@ -126,7 +126,7 @@ def train_target_model(target_model_dir: str, device: torch.device, trainset: Da
     torch.save(target_model.state_dict(), os.path.join(target_model_dir, "target_model.pth"))
 
 
-def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data, membership: np.ndarray):
+def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data: Dataset, membership: np.ndarray):
     """
     obtain roc and auc for  given (prepared) attacks and save to savedir
     :param attacks: a list of prepared attacks
@@ -143,6 +143,18 @@ def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data, members
     for attack in attacks:
         if attack.prepared is False:
             raise ValueError(f"{attack.__class__.__name__} is not prepared")
+
+    # save the index that's predicted
+    dummy_data_loader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False)
+    id_list = []
+    target_list = []
+    for idx, (data, target) in enumerate(dummy_data_loader):
+        id_list.append(idx)
+        target_list.append(target)
+    id_arr = np.array(id_list)
+    target_arr = np.array(target_list)
+    np.save(os.path.join(attack_pred_save_dir, 'id_of_prediction.npy'), id_arr)
+    np.save(os.path.join(attack_pred_save_dir, 'target_of_prediction.npy'), target_arr)
 
     predictions = []
     attacks_names = []
@@ -194,7 +206,11 @@ def main():
     target_len = int(len(dataset) * trainset_ratio)
     shadow_len = len(dataset) - target_len
     target_set, aux_set = random_split(dataset, [target_len, shadow_len])
-    training_set, aux_set = target_set.dataset, aux_set.dataset
+
+    # printing the length of each sub-dataset:
+    print(f"Length of target set (used in training and testing target model):\t{len(target_set)}")
+    print(f"Length of aux set (access able for attack):\t{len(aux_set)}")
+    print
 
     target_trainset, target_testset = random_split(target_set, [int(len(target_set) * train_test_ratio),
                                                len(target_set) - int(len(target_set) * train_test_ratio)])
@@ -224,7 +240,7 @@ def main():
     # -- prepare the attacks
     for attack in attacks:
         print("Preparing attack: ", attack.__class__.__name__)
-        attack.prepare(aux_set)
+        attack.prepare(aux_set.dataset)
 
     # -- STEP 3: attack the target dataset
     # mix the target trainset and testset and then attack
