@@ -19,18 +19,19 @@ from mia.attacks import base as mia_base
 from mia.utils import roc_auc
 import models
 
-batch_size = 2000
-trainset_ratio = 0.5  # percentage of training set to be used for training the target model
-train_test_ratio = 0.9  # percentage of training set to be used for training any model that uses a test set
-target_ratio = 0.7  # percentage of the dataset used for target (train/test) dataset
-
+batch_size = 128
+targetset_ratio = 0.4  # percentage of training set to be used for training/test the target model
+train_test_ratio = 0.5  # percentage of training set to be used for training any model that uses a test set
+lr = 0.1
 target_train_epochs = 100
 
 current_dir = os.getcwd()
 target_model_dir = os.path.join(current_dir,"target_model")
 attack_dir = os.path.join(current_dir,"attack")
 savedir = os.path.join(current_dir,"results")
-seed = 0
+seed = 4073
+
+aug = True
 
 
 def print_key_stats(predictions: np.ndarray, attack_name: str, savedir: str):
@@ -63,7 +64,7 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
     trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
     testloader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2)
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, target_model.parameters()), lr=0.1, momentum=0.9, weight_decay=0.0001)
+    optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, target_model.parameters()), lr=lr, momentum=0.9, weight_decay=0.0001)
 
     # Create a learning rate scheduler
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, target_train_epochs)
@@ -74,14 +75,11 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
         for i, data in enumerate(trainloader):
             inputs, labels = data
             inputs, labels = inputs.to(device), labels.to(device)
-
             optimizer.zero_grad()
             outputs = target_model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-
-        # Step the learning rate scheduler
         scheduler.step()
 
         if epoch % 20 == 0 or epoch == target_train_epochs - 1:
@@ -101,7 +99,7 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
                 outputs = target_model(inputs)
                 _, predicted = torch.max(outputs, 1)
                 train_correct_prediction += (predicted == labels).sum().item()
-            print(f"Epoch {epoch} train_acc: {train_correct_prediction / len(trainset):.2f} test_acc: {test_correct_predictions / len(testset):.2f} loss: {loss.item():.4f}")
+            print(f"Epoch {epoch} train_acc: {train_correct_prediction / len(trainset):.2f} test_acc: {test_correct_predictions / len(testset):.2f} loss: {loss.item():.4f}， lr: {scheduler.get_last_lr()[0]:.4f}")
 
     # save the target model
     torch.save(target_model.state_dict(), os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pth"))
@@ -156,29 +154,32 @@ def main():
         if not os.path.exists(dir):
             os.makedirs(dir)
 
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
+
     # initialize the dataset
-    train_transform = T.Compose([T.ToTensor(),
-                                T.Normalize(mean=[0.485, 0.456, 0.406], std=(0.229, 0.224, 0.225))
+    regular_transform = T.Compose([T.ToTensor(),
+                                T.Normalize(mean=mean, std=std)
                                 ])
-    test_transform = T.Compose([T.ToTensor(),
-                                T.Normalize(mean=[0.485, 0.456, 0.406], std=(0.229, 0.224, 0.225))
-                                ])
+
+    augmentation_transform = T.Compose([T.RandomHorizontalFlip(), T.RandomCrop(32, padding=4), T.transforms.ToTensor(), T.Normalize(mean=mean, std=std)])
+
+    transform = augmentation_transform if aug else regular_transform
 
     # load cifar10
     """NOTE: I am loading cifar10 from torchvision instead of using datasets/loader.py because 
     users are supposed to be able to use """
     trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                            download=True, transform=train_transform)
+                                            download=True, transform=transform)
 
     testset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                           download=True, transform=test_transform)
+                                           download=True, transform=transform)
 
     # prepare the shadow set and target set and then train a target model
     dataset = ConcatDataset([trainset, testset])
-    target_len = int(len(dataset) * trainset_ratio)
+    target_len = int(len(dataset) * targetset_ratio)
     shadow_len = len(dataset) - target_len
     target_set, aux_set = random_split(dataset, [target_len, shadow_len])
-    training_set, aux_set = target_set.dataset, aux_set.dataset
 
     target_trainset, target_testset = random_split(target_set, [int(len(target_set) * train_test_ratio),
                                                len(target_set) - int(len(target_set) * train_test_ratio)])
@@ -186,7 +187,8 @@ def main():
 
     # -- STEP 1: train target model
     target_model = models.create_resnet56()
-
+    untrained_target_model = deepcopy(target_model)
+    print("Target model: ", target_model.__class__.__name__, " is being trained with ", target_trainset.__class__.__name__, "len: ", len(target_trainset), " and ", target_testset.__class__.__name__, "len: ", len(target_testset))
     if not os.path.exists(os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pth")):
         train_target_model(target_model, target_model_dir, device, target_trainset, target_testset)
     else:
@@ -194,12 +196,12 @@ def main():
 
     # -- STEP 2: prepare the attacks
     losstraj_aux_info = losstraj_mia.LosstrajAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/losstraj', 'num_classes': 10, 'batch_size': 2000})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/losstraj', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr})
     merlin_aux_info = merlin_mia.MerlinAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': 2000})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': batch_size})
 
-    losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model))
-    merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model))
+    losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model), untrained_target_model)
+    merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model), untrained_target_model)
 
     attacks = [
         losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),

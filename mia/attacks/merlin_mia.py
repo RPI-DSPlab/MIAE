@@ -97,13 +97,14 @@ class MerlinModelAccess(ModelAccess):
     Implementation of model access for Morgan attack.
     """
 
-    def __init__(self, model, access_type: ModelAccessType = ModelAccessType.BLACK_BOX):
+    def __init__(self, model, untrained_model, access_type: ModelAccessType = ModelAccessType.BLACK_BOX):
         """
         Initialize model access with model and access type.
         :param model: the target model.
+        :param untrained_model: the untrained model.
         :param access_type: the type of access to the target model.
         """
-        super().__init__(model, access_type)
+        super().__init__(model, untrained_model, access_type)
 
     def to_device(self, device):
         self.model.to(device)

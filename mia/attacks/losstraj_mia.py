@@ -19,6 +19,7 @@ from mia.utils.dataset_utils import get_num_classes, dataset_split
 from mia.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
 
 
+
 class AttackMLP(torch.nn.Module):
     # default model for the attack
     def __init__(self, dim_in):
@@ -52,7 +53,7 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         super().__init__(config)
         self.device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
         self.seed = config.get('seed', 0)
-        self.batch_size = config.get('batch_size', 500)
+        self.batch_size = config.get('batch_size', 1000)
         self.num_workers = config.get('num_workers', 2)
         self.distillation_epochs = config.get('distillation_epochs', 100)
 
@@ -70,7 +71,7 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         self.num_classes = config.get('num_classes', 10)
 
         # training parameters
-        self.lr = config.get('lr', 0.001)
+        self.lr = config.get('lr', 0.1)
         self.momentum = config.get('momentum', 0.9)
         self.weight_decay = config.get('weight_decay', 0.0001)
 
@@ -82,24 +83,13 @@ class LosstrajModelAccess(ModelAccess):
     The model access for the loss trajectory based membership inference attack.
     """
 
-    def __init__(self, model, model_type: ModelAccessType = ModelAccessType.BLACK_BOX):
+    def __init__(self, model, untrained_model, model_type: ModelAccessType = ModelAccessType.BLACK_BOX):
         """
         Initialize the model access.
         :param model: the target model.
         :param model_type: the type of the target model.
         """
-        super().__init__(model, model_type)
-
-    def get_model_architecture(self):
-        """
-        Get the un-initialized model architecture of the target model.
-        :return: the un-initialized model architecture.
-        """
-        model_copy = copy.deepcopy(self.model)
-        for layer in model_copy.children():
-            if hasattr(layer, 'reset_parameters'):
-                layer.reset_parameters()
-        return model_copy
+        super().__init__(model, untrained_model, model_type)
 
 
 class LosstrajUtil:
@@ -114,13 +104,14 @@ class LosstrajUtil:
         :param teacher_type: the type of the teacher model. It can be "target" or "shadow".
         :return: None
         """
+        print(f"getting distilled model with teacher type: {teacher_type} on distillation dataset of len: {len(distillation_dataset)}")
         if os.path.exists(os.path.join(auxiliary_info.distill_models_path, teacher_type)) == False:
             os.makedirs(os.path.join(auxiliary_info.distill_models_path, teacher_type))
         elif len(os.listdir(
                 os.path.join(auxiliary_info.distill_models_path, teacher_type))) >= auxiliary_info.distillation_epochs:
             return  # if the distilled models are already saved, return
 
-        distilled_model = teacher_model_access.get_model_architecture()
+        distilled_model = copy.deepcopy(teacher_model_access.get_untrained_model())
         distilled_model.to(auxiliary_info.device)
         teacher_model_access.to_device(auxiliary_info.device)
         distilled_model.train()
@@ -133,14 +124,13 @@ class LosstrajUtil:
 
         for epoch in tqdm(range(auxiliary_info.distillation_epochs)):
             for i, data in enumerate(distill_train_loader):
-                optimizer.zero_grad()
                 inputs, labels = data
                 inputs = inputs.to(auxiliary_info.device)
-                teacher_pred = teacher_model_access.model(inputs)  # teacher model
+                optimizer.zero_grad()
+                teacher_pred = teacher_model_access.get_signal(inputs)  # teacher model
                 distilled_pred = distilled_model(inputs)  # student model
                 loss = torch.nn.KLDivLoss(reduction='batchmean')(F.log_softmax(distilled_pred, dim=1),
                                                                  F.softmax(teacher_pred, dim=1))
-
                 loss.backward()
                 optimizer.step()
             scheduler.step()
@@ -149,18 +139,6 @@ class LosstrajUtil:
             distilled_model.eval()
             if epoch % 20 == 0 or epoch == auxiliary_info.distillation_epochs - 1:
                 with torch.no_grad():
-                    test_correct_count = 0
-                    total_samples = 0
-                    for i, data in enumerate(distill_train_loader):
-                        inputs, labels = data
-                        inputs = inputs.to(auxiliary_info.device)
-                        labels = labels.to(auxiliary_info.device)
-                        outputs = distilled_model(inputs)
-                        _, predicted = torch.max(outputs, 1)
-                        test_correct_count += (predicted == labels).sum().item()
-                        total_samples += labels.size(0)
-                    test_acc = test_correct_count / total_samples
-
                     train_correct_count = 0
                     total_samples = 0
                     for i, data in enumerate(distill_train_loader):
@@ -172,7 +150,7 @@ class LosstrajUtil:
                         train_correct_count += (predicted == labels).sum().item()
                         total_samples += labels.size(0)
                     train_acc = train_correct_count / total_samples
-                    print(f"Epoch {epoch + 1}, train acc: {train_acc:.2f}%, test acc: {test_acc:.2f}%, Loss: {loss.item():.4f}")
+                    print(f"Epoch {epoch + 1}, train acc: {train_acc:.2f}%, Loss: {loss.item():.4f}, lr: {scheduler.get_last_lr()[0]:.4f}")
 
             # save the distilled model at the end of each epoch
             torch.save(distilled_model.state_dict(), os.path.join(auxiliary_info.distill_models_path, teacher_type,
@@ -255,30 +233,37 @@ class LosstrajUtil:
         :param auxiliary_info: the auxiliary information.
         :return: model access to the shadow model.
         """
+
+        print(f"obtaining shadow model with trainset len: {len(shadow_train_dataset)} and testset len: {len(shadow_test_dataset)}")
+
+        untrained_shadow_model = copy.deepcopy(shadow_model)
+
         if os.path.exists(auxiliary_info.shadow_model_path):
             shadow_model.load_state_dict(torch.load(auxiliary_info.shadow_model_path))
-            return LosstrajModelAccess(shadow_model, ModelAccessType.BLACK_BOX)
+            return LosstrajModelAccess(shadow_model, untrained_shadow_model, ModelAccessType.BLACK_BOX)
 
         shadow_model.to(auxiliary_info.device)
         shadow_model.train()
-        optimizer = torch.optim.SGD(shadow_model.parameters(), lr=auxiliary_info.lr, momentum=auxiliary_info.momentum,
+        criterion = torch.nn.CrossEntropyLoss()
+        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, shadow_model.parameters()), lr=auxiliary_info.lr, momentum=auxiliary_info.momentum,
                                     weight_decay=auxiliary_info.weight_decay)
-        scheduler = CosineAnnealingLR(optimizer, auxiliary_info.distillation_epochs)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, auxiliary_info.distillation_epochs)
 
         shadow_train_loader = DataLoader(shadow_train_dataset, batch_size=auxiliary_info.batch_size, shuffle=True,
                                          num_workers=auxiliary_info.num_workers)
-        shadow_test_loader = DataLoader(shadow_test_dataset, batch_size=auxiliary_info.batch_size, shuffle=True,
+        shadow_test_loader = DataLoader(shadow_test_dataset, batch_size=auxiliary_info.batch_size, shuffle=False,
                                         num_workers=auxiliary_info.num_workers)
 
         for epoch in tqdm(range(auxiliary_info.distillation_epochs)):
             for i, data in enumerate(shadow_train_loader):
-                optimizer.zero_grad()
                 inputs, labels = data
                 inputs, labels = inputs.to(auxiliary_info.device), labels.to(auxiliary_info.device)
+                optimizer.zero_grad()
                 outputs = shadow_model(inputs)
-                loss = torch.nn.CrossEntropyLoss()(outputs, labels)
+                loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
+            scheduler.step()
 
             # Calculate the accuracy for this batch
             if epoch % 20 == 0 or epoch == auxiliary_info.distillation_epochs - 1:
@@ -306,12 +291,11 @@ class LosstrajUtil:
                         total_samples += labels.size(0)
                     train_accuracy = train_correct_predictions / total_samples
                 print(
-            f"Epoch {epoch + 1}, train_acc: {train_accuracy:.2f}, test_acc: {test_accuracy:.2f}%, Loss: {loss.item():.4f}")
-            scheduler.step()
+            f"Epoch {epoch}, train_acc: {train_accuracy:.2f}, test_acc: {test_accuracy:.2f}%, Loss: {loss.item():.4f}, lr: {scheduler.get_last_lr()[0]:.4f}")
 
         # save the model
         torch.save(shadow_model.state_dict(), auxiliary_info.shadow_model_path)
-        return LosstrajModelAccess(shadow_model, ModelAccessType.BLACK_BOX)
+        return LosstrajModelAccess(shadow_model, untrained_shadow_model, ModelAccessType.BLACK_BOX)
 
     @classmethod
     def get_loss_trajectory(cls, data, model, auxiliary_info: LosstrajAuxiliaryInfo, model_type="target") -> np.ndarray:
@@ -509,7 +493,7 @@ class LosstrajAttack(MiAttack):
 
         # step 1: train shadow model, distill the shadow model and save the distilled models at each epoch
         print("PREPARE: Training shadow model...")
-        self.shadow_model = self.target_model_access.get_model_architecture()
+        self.shadow_model = self.target_model_access.get_untrained_model()
         self.shadow_model_access = LosstrajUtil.train_shadow_model(self.shadow_model, self.shadow_train_dataset,
                                                                    self.shadow_test_dataset,
                                                                    self.auxiliary_info)
@@ -573,7 +557,7 @@ class LosstrajAttack(MiAttack):
         # obtain the loss trajectory of the target model
         print("INFER: Obtaining loss trajectory of the target model...")
         target_loss_trajectory = LosstrajUtil.get_loss_trajectory(dataset,
-                                                                  self.target_model_access.get_model_architecture(),
+                                                                  self.target_model_access.get_untrained_model(),
                                                                   self.auxiliary_info, model_type="target")
 
         original_shadow_traj = LosstrajUtil.get_loss(dataset, self.shadow_model_access, self.auxiliary_info).reshape(-1,
