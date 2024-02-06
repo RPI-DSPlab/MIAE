@@ -10,6 +10,8 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 import torch.nn.functional as F
+from torch.optim.lr_scheduler import CosineAnnealingLR
+import torch.nn as nn
 from typing import List, Optional, Union
 
 from mia.utils.set_seed import set_seed
@@ -22,10 +24,10 @@ class AttackMLP(torch.nn.Module):
     def __init__(self, dim_in):
         super(AttackMLP, self).__init__()
         self.dim_in = dim_in
-        self.fc1 = torch.nn.Linear(self.dim_in, 512)
-        self.fc2 = torch.nn.Linear(512, 128)
-        self.fc3 = torch.nn.Linear(128, 32)
-        self.fc4 = torch.nn.Linear(32, 2)
+        self.fc1 = nn.Linear(self.dim_in, 512)
+        self.fc2 = nn.Linear(512, 128)
+        self.fc3 = nn.Linear(128, 32)
+        self.fc4 = nn.Linear(32, 2)
 
     def forward(self, x):
         x = x.view(-1, self.dim_in)
@@ -52,7 +54,7 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         self.seed = config.get('seed', 0)
         self.batch_size = config.get('batch_size', 500)
         self.num_workers = config.get('num_workers', 2)
-        self.distillation_epochs = config.get('distillation_epochs', 200)
+        self.distillation_epochs = config.get('distillation_epochs', 100)
 
         # directories:
         self.save_path = config.get('save_path', './losstraj_files')
@@ -61,11 +63,16 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         self.shadow_losstraj_path = self.save_path + '/shadow_losstraj'
 
         # dataset length: it should be given as the ratio of the training dataset length w.r.t. the whole auxiliary dataset
-        self.distillation_dataset_ratio = config.get('distillation_dataset_ratio', 0.5)
+        self.distillation_dataset_ratio = config.get('distillation_dataset_ratio', 0.6)
         self.shadow_dataset_ratio = 1 - self.distillation_dataset_ratio
         # train/test split ratio of the shadow dataset
         self.shadow_train_test_split_ratio = config.get('shadow_train_test_split_ratio', 0.5)
         self.num_classes = config.get('num_classes', 10)
+
+        # training parameters
+        self.lr = config.get('lr', 0.001)
+        self.momentum = config.get('momentum', 0.9)
+        self.weight_decay = config.get('weight_decay', 0.0001)
 
         self.attack_model = attack_model
 
@@ -117,7 +124,9 @@ class LosstrajUtil:
         distilled_model.to(auxiliary_info.device)
         teacher_model_access.to_device(auxiliary_info.device)
         distilled_model.train()
-        optimizer = torch.optim.Adam(distilled_model.parameters(), lr=0.001)
+        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, distilled_model.parameters()), lr=auxiliary_info.lr, momentum=auxiliary_info.momentum,
+                                    weight_decay=auxiliary_info.weight_decay)
+        scheduler = CosineAnnealingLR(optimizer, auxiliary_info.distillation_epochs)
 
         distill_train_loader = DataLoader(distillation_dataset, batch_size=auxiliary_info.batch_size, shuffle=True,
                                           num_workers=auxiliary_info.num_workers)
@@ -134,23 +143,36 @@ class LosstrajUtil:
 
                 loss.backward()
                 optimizer.step()
+            scheduler.step()
 
             # Calculate the accuracy for this batch
             distilled_model.eval()
-            correct_predictions = 0
-            total_samples = 0
             if epoch % 20 == 0 or epoch == auxiliary_info.distillation_epochs - 1:
                 with torch.no_grad():
+                    test_correct_count = 0
+                    total_samples = 0
                     for i, data in enumerate(distill_train_loader):
                         inputs, labels = data
                         inputs = inputs.to(auxiliary_info.device)
                         labels = labels.to(auxiliary_info.device)
                         outputs = distilled_model(inputs)
                         _, predicted = torch.max(outputs, 1)
-                        correct_predictions += (predicted == labels).sum().item()
+                        test_correct_count += (predicted == labels).sum().item()
                         total_samples += labels.size(0)
-                    accuracy = correct_predictions / total_samples
-                    print(f"Epoch {epoch + 1}, Accuracy: {accuracy:.2f}%, Loss: {loss.item():.4f}")
+                    test_acc = test_correct_count / total_samples
+
+                    train_correct_count = 0
+                    total_samples = 0
+                    for i, data in enumerate(distill_train_loader):
+                        inputs, labels = data
+                        inputs = inputs.to(auxiliary_info.device)
+                        labels = labels.to(auxiliary_info.device)
+                        outputs = distilled_model(inputs)
+                        _, predicted = torch.max(outputs, 1)
+                        train_correct_count += (predicted == labels).sum().item()
+                        total_samples += labels.size(0)
+                    train_acc = train_correct_count / total_samples
+                    print(f"Epoch {epoch + 1}, train acc: {train_acc:.2f}%, test acc: {test_acc:.2f}%, Loss: {loss.item():.4f}")
 
             # save the distilled model at the end of each epoch
             torch.save(distilled_model.state_dict(), os.path.join(auxiliary_info.distill_models_path, teacher_type,
@@ -239,9 +261,9 @@ class LosstrajUtil:
 
         shadow_model.to(auxiliary_info.device)
         shadow_model.train()
-        optimizer = torch.optim.Adam(shadow_model.parameters(), lr=0.001)
-
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+        optimizer = torch.optim.SGD(shadow_model.parameters(), lr=auxiliary_info.lr, momentum=auxiliary_info.momentum,
+                                    weight_decay=auxiliary_info.weight_decay)
+        scheduler = CosineAnnealingLR(optimizer, auxiliary_info.distillation_epochs)
 
         shadow_train_loader = DataLoader(shadow_train_dataset, batch_size=auxiliary_info.batch_size, shuffle=True,
                                          num_workers=auxiliary_info.num_workers)
@@ -258,24 +280,34 @@ class LosstrajUtil:
                 loss.backward()
                 optimizer.step()
 
-            # Step the learning rate scheduler
-            scheduler.step()
-
             # Calculate the accuracy for this batch
             if epoch % 20 == 0 or epoch == auxiliary_info.distillation_epochs - 1:
                 shadow_model.eval()
-                correct_predictions = 0
-                total_samples = 0
                 with torch.no_grad():
+                    test_correct_predictions = 0
+                    total_samples = 0
                     for i, data in enumerate(shadow_test_loader):
                         inputs, labels = data
                         inputs, labels = inputs.to(auxiliary_info.device), labels.to(auxiliary_info.device)
                         outputs = shadow_model(inputs)
                         _, predicted = torch.max(outputs, 1)
-                        correct_predictions += (predicted == labels).sum().item()
+                        test_correct_predictions += (predicted == labels).sum().item()
                         total_samples += labels.size(0)
-                    accuracy = correct_predictions / total_samples
-                    print(f"Epoch {epoch + 1}, Accuracy: {accuracy:.2f}%, Loss: {loss.item():.4f}")
+                    test_accuracy = test_correct_predictions / total_samples
+
+                    train_correct_predictions = 0
+                    total_samples = 0
+                    for i, data in enumerate(shadow_train_loader):
+                        inputs, labels = data
+                        inputs, labels = inputs.to(auxiliary_info.device), labels.to(auxiliary_info.device)
+                        outputs = shadow_model(inputs)
+                        _, predicted = torch.max(outputs, 1)
+                        train_correct_predictions += (predicted == labels).sum().item()
+                        total_samples += labels.size(0)
+                    train_accuracy = train_correct_predictions / total_samples
+                print(
+            f"Epoch {epoch + 1}, train_acc: {train_accuracy:.2f}, test_acc: {test_accuracy:.2f}%, Loss: {loss.item():.4f}")
+            scheduler.step()
 
         # save the model
         torch.save(shadow_model.state_dict(), auxiliary_info.shadow_model_path)
@@ -291,16 +323,16 @@ class LosstrajUtil:
         :param model_type: the type of the model. It can be "target" or "shadow".
         :return: the loss trajectory, where each row is the loss trajectory of a sample.
         """
+        loss_array = np.array([])
+        loss_trajectory = np.array([])
 
         if model_type not in ["target", "shadow"]:
             raise ValueError("model_type should be either 'target' or 'shadow'!")
 
         # create loader for the dataset
-        data_loader = DataLoader(data, batch_size=auxiliary_info.batch_size, shuffle=False,
-                                 num_workers=auxiliary_info.num_workers)
+        data_loader = DataLoader(data, batch_size=auxiliary_info.batch_size, shuffle=False)
 
         # load each distilled model and record the loss trajectory
-        loss_trajectory = []
         for epoch in tqdm(range(auxiliary_info.distillation_epochs)):
             distilled_model = model
             distilled_model.to(auxiliary_info.device)
@@ -309,20 +341,24 @@ class LosstrajUtil:
                                         "distilled_model_ep" + str(epoch) + ".pth")))
             distilled_model.eval()
             with torch.no_grad():
-                loss_array = []
+                iter_count = 0
                 for i, data in enumerate(data_loader):
                     inputs, labels = data
                     inputs = inputs.to(auxiliary_info.device)
                     labels = labels.to(auxiliary_info.device)
                     outputs = distilled_model(inputs)
-                    loss = torch.nn.CrossEntropyLoss(reduction='none')(outputs, labels)
-                    loss_array.append(loss.cpu().numpy())
-                loss_array = np.concatenate(loss_array, axis=0)
-                loss_trajectory.append(loss_array.flatten())
-        return np.array(loss_trajectory).transpose()
+                    loss = [nn.functional.cross_entropy(output.unsqueeze(0), label.unsqueeze(0)) for (output, label) in zip(outputs, labels)]
+                    loss = np.array([loss_i.detach().cpu().numpy() for loss_i in loss])
+                    loss = loss.reshape(-1, 1)
+                    loss_array = np.concatenate([loss_array, loss], axis=0) if iter_count > 0 else loss
+                    iter_count += 1
+
+            loss_trajectory = loss_array if epoch == 0 else np.concatenate([loss_trajectory, loss_array], axis=1)
+
+        return loss_trajectory
 
     @classmethod
-    def get_loss(cls, data, model_access: LosstrajModelAccess, auxiliary_info: LosstrajAuxiliaryInfo):
+    def get_loss(cls, data, model_access: LosstrajModelAccess, auxiliary_info: LosstrajAuxiliaryInfo) -> np.ndarray:
         """
         Get the loss of model on given data.
         :param data: the dataset to obtain the loss.
@@ -332,22 +368,24 @@ class LosstrajUtil:
         """
 
         # create loader for the dataset
-        data_loader = DataLoader(data, batch_size=auxiliary_info.batch_size, shuffle=False,
-                                 num_workers=auxiliary_info.num_workers)
+        data_loader = DataLoader(data, batch_size=auxiliary_info.batch_size, shuffle=False)
 
         model_access.to_device(auxiliary_info.device)
         model_access.model.eval()
         with torch.no_grad():
             loss_array = []
+            iter_count = 0
             for i, data in enumerate(data_loader):
                 inputs, labels = data
                 inputs = inputs.to(auxiliary_info.device)
                 labels = labels.to(auxiliary_info.device)
                 outputs = model_access.model(inputs)
-                loss = torch.nn.CrossEntropyLoss(reduction='none')(outputs, labels)
-                loss_array.append(loss.cpu().numpy())
-            loss_array = np.concatenate(loss_array, axis=0)
-        return np.array(loss_array)
+                loss = [nn.functional.cross_entropy(output.unsqueeze(0), label.unsqueeze(0)) for (output, label) in zip(outputs, labels)]
+                loss = np.array([loss_i.detach().cpu().numpy() for loss_i in loss]).reshape(-1, 1)
+                loss_array = np.concatenate([loss_array, loss], axis=1) if iter_count > 0 else loss
+                iter_count += 1
+
+        return loss_array
 
     @classmethod
     def train_attack_model(cls, in_samples: np.ndarray, out_samples: np.ndarray, auxiliary_info: LosstrajAuxiliaryInfo,
@@ -374,8 +412,11 @@ class LosstrajUtil:
         # train the attack model
         attack_model.to(auxiliary_info.device)
         attack_model.train()
-        optimizer = torch.optim.Adam(attack_model.parameters(), lr=0.001)
+        optimizer = torch.optim.SGD(attack_model.parameters(), lr=auxiliary_info.lr, momentum=auxiliary_info.momentum,
+                                    weight_decay=auxiliary_info.weight_decay)
         criterion = torch.nn.CrossEntropyLoss()
+        # no scheduler used in the losstraj original code
+        # scheduler = CosineAnnealingLR(optimizer, auxiliary_info.distillation_epochs)
 
         attack_loader = DataLoader(attack_dataset, batch_size=auxiliary_info.batch_size, shuffle=True,
                                    num_workers=auxiliary_info.num_workers)
@@ -405,7 +446,8 @@ class LosstrajUtil:
                         correct_predictions += (predicted == labels).sum().item()
                         total_samples += labels.size(0)
                     accuracy = correct_predictions / total_samples
-                    print(f"Epoch {epoch + 1}, Accuracy(on training set): {accuracy:.2f}%, Loss: {loss.item():.4f}")
+                    print(f"Epoch {epoch + 1}, train_acc: {accuracy:.2f}%, Loss: {loss.item():.4f}")
+            # scheduler.step()
         return attack_model
 
 
@@ -471,6 +513,7 @@ class LosstrajAttack(MiAttack):
         self.shadow_model_access = LosstrajUtil.train_shadow_model(self.shadow_model, self.shadow_train_dataset,
                                                                    self.shadow_test_dataset,
                                                                    self.auxiliary_info)
+        print("PREPARE: Distilling shadow model...")
         LosstrajUtil.model_distillation(self.shadow_model_access, self.distillation_train_dataset, self.auxiliary_info,
                                         teacher_type="shadow")
 
@@ -490,7 +533,7 @@ class LosstrajAttack(MiAttack):
                                                                             self.auxiliary_info, model_type="shadow")
             original_shadow_traj = LosstrajUtil.get_loss(self.shadow_train_dataset, self.shadow_model_access,
                                                          self.auxiliary_info).reshape(-1, 1)
-            shadow_train_loss_trajectory = np.concatenate([shadow_train_loss_trajectory, original_shadow_traj], axis=1)
+            shadow_train_loss_trajectory = np.concatenate([original_shadow_traj, shadow_train_loss_trajectory], axis=1)
             np.save(self.auxiliary_info.shadow_losstraj_path + '/shadow_train_loss_traj.npy',
                     np.array(shadow_train_loss_trajectory))
         else:
@@ -502,7 +545,7 @@ class LosstrajAttack(MiAttack):
                                                                            self.auxiliary_info, model_type="shadow")
             original_shadow_traj = LosstrajUtil.get_loss(self.shadow_test_dataset, self.shadow_model_access,
                                                          self.auxiliary_info).reshape(-1, 1)
-            shadow_test_loss_trajectory = np.concatenate([shadow_test_loss_trajectory, original_shadow_traj], axis=1)
+            shadow_test_loss_trajectory = np.concatenate([original_shadow_traj, shadow_test_loss_trajectory], axis=1)
             np.save(self.auxiliary_info.shadow_losstraj_path + '/shadow_test_loss_traj.npy',
                     np.array(shadow_test_loss_trajectory))
         else:
@@ -543,5 +586,5 @@ class LosstrajAttack(MiAttack):
         target_pred = self.attack_model(data_to_infer.to(self.auxiliary_info.device))
 
         target_pred = target_pred.detach().cpu().numpy()
-        target_pred = np.transpose(target_pred)[1]
+        target_pred = np.transpose(target_pred)[0]
         return target_pred

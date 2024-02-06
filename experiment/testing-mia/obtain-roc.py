@@ -19,12 +19,12 @@ from mia.attacks import base as mia_base
 from mia.utils import roc_auc
 import models
 
-batch_size = 1000
+batch_size = 2000
 trainset_ratio = 0.5  # percentage of training set to be used for training the target model
 train_test_ratio = 0.9  # percentage of training set to be used for training any model that uses a test set
 target_ratio = 0.7  # percentage of the dataset used for target (train/test) dataset
 
-target_train_epochs = 200
+target_train_epochs = 100
 
 current_dir = os.getcwd()
 target_model_dir = os.path.join(current_dir,"target_model")
@@ -63,10 +63,10 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
     trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
     testloader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2)
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(target_model.parameters(), lr=0.01, momentum=0.9, weight_decay=0.0001)
+    optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, target_model.parameters()), lr=0.1, momentum=0.9, weight_decay=0.0001)
 
     # Create a learning rate scheduler
-    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, target_train_epochs)
 
     print("Training target model")
     for epoch in tqdm(range(target_train_epochs)):
@@ -82,7 +82,7 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
             optimizer.step()
 
         # Step the learning rate scheduler
-        # scheduler.step()
+        scheduler.step()
 
         if epoch % 20 == 0 or epoch == target_train_epochs - 1:
             target_model.eval()
@@ -158,10 +158,10 @@ def main():
 
     # initialize the dataset
     train_transform = T.Compose([T.ToTensor(),
-                                T.Normalize(mean=[0.4914, 0.4822, 0.4465], std=(0.247, 0.243, 0.261))
+                                T.Normalize(mean=[0.485, 0.456, 0.406], std=(0.229, 0.224, 0.225))
                                 ])
     test_transform = T.Compose([T.ToTensor(),
-                                T.Normalize(mean=[0.4914, 0.4822, 0.4465], std=(0.247, 0.243, 0.261))
+                                T.Normalize(mean=[0.485, 0.456, 0.406], std=(0.229, 0.224, 0.225))
                                 ])
 
     # load cifar10
@@ -185,7 +185,7 @@ def main():
 
 
     # -- STEP 1: train target model
-    target_model = models.create_wideresnet32_4()
+    target_model = models.create_resnet56()
 
     if not os.path.exists(os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pth")):
         train_target_model(target_model, target_model_dir, device, target_trainset, target_testset)
