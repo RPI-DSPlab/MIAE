@@ -25,6 +25,19 @@ class AuxiliaryInfo(ABC):
         """
         pass
 
+    def save_config_to_dict(self):
+        """
+        Save the configuration of the auxiliary information to a dictionary.
+        :return: the dictionary containing the configuration of the auxiliary information.
+        """
+        attr_vars = vars(self)
+        attr_dict = dict()
+        for key, value in vars(self).items():
+            if isinstance(value, (int, float, str, bool, list, dict, np.ndarray)):
+                attr_dict[key] = value
+
+        return attr_dict
+
 
 class ModelAccess(ABC):
     """
@@ -70,6 +83,13 @@ class ModelAccess(ABC):
 
     def get_untrained_model(self):
         return copy.deepcopy(self.untrained_model)
+
+    def eval(self):
+        """
+        Set the model to evaluation mode.
+        :return:
+        """
+        self.model.eval()
 
 
 class MiAttack(ABC):
