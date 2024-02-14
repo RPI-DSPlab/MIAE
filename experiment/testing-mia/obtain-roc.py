@@ -17,46 +17,21 @@ from mia.utils.set_seed import set_seed
 from mia.attacks import losstraj_mia, merlin_mia
 from mia.attacks import base as mia_base
 from mia.utils import roc_auc
+import models
 
-batch_size = 1000
-trainset_ratio = 0.5  # percentage of training set to be used for training the target model
-train_test_ratio = 0.9  # percentage of training set to be used for training any model that uses a test set
-target_ratio = 0.7  # percentage of the dataset used for target (train/test) dataset
-
-target_train_epochs = 200
+batch_size = 128
+targetset_ratio = 0.4  # percentage of training set to be used for training/test the target model
+train_test_ratio = 0.5  # percentage of training set to be used for training any model that uses a test set
+lr = 0.1
+target_train_epochs = 100
 
 current_dir = os.getcwd()
 target_model_dir = os.path.join(current_dir,"target_model")
 attack_dir = os.path.join(current_dir,"attack")
 savedir = os.path.join(current_dir,"results")
-seed = 0
+seed = 4073
 
-
-class TargetModel(torch.nn.Module):
-    """
-    a basic target model for CIFAR10
-    """
-
-    def __init__(self):
-        super(TargetModel, self).__init__()
-        self.conv1 = torch.nn.Conv2d(3, 32, 3, padding=1)
-        self.conv2 = torch.nn.Conv2d(32, 32, 3, padding=1)
-        self.conv3 = torch.nn.Conv2d(32, 64, 3, padding=1)
-        self.conv4 = torch.nn.Conv2d(64, 64, 3, padding=1)
-        self.fc1 = torch.nn.Linear(64 * 8 * 8, 512)
-        self.fc2 = torch.nn.Linear(512, 10)
-
-    def forward(self, x):
-        x = torch.nn.functional.relu(self.conv1(x))
-        x = torch.nn.functional.relu(self.conv2(x))
-        x = torch.nn.functional.max_pool2d(x, 2)
-        x = torch.nn.functional.relu(self.conv3(x))
-        x = torch.nn.functional.relu(self.conv4(x))
-        x = torch.nn.functional.max_pool2d(x, 2)
-        x = x.view(-1, 64 * 8 * 8)
-        x = torch.nn.functional.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
+aug = True
 
 
 def print_key_stats(predictions: np.ndarray, attack_name: str, savedir: str):
@@ -74,56 +49,60 @@ def print_key_stats(predictions: np.ndarray, attack_name: str, savedir: str):
     plt.close()
 
 
-def train_target_model(target_model_dir: str, device: torch.device, trainset: Dataset, testset: Dataset):
+def train_target_model(model, target_model_dir: str, device: torch.device, trainset: Dataset, testset: Dataset):
     """
     train a target model and save to target_model_dir
 
+    :param model: model to train
     :param target_model_dir: directory to save target model
     :param device: device to train target model
     :param trainset: training set (member)
     :param testset: test set (non-member)
     """
 
-    target_model = TargetModel().to(device)
+    target_model = model.to(device)
     trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
     testloader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2)
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(target_model.parameters(), lr=0.001)
+    optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, target_model.parameters()), lr=lr, momentum=0.9, weight_decay=0.0001)
 
     # Create a learning rate scheduler
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, target_train_epochs)
 
-    correct_predictions = 0
-    total_samples = 0
-
+    print("Training target model")
     for epoch in tqdm(range(target_train_epochs)):
         target_model.train()
         for i, data in enumerate(trainloader):
             inputs, labels = data
             inputs, labels = inputs.to(device), labels.to(device)
-
             optimizer.zero_grad()
             outputs = target_model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-
-        # Step the learning rate scheduler
         scheduler.step()
 
         if epoch % 20 == 0 or epoch == target_train_epochs - 1:
             target_model.eval()
+            test_correct_predictions = 0
             for i, data in enumerate(testloader):
                 inputs, labels = data
                 inputs, labels = inputs.to(device), labels.to(device)
                 outputs = target_model(inputs)
                 _, predicted = torch.max(outputs, 1)
-                correct_predictions += (predicted == labels).sum().item()
-                total_samples += labels.size(0)
-            print(f"Epoch {epoch} accuracy: {correct_predictions / total_samples:.2f} loss: {loss.item():.4f}")
+                test_correct_predictions += (predicted == labels).sum().item()
+
+            train_correct_prediction = 0
+            for i, data in enumerate(trainloader):
+                inputs, labels = data
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = target_model(inputs)
+                _, predicted = torch.max(outputs, 1)
+                train_correct_prediction += (predicted == labels).sum().item()
+            print(f"Epoch {epoch} train_acc: {train_correct_prediction / len(trainset):.2f} test_acc: {test_correct_predictions / len(testset):.2f} loss: {loss.item():.4f}， lr: {scheduler.get_last_lr()[0]:.4f}")
 
     # save the target model
-    torch.save(target_model.state_dict(), os.path.join(target_model_dir, "target_model.pth"))
+    torch.save(target_model.state_dict(), os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pth"))
 
 
 def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data: Dataset, membership: np.ndarray):
@@ -143,6 +122,7 @@ def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data: Dataset
     for attack in attacks:
         if attack.prepared is False:
             raise ValueError(f"{attack.__class__.__name__} is not prepared")
+        break  # SKIPPING MERLIN FOR NOW
 
     # save the index that's predicted
     dummy_data_loader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False)
@@ -166,12 +146,14 @@ def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data: Dataset
             prediction = np.load(os.path.join(attack_pred_save_dir, attack.__class__.__name__+'_pred.npy'))
         predictions.append(prediction)
         attacks_names.append(attack.__class__.__name__)
+        break  # SKIPPING MERLIN FOR NOW
 
     membership_list = [membership for _ in range(len(attacks))]
 
     # print key stats of predictions
     for prediction, attack_name in zip(predictions, attacks_names):
         print_key_stats(prediction, attack_name, savedir)
+        break  # SKIPPING MERLIN FOR NOW
 
     roc_auc.fig_fpr_tpr(predictions, membership_list, attacks_names,savedir)
 
@@ -184,53 +166,54 @@ def main():
         if not os.path.exists(dir):
             os.makedirs(dir)
 
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
+
     # initialize the dataset
-    train_transform = T.Compose([T.ToTensor(),
-                                T.Normalize(mean=[0.4914, 0.4822, 0.4465], std=(0.247, 0.243, 0.261))
+    regular_transform = T.Compose([T.ToTensor(),
+                                T.Normalize(mean=mean, std=std)
                                 ])
-    test_transform = T.Compose([T.ToTensor(),
-                                T.Normalize(mean=[0.4914, 0.4822, 0.4465], std=(0.247, 0.243, 0.261))
-                                ])
+
+    augmentation_transform = T.Compose([T.RandomHorizontalFlip(), T.RandomCrop(32, padding=4), T.transforms.ToTensor(), T.Normalize(mean=mean, std=std)])
+
+    transform = augmentation_transform if aug else regular_transform
 
     # load cifar10
     """NOTE: I am loading cifar10 from torchvision instead of using datasets/loader.py because 
     users are supposed to be able to use """
     trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                            download=True, transform=train_transform)
+                                            download=True, transform=transform)
 
     testset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                           download=True, transform=test_transform)
+                                           download=True, transform=transform)
 
     # prepare the shadow set and target set and then train a target model
     dataset = ConcatDataset([trainset, testset])
-    target_len = int(len(dataset) * trainset_ratio)
+    target_len = int(len(dataset) * targetset_ratio)
     shadow_len = len(dataset) - target_len
     target_set, aux_set = random_split(dataset, [target_len, shadow_len])
-
-    # printing the length of each sub-dataset:
-    print(f"Length of target set (used in training and testing target model):\t{len(target_set)}")
-    print(f"Length of aux set (access able for attack):\t{len(aux_set)}")
-    print
 
     target_trainset, target_testset = random_split(target_set, [int(len(target_set) * train_test_ratio),
                                                len(target_set) - int(len(target_set) * train_test_ratio)])
 
 
     # -- STEP 1: train target model
-    if not os.path.exists(os.path.join(target_model_dir, "target_model.pth")):
-        train_target_model(target_model_dir, device, target_trainset, target_testset)
-
-    target_model = TargetModel()
-    target_model.load_state_dict(torch.load(os.path.join(target_model_dir, "target_model.pth")))
+    target_model = models.create_resnet56()
+    untrained_target_model = deepcopy(target_model)
+    print("Target model: ", target_model.__class__.__name__, " is being trained with ", target_trainset.__class__.__name__, "len: ", len(target_trainset), " and ", target_testset.__class__.__name__, "len: ", len(target_testset))
+    if not os.path.exists(os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pth")):
+        train_target_model(target_model, target_model_dir, device, target_trainset, target_testset)
+    else:
+        target_model.load_state_dict(torch.load(os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pth")))
 
     # -- STEP 2: prepare the attacks
     losstraj_aux_info = losstraj_mia.LosstrajAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/losstraj', 'num_classes': 10, 'batch_size': 2000})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/losstraj', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr})
     merlin_aux_info = merlin_mia.MerlinAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': 2000})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': batch_size})
 
-    losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model))
-    merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model))
+    losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model), untrained_target_model)
+    merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model), untrained_target_model)
 
     attacks = [
         losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
@@ -240,7 +223,8 @@ def main():
     # -- prepare the attacks
     for attack in attacks:
         print("Preparing attack: ", attack.__class__.__name__)
-        attack.prepare(aux_set.dataset)
+        attack.prepare(aux_set)
+        break  # SKIPPING MERLIN FOR NOW
 
     # -- STEP 3: attack the target dataset
     # mix the target trainset and testset and then attack

@@ -45,7 +45,7 @@ def do_plot(prediction: np.ndarray,
 
     low = tpr[np.where(fpr < .001)[0][-1]] if np.any(fpr < .001) else 0
 
-    print(f'Attack: {legend.strip():<20} AUC: {auc:<8.4f} Accuracy: {acc:<8.4f} TPR@0.1%%FPR: {low:<8.4f}')
+    print(f'Attack: {legend.strip():<20} AUC: {auc:<8.4f} max Accuracy: {acc:<8.4f} TPR@0.1%FPR: {low:<8.4f}')
 
     metric_text = f'auc={auc:.3f}'
 
@@ -97,11 +97,3 @@ def fig_fpr_tpr(predictions: List[np.ndarray],
 
     plt.show()
 
-
-if __name__ == "__main__":
-    exp_num = 3
-    with open('../samples/lira_stats_370_target.pkl', 'rb') as f:
-        lira_stats_data = pickle.load(f)
-    fig_fpr_tpr([lira_stats_data[i][0] for i in range(exp_num)],
-                [lira_stats_data[i][1] for i in range(exp_num)],
-                ["LIRA", "Still LIRA", "Of course, LIRA"])
