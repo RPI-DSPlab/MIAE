@@ -111,7 +111,7 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
     torch.save(target_model.state_dict(), os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pkl"))
 
 
-def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data, membership: np.ndarray):
+def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data: Dataset, membership: np.ndarray):
     """
     obtain roc and auc for  given (prepared) attacks and save to savedir
     :param attacks: a list of prepared attacks
@@ -129,6 +129,18 @@ def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data, members
         if attack.prepared is False:
             raise ValueError(f"{attack.__class__.__name__} is not prepared")
         break  # SKIPPING MERLIN FOR NOW
+
+    # save the index that's predicted
+    dummy_data_loader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False)
+    id_list = []
+    target_list = []
+    for idx, (data, target) in enumerate(dummy_data_loader):
+        id_list.append(idx)
+        target_list.append(target)
+    id_arr = np.array(id_list)
+    target_arr = np.array(target_list)
+    np.save(os.path.join(attack_pred_save_dir, 'id_of_prediction.npy'), id_arr)
+    np.save(os.path.join(attack_pred_save_dir, 'target_of_prediction.npy'), target_arr)
 
     predictions = []
     attacks_names = []
