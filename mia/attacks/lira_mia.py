@@ -1,25 +1,48 @@
 # This code implements "Membership Inference Attacks From First Principles", S&P 2022
 # The code is based on the code from
 # https://github.com/tensorflow/privacy/tree/master/research/mi_lira_2021
+import copy
 import logging
 import os
+from typing import List
 
 import numpy as np
 import scipy
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.utils.data import ConcatDataset, DataLoader, Subset
+from torch.utils.data import ConcatDataset, DataLoader, Subset, Dataset
+import torch.nn as nn
 from torchvision.transforms import transforms
 
 from mia.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
-from utils.datasets.loader import load_dataset
-from utils.models.loader import init_network
-from utils.optim import trainer
-from utils.optim.trainer import load_model
+from utils.dataset_utils import get_xy_from_dataset
+from torch.cuda.amp import GradScaler, autocast
 from utils.set_seed import set_seed
 
 
-# from attack_classifier import AttackClassifier # no classifer needed for LIRA
+class EMA(nn.Module):
+    def __init__(self, model, decay=0.9999, device=None):
+        super(EMA, self).__init__()
+        self.module = copy.deepcopy(model)
+        self.module.eval()
+        self.decay = decay
+        self.device = device
+        if self.device is not None:
+            self.module.to(device=device)
+
+    def _update(self, model, update_fn):
+        with torch.no_grad():
+            for ema_v, model_v in zip(self.module.state_dict().values(), model.state_dict().values()):
+                if self.device is not None:
+                    model_v = model_v.to(device=self.device)
+                ema_v.copy_(update_fn(ema_v, model_v))
+
+    def update(self, model):
+        self._update(model, update_fn=lambda e, m: self.decay * e + (1. - self.decay) * m)
+
+    def set(self, model):
+        self._update(model, update_fn=lambda e, m: m)
+
 
 class LiraModelAccess(ModelAccess):
     """
@@ -71,11 +94,8 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
         """
         Initialize LiraAuxiliaryInfo with a configuration dictionary.
         """
+        super().__init__(config)
         self.config = config
-
-        # Model architecture parameters
-        self.arch = config.get('arch', "wrn28-2")
-        self.init_weights = config.get('init_weights', True)
 
         # Training parameters
         self.weight_decay = config.get('weight_decay', 0.01)
@@ -89,50 +109,21 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
         self.path = config.get('path', None)
 
         # Auxiliary info for LIRA
-        self.dataset_name = config.get('dataset_name', None)
-        self.dataset_dir = config.get('dataset_dir', f"./data/{self.dataset_name}")
-        self.num_shadow_models = config.get('num_shadow_models', None)
+        self.num_shadow_models = config.get('num_shadow_models', 20)
         self.num_target_models = config.get('num_target_models', 1)
         self.shadow_path = config.get('shadow_path', f"./weights/shadow/{self.arch}/")
         self.target_path = config.get('target_path', f"./weights/target/{self.arch}/")
 
 
-def _split_data(fullset, expid, iteration_range, is_shadow):
-    if is_shadow:  # case: for shadow model
-        keep = np.random.uniform(0, 1, size=(iteration_range, len(fullset)))
-        order = keep.argsort(0)
-        keep = order < int(.5 * iteration_range)
-        keep = np.array(keep[expid], dtype=bool)
-        return np.where(keep)[0], np.where(~keep)[0]
-    else:  # case: target model: random split
-        keep = np.random.uniform(0, 1, size=len(fullset)) <= 0.5
-        return np.where(keep)[0], np.where(~keep)[0]
+def _split_data(fullset, expid, iteration_range):
+    keep = np.random.uniform(0, 1, size=(iteration_range, len(fullset)))
+    order = keep.argsort(0)
+    keep = order < int(.5 * iteration_range)
+    keep = np.array(keep[expid], dtype=bool)
+    return np.where(keep)[0], np.where(~keep)[0]
 
 
 class LIRAUtil:
-    @classmethod
-    def _prepare_data(cls, info: LiraAuxiliaryInfo):
-        """
-        Prepares the data by loading the dataset and applying transformations.
-
-        Args:
-        info (LiraAuxiliaryInfo): The auxiliary info instance containing all the necessary information.
-        """
-        # Constants
-        DATA_TRANSFORM = transforms.Compose([
-            transforms.RandomCrop(32, padding=(4, 4), padding_mode='reflect'),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-        ])
-
-        # Prepare the data
-        dataset = load_dataset(dataset_name=info.dataset_name, data_path=info.dataset_dir,
-                               train_transform=DATA_TRANSFORM, test_transform=DATA_TRANSFORM, target_transform=None)
-
-        # Combine trainset and testset
-        return dataset
-
     @classmethod
     def _make_directory_if_not_exists(cls, dir_path):
         """
@@ -144,29 +135,120 @@ class LIRAUtil:
         if not os.path.exists(dir_path):
             os.makedirs(dir_path)
 
-    @classmethod
-    def train_models(cls, info: LiraAuxiliaryInfo, is_shadow=True):
-        """
-        Trains the models (either shadow or target models).
 
-        Args:
-        info (LiraAuxiliaryInfo): The auxiliary info instance containing all the necessary information.
-        is_shadow (bool): If true, shadow models are trained. Otherwise, target models are trained.
+    @classmethod
+    def train(cls, model, device, train_loader, optimizer, scheduler=None):
+        """
+        train function for the shadow_model
+        """
+        model.train()
+        ema = EMA(model, 0.999)
+        weight_decay = 0.01
+
+        scaler = GradScaler()  # for mixed precision training
+        running_loss = 0.0
+        correct = 0
+
+        for batch_idx, (data, target) in enumerate(train_loader):
+            data, target = data.to(device), target.to(device)
+
+            # forward
+            with autocast():
+                output = model(data)
+                cross_entropy_loss = nn.CrossEntropyLoss()(output, target)
+
+                # weight decay loss
+                l2_reg = torch.tensor(0., requires_grad=True)
+                for name, param in model.named_parameters():
+                    if 'weight' in name:
+                        l2_reg = l2_reg + torch.norm(param, 2)
+                loss_wd = 0.5 * l2_reg  # weight decay loss
+
+                # total loss = cross entropy loss + weight decay loss
+                loss = cross_entropy_loss + weight_decay * loss_wd
+
+            # backward
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad()
+
+            # update EMA
+            ema.update(model)
+
+            # calculate running loss and correct prediction count for accuracy
+            running_loss += loss.item() * data.size(0)
+            pred = output.argmax(dim=1, keepdim=True)
+            correct += pred.eq(target.view_as(pred)).sum().item()
+
+        if scheduler is not None:
+            scheduler.step()
+
+        return running_loss / len(train_loader.dataset), correct / len(train_loader.dataset)
+
+    @classmethod
+    def test(cls, model, device, test_loader):
+        """
+        test function for the shadow_model
+        """
+        model.eval()
+        correct = 0
+        with torch.no_grad():
+            for data, target in test_loader:
+                data, target = data.to(device), target.to(device)
+                output = model(data)
+                pred = output.argmax(dim=1, keepdim=True)
+                correct += pred.eq(target.view_as(pred)).sum().item()
+        return correct / len(test_loader.dataset)
+
+    @classmethod
+    def predict(cls, model, loader, device):
+        """
+        Predicts the outputs of a model given a data loader.
+        """
+        model.eval()
+        outputs = []
+        with torch.no_grad():
+            for data, _ in loader:
+                data = data.to(device)
+                output = nn.Softmax(dim=1)(model(data))
+                outputs.append(output)
+        return torch.cat(outputs)
+
+    @classmethod
+    def save_model(cls, model, path):
+        """
+        Saves the model to the given path.
+        """
+        torch.save(model.state_dict(), path)
+
+    @classmethod
+    def load_model(cls, model, path):
+        """
+        Loads the model from the given path.
+        """
+        model.load_state_dict(torch.load(path))
+        model.eval()
+        return model
+
+    @classmethod
+    def train_shadow_models(cls, model, dataset, info: LiraAuxiliaryInfo):
+        """
+        Trains the shadow models.
+        :param dataset: The dataset to be used for training.
+        :param info: The auxiliary info instance containing all the necessary information.
         """
         # init
-        mode = "shadow" if is_shadow else "target"
-        iteration_range = info.num_shadow_models if is_shadow else info.num_target_models
-        seed_base = info.shadow_seed_base if is_shadow else info.target_seed_base
+        iteration_range = info.num_shadow_models
+        seed_base = info.shadow_seed_base
         set_seed(seed_base)
         device = torch.device(info.device)
-        dataset = cls._prepare_data(info)
-        fullset = ConcatDataset([dataset.train_set, dataset.test_set])
 
         for expid in range(iteration_range):
             # Define the directory path
-            folder_name = expid if is_shadow else expid + seed_base
-            dir_path = f"./weights/{mode}/{info.arch}/{folder_name}"
-            log_path = f"./logs/{mode}/{info.arch}"
+            folder_name = expid
+            dir_path = f"./weights/shadow/{model.__name__}/{folder_name}"
+            log_path = f"./logs/shadow/{model.__name__}"
 
             # Check if the directory exists and create
             cls._make_directory_if_not_exists(dir_path)
@@ -175,15 +257,14 @@ class LIRAUtil:
             set_seed(expid + seed_base)
 
             # split the data
-            shadow_train_indices, shadow_out_indices = _split_data(fullset, expid, iteration_range, is_shadow)
+            shadow_train_indices, shadow_out_indices = _split_data(dataset, expid, iteration_range)
 
             # Create the data loaders for training and testing
-            shadow_train_loader = DataLoader(Subset(fullset, shadow_train_indices), batch_size=256, shuffle=True)
-            shadow_out_loader = DataLoader(Subset(fullset, shadow_out_indices), batch_size=256, shuffle=False)
+            shadow_train_loader = DataLoader(Subset(dataset, shadow_train_indices), batch_size=256, shuffle=True)
+            shadow_out_loader = DataLoader(Subset(dataset, shadow_out_indices), batch_size=256, shuffle=False)
 
             # Prepare to train the target model
-            target_model = init_network(arch=info.arch, init_weights=True).to(device)
-            optimizer = torch.optim.Adam(target_model.parameters(), lr=0.001, weight_decay=0.0005)
+            optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=0.0005)
             scheduler = CosineAnnealingLR(optimizer, T_max=info.epochs, eta_min=0)
 
             # Logging
@@ -194,15 +275,18 @@ class LIRAUtil:
                                     logging.StreamHandler()
                                 ])
 
+            curr_model = copy.deepcopy(model)
+            curr_model.to(device)
+
             for epoch in range(1, info.epochs):
-                loss, _ = trainer.train(target_model, device, shadow_train_loader, optimizer, scheduler)
-                acc = trainer.test(target_model, device, shadow_out_loader)
+                loss, _ = LIRAUtil.train(curr_model, device, shadow_train_loader, optimizer, scheduler)
+                acc = LIRAUtil.test(curr_model, device, shadow_out_loader)
                 logging.info(f"Train Target Model: {epoch}/{info.epochs}: TRAIN loss: {loss:.8f}; TEST acc: {acc:.6f}")
 
             # save model
-            trainer.save_model(target_model, f"{dir_path}/{mode}.pth")
+            LIRAUtil.save_model(curr_model, f"{dir_path}/shadow.pth")
             # save keep
-            is_in_train = np.full(len(fullset), False)
+            is_in_train = np.full(len(dataset), False)
             is_in_train[shadow_train_indices] = True
             np.save(f"{dir_path}/keep.npy", is_in_train)
 
@@ -255,7 +339,7 @@ class LIRAUtil:
 
             prediction.extend(score.mean(1))
 
-        return prediction
+        return np.array(prediction)
 
     @classmethod
     def _generate_logits(cls, model, data_loader, device):
@@ -289,40 +373,42 @@ class LIRAUtil:
         return torch.cat(logits).unsqueeze(1)  # should be [num_samples, 2, num_classes]
 
     @classmethod
-    def process_models(cls, info: LiraAuxiliaryInfo, target_model_access: ModelAccess,
-                       is_shadow=True, threshold_acc=0.5):
+    def process_shadow_models(cls, info: LiraAuxiliaryInfo, auxiliary_dataset: Dataset, shadow_model_arch,
+                       threshold_acc=0.5) -> (List[torch.Tensor], List[torch.Tensor]):
         """
-        Loads the models and calculates the scores for each model.
+        Load and process the shadow models to generate the scores and kept indices.
 
-        Args:
-        info (LiraAuxiliaryInfo): The auxiliary info instance containing all the necessary information.
-        is_shadow (bool): If true, shadow models are processed. Otherwise, target models are processed.
-        threshold_acc (float): The accuracy threshold for skipping records.
+        :param info: The auxiliary info instance containing all the necessary information.
+        :param auxiliary_dataset: The auxiliary dataset.
+        :param shadow_model_arch: The architecture of the shadow model.
+        :param threshold_acc: The accuracy threshold for skipping records.
+
+        :return: The list of scores and the list of kept indices.
         """
-        dataset = cls._prepare_data(info)
-        fullset = ConcatDataset([dataset.train_set, dataset.test_set])
-        fullsetloader = torch.utils.data.DataLoader(fullset, batch_size=20, shuffle=False, num_workers=8)
+        fullsetloader = torch.utils.data.DataLoader(auxiliary_dataset, batch_size=20, shuffle=False, num_workers=8)
 
         # Combine the targets from trainset and testset
-        fullset_targets = dataset.train_set.targets + dataset.test_set.targets
+        _, fullset_targets = get_xy_from_dataset(auxiliary_dataset)
 
         score_list = []
         keep_list = []
-        model_path = info.shadow_path if is_shadow else info.target_path
+        model_path = info.shadow_path
         model_locations = os.listdir(model_path)
 
         for index, dir_name in enumerate(model_locations, start=1):
             seed_folder = os.path.join(model_path, dir_name)
             if os.path.isdir(seed_folder):
-                model_path = os.path.join(seed_folder, f"{'shadow' if is_shadow else 'target'}.pth")
+                model_path = os.path.join(seed_folder, "shadow.pth")
                 if os.path.isfile(model_path):
                     print(f"load model [{index}/{len(model_locations)}]: {model_path}")
-                    model = load_model(info.arch, path=model_path).to(info.device)
+                    model = cls.load_model(shadow_model_arch, path=model_path).to(info.device)
                     scores, mean_acc = cls._calculate_score(cls._generate_logits(model,
                                                                                  fullsetloader,
                                                                                  info.device).cpu().numpy(),
                                                             fullset_targets)
-                    if mean_acc < threshold_acc: continue  # model is too bad, skip this record
+                    if mean_acc < threshold_acc:
+                        print(f"model {index} is too bad, skip this record")
+                        continue  # model is too bad, skip this record
 
                     # Convert the numpy array to a PyTorch tensor and add a new dimension
                     scores = torch.unsqueeze(torch.from_numpy(scores), 0)
@@ -332,6 +418,44 @@ class LIRAUtil:
                 if os.path.isfile(keep_path):
                     keep = torch.unsqueeze(torch.from_numpy(np.load(keep_path)), 0)
                     keep_list.append(keep)
+
+            else:
+                print(f"model {index} does not exist, skip this record")
+
+        return score_list, keep_list
+
+
+    @classmethod
+    def process_target_model(cls, info: LiraAuxiliaryInfo, target_model_access: LiraModelAccess, auxiliary_dataset: Dataset,
+                       threshold_acc=0.5) -> (List[torch.Tensor], List[torch.Tensor]):
+        """
+        Calculates the target model's scores.
+
+        :param info: The auxiliary info instance containing all the necessary information.
+        :param target_model_access: The model access instance for the target model.
+        :param auxiliary_dataset: The auxiliary dataset.
+        :param threshold_acc: The accuracy threshold for skipping records.
+
+        :return: The list of scores and the list of kept indices.
+        """
+        fullsetloader = torch.utils.data.DataLoader(auxiliary_dataset, batch_size=20, shuffle=False, num_workers=8)
+
+        # Combine the targets from trainset and testset
+        _, fullset_targets = get_xy_from_dataset(auxiliary_dataset)
+
+        score_list = []
+        keep_list = []
+
+        print(f"processing target model")
+        scores, mean_acc = cls._calculate_score(target_model_access.get_signal(fullsetloader), fullset_targets)
+
+        if mean_acc < threshold_acc:
+            print(f"target model is too bad, skip this record")
+            return score_list, keep_list
+
+        # Convert the numpy array to a PyTorch tensor and add a new dimension
+        scores = torch.unsqueeze(torch.from_numpy(scores), 0)
+        score_list.append(scores)
 
         return score_list, keep_list
 
@@ -378,44 +502,45 @@ class LiraMiAttack(MiAttack):
     Implementation of MiAttack for Lira.
     """
 
-    def __init__(self, target_model_access: LiraModelAccess, auxiliary_info: LiraAuxiliaryInfo, target_data=None):
+    def __init__(self, target_model_access: LiraModelAccess, auxiliary_info: LiraAuxiliaryInfo):
         """
         Initialize LiraMiAttack.
         """
-        super().__init__(target_model_access, auxiliary_info, target_data)
+        super().__init__(target_model_access, auxiliary_info)
         self.shadow_scores = self.shadow_keeps = self.target_scores = self.target_keeps = None
         self.auxiliary_info = auxiliary_info
         self.config = self.auxiliary_info.config
+        self.target_model_access = target_model_access
 
-    def prepare(self, attack_config: dict):
+    def prepare(self, auxiliary_dataset):
         """
         Prepares for the attack by training models and generating the score and kept index data.
 
         Args:
         attack_config (dict): The attack configuration dictionary.
         """
-        LIRAUtil.train_models(info=self.auxiliary_info, is_shadow=True)
+
+        shadow_model = self.target_model_access.get_untrained_model()
+        LIRAUtil.train_shadow_models(shadow_model, auxiliary_dataset, info=self.auxiliary_info)
 
         # given the model, calculate the score and generate the kept index data
-        self.shadow_scores, self.shadow_keeps = LIRAUtil.process_models(self.auxiliary_info.shadow_path,
-                                                                        self.target_model_access,
-                                                                        is_shadow=True)
+        self.shadow_scores, self.shadow_keeps = LIRAUtil.process_shadow_models(self.auxiliary_info, auxiliary_dataset, shadow_model)
 
         # Convert the list of tensors to a single tensor
         self.shadow_scores = torch.cat(self.shadow_scores, dim=0)  # (20, 60000, 2)
         self.shadow_keeps = torch.cat(self.shadow_keeps, dim=0)  # (20, 60000)
 
-    def infer(self, target_data):
+    def infer(self, dataset: torch.utils.data.Dataset) -> np.ndarray:
         """
         Infers whether a data point is in the training set by using the LIRA membership inference attack.
 
-        Args:
-        target_data (torch.utils.data.Dataset): The target dataset.
+        :param dataset: The data points to be inferred.
+        :return: The inferred membership status of the data point.
         """
         if self.shadow_scores is None or \
                 self.shadow_keeps is None or \
                 self.target_scores is None or \
                 self.target_keeps is None:
-            raise "You should init the model by calling prepare() first"
+            raise ValueError("The attack is not prepared yet!")
 
-        return LIRAUtil.lira_mia(np.array(self.shadow_scores), np.array(self.shadow_keeps), target_data)
+        return LIRAUtil.lira_mia(np.array(self.shadow_scores), np.array(self.shadow_keeps), dataset)
