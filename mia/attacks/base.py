@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 import torch
 
@@ -23,20 +25,35 @@ class AuxiliaryInfo(ABC):
         """
         pass
 
+    def save_config_to_dict(self):
+        """
+        Save the configuration of the auxiliary information to a dictionary.
+        :return: the dictionary containing the configuration of the auxiliary information.
+        """
+        attr_vars = vars(self)
+        attr_dict = dict()
+        for key, value in vars(self).items():
+            if isinstance(value, (int, float, str, bool, list, dict, np.ndarray)):
+                attr_dict[key] = value
+
+        return attr_dict
+
 
 class ModelAccess(ABC):
     """
     Base class for all types of model access.
     """
 
-    def __init__(self, model, access_type: ModelAccessType):
+    def __init__(self, model, untrained_model, access_type: ModelAccessType):
         """
         Initialize model access with a model handler.
         :param model: the model handler to be used, which can be a model object (white box) or a model api(black box).
+        :param untrained_model: the untrained model handler to be used, which can be a model object (white box) or a model api(black box).
         :param type: the type of model access, which can be "white_box" or "black_box" or "gray_box"
         """
         self.model = model
         self.access_type = access_type
+        self.untrained_model = untrained_model
 
     def get_signal(self, data):
         """
@@ -63,6 +80,16 @@ class ModelAccess(ABC):
         :return:
         """
         self.model.to(device)
+
+    def get_untrained_model(self):
+        return copy.deepcopy(self.untrained_model)
+
+    def eval(self):
+        """
+        Set the model to evaluation mode.
+        :return:
+        """
+        self.model.eval()
 
 
 class MiAttack(ABC):
