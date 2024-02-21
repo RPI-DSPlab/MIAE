@@ -1,4 +1,4 @@
-from mia.sample_metrics.sample_metrics_config.base import ExampleHardnessConfig
+from miae.sample_metrics.sample_metrics_config.base import ExampleHardnessConfig
 from abc import ABC
 
 

@@ -11,9 +11,9 @@ from torch.utils.data import DataLoader, TensorDataset, ConcatDataset, Dataset, 
 from sklearn.metrics import roc_curve
 from tqdm import tqdm
 
-from mia.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
-from mia.utils.set_seed import set_seed
-from mia.utils import dataset_utils
+from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
+from miae.utils.set_seed import set_seed
+from miae.utils import dataset_utils
 
 
 def get_total_elements(dataloader):

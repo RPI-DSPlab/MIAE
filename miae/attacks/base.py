@@ -3,7 +3,7 @@ import copy
 import numpy as np
 import torch
 
-from mia.attacks.attack_classifier import *
+from miae.attacks.attack_classifier import *
 
 
 class ModelAccessType(Enum):

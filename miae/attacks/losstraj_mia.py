@@ -15,9 +15,9 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 import torch.nn as nn
 from typing import List, Optional, Union
 
-from mia.utils.set_seed import set_seed
-from mia.utils.dataset_utils import get_num_classes, dataset_split
-from mia.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
+from miae.utils.set_seed import set_seed
+from miae.utils.dataset_utils import get_num_classes, dataset_split
+from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
 
 
 class AttackMLP(torch.nn.Module):

@@ -12,9 +12,9 @@ from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import roc_curve
 from tqdm import tqdm
 
-from mia.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
-from mia.utils import datasets
-from mia.utils import models
-from mia.utils.set_seed import set_seed
-from mia.utils.datasets import AbstractGeneralDataset
+from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
+from miae.utils import datasets
+from miae.utils import models
+from miae.utils.set_seed import set_seed
+from miae.utils.datasets import AbstractGeneralDataset
 
