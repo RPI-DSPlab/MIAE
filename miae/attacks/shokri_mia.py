@@ -11,10 +11,10 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mia.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
-from mia.utils import datasets
-from mia.utils import models
-from mia.utils.set_seed import set_seed
+from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
+from miae.utils import datasets
+from miae.utils import models
+from miae.utils.set_seed import set_seed
 
 
 class AttackMLP(torch.nn.Module):

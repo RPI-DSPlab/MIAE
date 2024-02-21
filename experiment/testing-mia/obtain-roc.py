@@ -9,14 +9,14 @@ from tqdm import tqdm
 from copy import deepcopy
 from matplotlib import pyplot as plt
 
-# add mia to path
+# add miae to path
 import sys
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
-from mia.utils.set_seed import set_seed
-from mia.attacks import losstraj_mia, merlin_mia
-from mia.attacks import base as mia_base
-from mia.utils import roc_auc, dataset_utils
+from miae.utils.set_seed import set_seed
+from miae.attacks import losstraj_mia, merlin_mia, lira_mia
+from miae.attacks import base as mia_base
+from miae.utils import roc_auc, dataset_utils
 import models
 
 batch_size = 128
@@ -111,12 +111,12 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
     torch.save(target_model.state_dict(), os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pkl"))
 
 
-def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data: Dataset, membership: np.ndarray):
+def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data_to_attack: Dataset, membership: np.ndarray):
     """
     obtain roc and auc for  given (prepared) attacks and save to savedir
     :param attacks: a list of prepared attacks
     :param savedir: directory to save roc and auc
-    :param data: data to predict membership
+    :param data_to_attack: data to predict membership
     :param membership: membership of data
     :return: None
     """
@@ -131,7 +131,7 @@ def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data: Dataset
         break  # SKIPPING MERLIN FOR NOW
 
     # save the index that's predicted
-    dummy_data_loader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False)
+    dummy_data_loader = torch.utils.data.DataLoader(data_to_attack, batch_size=1, shuffle=False)
     id_list = []
     target_list = []
     for idx, (data, target) in enumerate(dummy_data_loader):
@@ -146,13 +146,12 @@ def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data: Dataset
     attacks_names = []
     for attack in attacks:
         if not os.path.exists(os.path.join(attack_pred_save_dir, attack.__class__.__name__+'_pred.npy')):
-            prediction = attack.infer(data)
+            prediction = attack.infer(data_to_attack)
             np.save(os.path.join(attack_pred_save_dir, attack.__class__.__name__+'_pred.npy'), prediction)
         else:
             prediction = np.load(os.path.join(attack_pred_save_dir, attack.__class__.__name__+'_pred.npy'))
         predictions.append(prediction)
         attacks_names.append(attack.__class__.__name__)
-        break  # SKIPPING MERLIN FOR NOW
 
     membership_list = [membership for _ in range(len(attacks))]
 
@@ -212,27 +211,30 @@ def main():
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/losstraj', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'distillation_epochs': target_train_epochs})
     merlin_aux_info = merlin_mia.MerlinAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': batch_size})
+    lira_aux_info = lira_mia.LiraAuxiliaryInfo(
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': target_train_epochs})
 
     losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model), untrained_target_model)
     merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model), untrained_target_model)
+    lira_target_model_access = lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
 
     attacks = [
-        losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
-        merlin_mia.MerlinAttack(merlin_target_model_access, merlin_aux_info)
+        # losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
+        # merlin_mia.MerlinAttack(merlin_target_model_access, merlin_aux_info),
+        lira_mia.LiraMiAttack(lira_target_model_access, lira_aux_info)
     ]
 
     # -- prepare the attacks
     for attack in attacks:
         print("Preparing attack: ", attack.__class__.__name__)
         attack.prepare(aux_set)
-        break  # SKIPPING MERLIN FOR NOW
 
     # -- STEP 3: attack the target dataset
     # mix the target trainset and testset and then attack
-    target_dataset = ConcatDataset([target_trainset, target_testset])
+    dataset_to_attack = ConcatDataset([target_trainset, target_testset])
     target_membership = np.concatenate([np.ones(len(target_trainset)), np.zeros(len(target_testset))])
 
-    obtain_roc_auc(attacks, savedir, target_dataset, target_membership)
+    obtain_roc_auc(attacks, savedir, dataset_to_attack, target_membership)
 
 
 

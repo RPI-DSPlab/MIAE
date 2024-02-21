@@ -3,11 +3,11 @@ import torch
 import torchvision.transforms as T
 
 import sys
-sys.path.append('/home/wangz56/MIAE/mia')
+sys.path.append('/miae')
 sys.path.append('/home/wangz56/MIAE')
-from mia import sample_metrics, attacks, visualization
-from mia.sample_metrics import sample_metrics_config
-from mia.utils import datasets, models
+from miae import sample_metrics, attacks, visualization
+from miae.sample_metrics import sample_metrics_config
+from miae.utils import datasets, models
 from utils.datasets.loader import load_dataset
 from torchvision.models import vgg16
 

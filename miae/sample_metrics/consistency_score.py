@@ -2,7 +2,7 @@ import copy
 from abc import ABC
 
 from tqdm import tqdm
-from mia.sample_metrics.base import ExampleMetric
+from miae.sample_metrics.base import ExampleMetric
 import torch
 import os
 import numpy as np
