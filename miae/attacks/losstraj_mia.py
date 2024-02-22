@@ -3,6 +3,7 @@
 # The code is based on the code from
 # https://github.com/DennisLiu2022/Membership-Inference-Attacks-by-Exploiting-Loss-Trajectory
 import copy
+import logging
 import os
 import json
 
@@ -76,6 +77,9 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         self.weight_decay = config.get('weight_decay', 0.0001)
 
         self.attack_model = attack_model
+
+        # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
+        self.log_path = config.get('log_path', None)
 
 
 class LosstrajModelAccess(ModelAccess):
@@ -521,6 +525,13 @@ class LosstrajAttack(MiAttack):
                 "The number of classes in the auxiliary dataset does not match the number of classes in the auxiliary information!")
 
         attack_model = self.auxiliary_info.attack_model
+
+        if self.auxiliary_info.log_path is not None:
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s - %(levelname)s - %(message)s',
+                filename=f'{self.auxiliary_info.log_path}/losstraj_mia.log',
+            )
 
         # saving config
         with open(self.auxiliary_info.save_path + '/losstraj_attack_config.json', 'w') as f:

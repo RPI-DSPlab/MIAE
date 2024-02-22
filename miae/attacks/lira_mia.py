@@ -116,7 +116,9 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
         # Auxiliary info for LIRA
         self.num_shadow_models = config.get('num_shadow_models', 20)
         self.shadow_path = config.get('shadow_path', f"{self.save_path}/weights/shadow/")
-        self.logging_path = config.get('logging_path', f"{self.save_path}/logs/")
+
+        # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
+        self.log_path = config.get('log_path', None)
 
 
 def _split_data(fullset, expid, iteration_range):
@@ -282,7 +284,7 @@ class LIRAUtil:
             # Define the directory path
             folder_name = expid
             dir_path = f"{info.shadow_path}/{folder_name}"
-            log_path = f"{info.logging_path}/{folder_name}"
+            log_path = f"{info.log_path}/{folder_name}"
 
             # Check if the directory exists and create
             cls._make_directory_if_not_exists(dir_path)
@@ -300,12 +302,19 @@ class LIRAUtil:
                                            shuffle=False)
 
             # Logging
-            logging.basicConfig(level=logging.INFO,
-                                format='%(asctime)s - %(levelname)s - %(message)s',
-                                handlers=[
-                                    logging.FileHandler(f"{log_path}/log_expid_{expid}.log"),
-                                    logging.StreamHandler()
-                                ])
+            if info.log_path is None:
+                logging.basicConfig(level=logging.INFO,
+                                    format='%(asctime)s - %(levelname)s - %(message)s',
+                                    handlers=[
+                                        logging.FileHandler(f"{log_path}/log_expid_{expid}.log"),
+                                        logging.StreamHandler()
+                                    ])
+            else:
+                logging.basicConfig(level=logging.INFO,
+                                    format='%(asctime)s - %(levelname)s - %(message)s',
+                                    handlers=[
+                                        logging.FileHandler(f"{info.log_path}/lira_mia_log/log_expid_{expid}.log"),
+                                    ])
 
             curr_model = copy.deepcopy(model)
             curr_model.to(device)
@@ -492,7 +501,8 @@ class LIRAUtil:
 
         print(f"processing target model")
         target_model_access.to_device(info.device)
-        scores, mean_acc = cls._calculate_score(target_model_access.get_signal_lira(dataset_loader, info.device).cpu().numpy(), fullset_targets)
+        scores, mean_acc = cls._calculate_score(
+            target_model_access.get_signal_lira(dataset_loader, info.device).cpu().numpy(), fullset_targets)
 
         # Convert the numpy array to a PyTorch tensor and add a new dimension
         scores = torch.unsqueeze(torch.from_numpy(scores), 0)
@@ -535,14 +545,14 @@ class LIRAUtil:
         return score, mean_acc
 
 
-class LiraMiAttack(MiAttack):
+class LiraAttack(MiAttack):
     """
     Implementation of MiAttack for Lira.
     """
 
     def __init__(self, target_model_access: LiraModelAccess, auxiliary_info: LiraAuxiliaryInfo):
         """
-        Initialize LiraMiAttack.
+        Initialize LiraAttack.
         """
         super().__init__(target_model_access, auxiliary_info)
         self.auxiliary_dataset = None
@@ -569,6 +579,12 @@ class LiraMiAttack(MiAttack):
         :return: The inferred membership status of the data point.
         """
 
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            filename=f'{self.auxiliary_info.log_path}/lira_mia.log',
+        )
+
         TEST = True  # if True, we save scores and keep to the file
 
         shadow_model = self.target_model_access.get_untrained_model()
@@ -579,14 +595,14 @@ class LiraMiAttack(MiAttack):
         # given the model, calculate the score and generate the kept index data
 
         if TEST:
-            # if we finds the scores and keep from the file, we don't need to calculate it again
+            # if we find the scores and keep from the file, we don't need to calculate it again
             if os.path.exists('shadow_scores.npy') and os.path.exists('shadow_keeps.npy'):
                 self.shadow_scores = torch.from_numpy(np.load('shadow_scores.npy'))
                 self.shadow_keeps = torch.from_numpy(np.load('shadow_keeps.npy'))
             else:
                 self.shadow_scores, self.shadow_keeps = LIRAUtil.process_shadow_models(self.auxiliary_info,
-                                                                               shadow_target_concat_set,
-                                                                               shadow_model)
+                                                                                       shadow_target_concat_set,
+                                                                                       shadow_model)
                 # Convert the list of tensors to a single tensor
                 self.shadow_scores = torch.cat(self.shadow_scores, dim=0)
                 self.shadow_keeps = torch.cat(self.shadow_keeps, dim=0)
@@ -594,17 +610,19 @@ class LiraMiAttack(MiAttack):
                 np.save('shadow_keeps.npy', self.shadow_keeps)
         else:
             self.shadow_scores, self.shadow_keeps = LIRAUtil.process_shadow_models(self.auxiliary_info,
-                                                                               shadow_target_concat_set,
-                                                                               shadow_model)
+                                                                                   shadow_target_concat_set,
+                                                                                   shadow_model)
             # Convert the list of tensors to a single tensor
             self.shadow_scores = torch.cat(self.shadow_scores, dim=0)
             self.shadow_keeps = torch.cat(self.shadow_keeps, dim=0)
 
         # obtaining target_score, which is the prediction of the target model
-        target_scores = LIRAUtil.process_target_model(self.target_model_access, self.auxiliary_info, shadow_target_concat_set)
+        target_scores = LIRAUtil.process_target_model(self.target_model_access, self.auxiliary_info,
+                                                      shadow_target_concat_set)
         target_scores = torch.cat(target_scores, dim=0)
 
-        predictions = LIRAUtil.lira_mia(np.array(self.shadow_keeps), np.array(self.shadow_scores), np.array(target_scores))
+        predictions = LIRAUtil.lira_mia(np.array(self.shadow_keeps), np.array(self.shadow_scores),
+                                        np.array(target_scores))
 
         # return the predictions on the target data
         return predictions[:len(dataset)]
