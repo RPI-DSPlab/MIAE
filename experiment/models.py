@@ -8,6 +8,19 @@ import numpy as np
 import torch.nn.functional as F
 
 
+def get_model(model_name, num_classes, input_size):
+    if model_name == 'resnet56':
+        return create_resnet56(num_classes=num_classes, input_size=input_size)
+    elif model_name == 'wrn32_4':
+        return create_wideresnet32_4(num_classes=num_classes, input_size=input_size)
+    elif model_name == 'vgg16':
+        return create_vgg16(num_classes=num_classes, input_size=input_size)
+    elif model_name == 'mobilenet':
+        return create_mobilenet(num_classes=num_classes, input_size=input_size)
+    else:
+        raise ValueError('Unknown model name')
+
+
 def create_resnet56(num_classes=10, input_size=32):
     num_blocks = [9, 9, 9]
     num_classes = num_classes
