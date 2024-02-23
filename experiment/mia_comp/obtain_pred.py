@@ -86,11 +86,12 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
     target_train_epochs = arg.target_epochs
     lr = arg.attack_lr
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        filename=f'{target_model_dir}/target_model.log',
-    )
+    target_logger = logging.getLogger('target_logger')
+    target_logger.setLevel(logging.INFO)
+    fh = logging.FileHandler(os.path.join(target_model_dir, f"target_model_{arg.target_model}_{arg.dataset}.log"))
+    fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+    target_logger.addHandler(fh)
+
 
     target_model = model.to(device)
     trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
@@ -133,12 +134,12 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
                 outputs = target_model(inputs)
                 _, predicted = torch.max(outputs, 1)
                 train_correct_prediction += (predicted == labels).sum().item()
-            logging.info(
+            target_logger.info(
                 f"Epoch {epoch} train_acc: {train_correct_prediction / len(trainset):.2f} test_acc: {test_correct_predictions / len(testset):.2f} loss: {loss.item():.4f}， lr: {scheduler.get_last_lr()[0]:.4f}")
 
     # save the target model
     torch.save(target_model.state_dict(),
-               os.path.join(args.target_model_path, "target_model_" + args.target_model + ".pkl"))
+               os.path.join(args.target_model_path, "target_model_" + args.target_model + args.dataset + ".pkl"))
 
 
 def get_target_model_access(args, target_model, untrained_target_model) -> mia_base.ModelAccess:
@@ -170,15 +171,16 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
     if args.attack == "losstraj":
         return losstraj_mia.LosstrajAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
-             'batch_size': args.batch_size, 'lr': 0.01, 'distillation_epochs': args.attack_epochs, 'log_path': args.result_path})
+             'batch_size': args.batch_size, 'lr': 0.1, 'distillation_epochs': args.attack_epochs,
+             'log_path': args.result_path})
     if args.attack == "lira":
         return lira_mia.LiraAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
-             'batch_size': args.batch_size, 'lr': 0.01, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+             'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
     if args.attack == "shokri":
         return shokri_mia.ShokriAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
-             'batch_size': args.batch_size, 'lr': 0.01, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+             'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
     else:
         raise ValueError("Invalid attack type")
 
@@ -201,6 +203,7 @@ def get_attack(args, aux_info: mia_base.AuxiliaryInfo, target_model_access: mia_
     else:
         raise ValueError("Invalid attack type")
 
+
 def delete_files_in_directory(directory):
     for filename in os.listdir(directory):
         file_path = os.path.join(directory, filename)
@@ -214,7 +217,7 @@ def delete_files_in_directory(directory):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='obtain_membership_inference_prediction')
 
-    #special arguments
+    # special arguments
     """if this argument is not non, the script will only save the dataset and exit. This is used to make sure the
     index - data mapping is consistent across different runs. This is useful when we want to compare the performance."""
     parser.add_argument('--save_dataset', type=bool, default=False, help='whether to save the dataset')
@@ -230,7 +233,8 @@ if __name__ == '__main__':
     parser.add_argument('--target_set_ratio', type=float, default=0.35,
                         help='the ratio of the data used for target model training over the whole dataset')
     parser.add_argument('--train_test_ratio', type=float, default=0.5, help='train test ratio for target and MIA')
-    parser.add_argument('--delete-files', type=bool, default=True, help='whether to delete the preparation files after training')
+    parser.add_argument('--delete-files', type=bool, default=True,
+                        help='whether to delete the preparation files after training')
 
     # optional arguments (eg. training hyperparameters)
     parser.add_argument('--seed', type=int, default=0, help='random seed')
@@ -246,7 +250,6 @@ if __name__ == '__main__':
 
     # set seed
     set_seed(args.seed)
-    # logging setup for target model training
 
     # create all the necessary directories
     for path in [args.result_path, args.target_model_path, args.preparation_path]:
@@ -292,11 +295,11 @@ if __name__ == '__main__':
     # training the target model
     target_model_copy = models.get_model(args.target_model, num_classes, input_size).to(args.device)
     target_model = models.get_model(args.target_model, num_classes, input_size).to(args.device)
-    if not os.path.exists(os.path.join(args.target_model_path, "target_model_" + args.target_model + ".pkl")):
+    if not os.path.exists(os.path.join(args.target_model_path, "target_model_" + args.target_model + args.dataset + ".pkl")):
         train_target_model(target_model, args.target_model_path, args.device, target_trainset, target_testset, args)
     else:
         target_model.load_state_dict(
-            torch.load(os.path.join(args.target_model_path, "target_model_" + args.target_model + ".pkl")))
+            torch.load(os.path.join(args.target_model_path, "target_model_" + args.target_model + args.dataset + ".pkl")))
         target_model.eval()
 
     # prepare the attack
@@ -309,8 +312,8 @@ if __name__ == '__main__':
     pred = attack.infer(dataset_to_attack)
     np.save(os.path.join(args.result_path, "pred_" + args.attack + ".npy"), pred)
 
-    if args.delete_files:
-        delete_files_in_directory(args.preparation_path)
+    # print the accuracy
+    print(f"Accuracy: {np.mean((pred > 0.5) == target_membership):.4f}")
 
-
-
+    # if args.delete_files:
+    #     delete_files_in_directory(args.preparation_path)
