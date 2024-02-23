@@ -81,6 +81,13 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
 
+        if self.log_path is not None:
+            self.loss_traj_logger = logging.getLogger('loss_traj_logger')
+            self.loss_traj_logger.setLevel(logging.INFO)
+            fh = logging.FileHandler(self.log_path + '/loss_traj.log')
+            fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+            self.loss_traj_logger.addHandler(fh)
+
 
 class LosstrajModelAccess(ModelAccess):
     """
@@ -110,6 +117,9 @@ class LosstrajUtil:
         """
         print(
             f"getting distilled model with teacher type: {teacher_type} on distillation dataset of len: {len(distillation_dataset)}")
+        if auxiliary_info.log_path is not None:
+            auxiliary_info.loss_traj_logger.info(
+                f"getting distilled model with teacher type: {teacher_type} on distillation dataset of len: {len(distillation_dataset)}")
         if not os.path.exists(os.path.join(auxiliary_info.distill_models_path, teacher_type)):
             os.makedirs(os.path.join(auxiliary_info.distill_models_path, teacher_type))
         elif len(os.listdir(
@@ -170,6 +180,10 @@ class LosstrajUtil:
                     print(
                         f"Epoch {epoch + 1}, student_train acc: {student_acc:.2f}%, teacher acc: {teacher_acc:.2f}%, "
                         f"Loss: {train_loss:.2f}, lr: {scheduler.get_last_lr()[0]:.4f}")
+                    if auxiliary_info.log_path is not None:
+                        auxiliary_info.loss_traj_logger.info(
+                            f"Epoch {epoch + 1}, student_train acc: {student_acc:.2f}%, teacher acc: {teacher_acc:.2f}%, "
+                            f"Loss: {train_loss:.2f}, lr: {scheduler.get_last_lr()[0]:.4f}")
 
             # save the model
             torch.save(distilled_model.state_dict(),
@@ -256,7 +270,9 @@ class LosstrajUtil:
 
         print(
             f"obtaining shadow model with trainset len: {len(shadow_train_dataset)} and testset len: {len(shadow_test_dataset)}")
-
+        if auxiliary_info.log_path is not None:
+            auxiliary_info.loss_traj_logger.info(
+                f"obtaining shadow model with trainset len: {len(shadow_train_dataset)} and testset len: {len(shadow_test_dataset)}")
         untrained_shadow_model = copy.deepcopy(shadow_model)
 
         if os.path.exists(auxiliary_info.shadow_model_path):
@@ -316,7 +332,9 @@ class LosstrajUtil:
                     train_accuracy = train_correct_predictions / total_samples
                 print(
                     f"Epoch {epoch}, train_acc: {train_accuracy:.2f}, test_acc: {test_accuracy:.2f}%, Loss: {train_loss:.4f}, lr: {scheduler.get_last_lr()[0]:.4f}")
-
+                if auxiliary_info.log_path is not None:
+                    auxiliary_info.loss_traj_logger.info(
+                        f"Epoch {epoch}, train_acc: {train_accuracy:.2f}, test_acc: {test_accuracy:.2f}%, Loss: {train_loss:.4f}, lr: {scheduler.get_last_lr()[0]:.4f}")
         # save the model
         torch.save(shadow_model.state_dict(), auxiliary_info.shadow_model_path)
         return LosstrajModelAccess(shadow_model, untrained_shadow_model, ModelAccessType.BLACK_BOX)
@@ -417,14 +435,15 @@ class LosstrajUtil:
         # split the dataset to train set and test set:
         attack_model.to(auxiliary_info.device)
         trainset_len = int(len(attack_dataset) * test_ratio)
-        trainset, testset = dataset_split(attack_dataset, [trainset_len, len(attack_dataset) - trainset_len]) if test_ratio > 0 else (
+        trainset, testset = dataset_split(attack_dataset,
+                                          [trainset_len, len(attack_dataset) - trainset_len]) if test_ratio > 0 else (
             attack_dataset, None)
 
         train_loader = DataLoader(trainset, batch_size=auxiliary_info.batch_size, shuffle=True,
                                   num_workers=auxiliary_info.num_workers)
         if test_ratio > 0:
             test_loader = DataLoader(testset, batch_size=auxiliary_info.batch_size, shuffle=True,
-                                    num_workers=auxiliary_info.num_workers)
+                                     num_workers=auxiliary_info.num_workers)
 
         criterion = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, attack_model.parameters()), lr=0.01,
@@ -471,8 +490,14 @@ class LosstrajUtil:
                 if test_ratio > 0:
                     print(
                         f"Epoch {epoch}, train_acc: {train_accuracy:.2f}, test_acc: {test_accuracy:.2f}%, Loss: {train_loss:.4f}")
+                    if auxiliary_info.log_path is not None:
+                        auxiliary_info.loss_traj_logger.info(
+                            f"Epoch {epoch}, train_acc: {train_accuracy:.2f}, test_acc: {test_accuracy:.2f}%, Loss: {train_loss:.4f}")
                 else:
                     print(f"Epoch {epoch}, train_acc: {train_accuracy:.2f}, Loss: {train_loss:.4f}")
+                    if auxiliary_info.log_path is not None:
+                        auxiliary_info.loss_traj_logger.info(
+                            f"Epoch {epoch}, train_acc: {train_accuracy:.2f}, Loss: {train_loss:.4f}")
 
         # save the model
         torch.save(attack_model.state_dict(), os.path.join(auxiliary_info.save_path, "attack_model.pkl"))
@@ -526,13 +551,6 @@ class LosstrajAttack(MiAttack):
 
         attack_model = self.auxiliary_info.attack_model
 
-        if self.auxiliary_info.log_path is not None:
-            logging.basicConfig(
-                level=logging.INFO,
-                format='%(asctime)s - %(levelname)s - %(message)s',
-                filename=f'{self.auxiliary_info.log_path}/losstraj_mia.log',
-            )
-
         # saving config
         with open(self.auxiliary_info.save_path + '/losstraj_attack_config.json', 'w') as f:
             json.dump(self.auxiliary_info.save_config_to_dict(), f)
@@ -540,6 +558,8 @@ class LosstrajAttack(MiAttack):
         # set the seed
         set_seed(self.auxiliary_info.seed)
         print(f"LOSSTRAJ: setting seed to {self.auxiliary_info.seed}")
+        if self.auxiliary_info.log_path is not None:
+            self.auxiliary_info.loss_traj_logger.info(f"LOSSTRAJ: setting seed to {self.auxiliary_info.seed}")
         # determine the length of the distillation dataset and the shadow dataset
         distillation_train_len = int(len(auxiliary_dataset) * self.auxiliary_info.distillation_dataset_ratio)
         shadow_dataset_len = len(auxiliary_dataset) - distillation_train_len
@@ -551,21 +571,30 @@ class LosstrajAttack(MiAttack):
 
         # step 1: train shadow model, distill the shadow model and save the distilled models at each epoch
         print("PREPARE: Training shadow model...")
+        if self.auxiliary_info.log_path is not None:
+            self.auxiliary_info.loss_traj_logger.info("PREPARE: Training shadow model...")
+
         self.shadow_model = self.target_model_access.get_untrained_model()
         self.shadow_model_access = LosstrajUtil.train_shadow_model(self.shadow_model, self.shadow_train_dataset,
                                                                    self.shadow_test_dataset,
                                                                    self.auxiliary_info)
         print("PREPARE: Distilling shadow model...")
+        if self.auxiliary_info.log_path is not None:
+            self.auxiliary_info.loss_traj_logger.info("PREPARE: Distilling shadow model...")
         LosstrajUtil.model_distillation(self.shadow_model_access, self.distillation_train_dataset, self.auxiliary_info,
                                         teacher_type="shadow")
 
         # step 2: distill the target model and save the distilled models at each epoch
         print("PREPARE: Distilling target model...")
+        if self.auxiliary_info.log_path is not None:
+            self.auxiliary_info.loss_traj_logger.info("PREPARE: Distilling target model...")
         LosstrajUtil.model_distillation(self.target_model_access, self.distillation_train_dataset, self.auxiliary_info,
                                         teacher_type="target")
 
         # step 3: obtain the loss trajectory of the shadow model and train the attack model
         print("PREPARE: Obtaining loss trajectory of the shadow model...")
+        if self.auxiliary_info.log_path is not None:
+            self.auxiliary_info.loss_traj_logger.info("PREPARE: Obtaining loss trajectory of the shadow model...")
         if not os.path.exists(self.auxiliary_info.shadow_losstraj_path):
             os.makedirs(self.auxiliary_info.shadow_losstraj_path)
 
@@ -609,6 +638,8 @@ class LosstrajAttack(MiAttack):
         attack_dataset = TensorDataset(traj_data, attack_membership)
 
         print("PREPARE: Training attack model...")
+        if self.auxiliary_info.log_path is not None:
+            self.auxiliary_info.loss_traj_logger.info("PREPARE: Training attack model...")
         self.attack_model = attack_model(self.auxiliary_info.distillation_epochs + 1)
         self.attack_model = LosstrajUtil.train_attack_model(attack_dataset,
                                                             self.auxiliary_info, self.attack_model)

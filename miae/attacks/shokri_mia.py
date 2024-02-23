@@ -80,6 +80,12 @@ class ShokriAuxiliaryInfo(AuxiliaryInfo):
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
+        if self.log_path is not None:
+            self.shokri_logger = logging.getLogger('shokri_logger')
+            self.shokri_logger.setLevel(logging.INFO)
+            fh = logging.FileHandler(self.log_path + '/shokri.log')
+            fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+            self.shokri_logger.addHandler(fh)
 
 
 class ShokriModelAccess(ModelAccess):
@@ -156,7 +162,7 @@ class ShokriUtil:
                     f"{train_loss:.4f}, lr: {scheduler.get_last_lr()[0]:.4f}")
 
                 if aux_info.log_path is not None:
-                    logging.info(
+                    aux_info.shokri_logger.info(
                         f"Epoch {epoch}, train_acc: {train_accuracy * 100:.2f}%, test_acc: {test_accuracy * 100:.2f}%, Loss:"
                         f"{train_loss:.4f}, lr: {scheduler.get_last_lr()[0]:.4f}")
         return shadow_model
@@ -219,12 +225,12 @@ class ShokriUtil:
                     print(
                         f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, test_acc: {test_acc * 100:.2f}%, Loss: {train_loss:.4f}")
                     if aux_info.log_path is not None:
-                        logging.info(
+                        aux_info.shokri_logger.info(
                             f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, test_acc: {test_acc * 100:.2f}%, Loss: {train_loss:.4f}")
                 else:
                     print(f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, Loss: {train_loss * 100:.4f}%")
                     if aux_info.log_path is not None:
-                        logging.info(
+                        aux_info.shokri_logger.info(
                             f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, Loss: {train_loss * 100:.4f}%")
 
         return attack_model
@@ -331,12 +337,6 @@ class ShokriAttack(MiAttack):
         # set seed
         set_seed(self.auxiliary_info.seed)
 
-        if self.auxiliary_info.log_path is not None:
-            logging.basicConfig(
-                level=logging.INFO,
-                format='%(asctime)s - %(levelname)s - %(message)s',
-                filename=f'{self.auxiliary_info.log_path}/shokri_mia.log',
-            )
 
         # create shadow datasets
         sub_shadow_dataset_list = ShokriUtil.split_dataset(auxiliary_dataset, self.auxiliary_info.num_shadow_models)
@@ -368,12 +368,12 @@ class ShokriAttack(MiAttack):
                 if os.path.exists(model_path):
                     print(f"Loading shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
                     if self.auxiliary_info.log_path is not None:
-                        logging.info(f"Loading shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
+                        self.auxiliary_info.shokri_logger.info(f"Loading shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
                     shadow_model_i.load_state_dict(torch.load(model_path))
                 else:
                     print(f"Training shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
                     if self.auxiliary_info.log_path is not None:
-                        logging.info(f"Training shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
+                        self.auxiliary_info.shokri_logger.info(f"Training shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
                     shadow_model_i = ShokriUtil.train_shadow_model(shadow_model_i, shadow_train_loader,
                                                                    shadow_test_loader,
                                                                    self.auxiliary_info)
@@ -442,7 +442,7 @@ class ShokriAttack(MiAttack):
         if len(labels) == len(os.listdir(self.auxiliary_info.attack_model_path)):
             print("Loading attack models...")
             if self.auxiliary_info.log_path is not None:
-                logging.info("Loading attack models...")
+                self.auxiliary_info.shokri_logger.info("Loading attack models...")
             for i, label in enumerate(labels):
                 model = self.auxiliary_info.attack_model(self.auxiliary_info.num_classes)
                 model.load_state_dict(torch.load(f"{self.auxiliary_info.attack_model_path}/attack_model_{label}.pt"))
@@ -452,7 +452,7 @@ class ShokriAttack(MiAttack):
             for i, label in enumerate(labels):
                 print(f"Training attack model for {i}/{len(labels)} label \"{label}\" ...")
                 if self.auxiliary_info.log_path is not None:
-                    logging.info(f"Training attack model for {i}/{len(labels)} label \"{label}\" ...")
+                    self.auxiliary_info.shokri_logger.info(f"Training attack model for {i}/{len(labels)} label \"{label}\" ...")
                 # filter the dataset with the label
                 attack_train_dataset_filtered = ShokriUtil.filter_dataset(attack_train_dataset, label)
                 attack_test_dataset_filtered = ShokriUtil.filter_dataset(attack_test_dataset,
