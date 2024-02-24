@@ -267,7 +267,7 @@ if __name__ == '__main__':
     import pickle
 
     if args.save_dataset:  # save the dataset and exit
-        dataset_save_path = os.path.join(args.result_path, "dataset_save")
+        dataset_save_path = os.path.join(args.result_path, f"dataset_save/{args.dataset}",)
         if not os.path.exists(dataset_save_path):
             os.makedirs(dataset_save_path)
 

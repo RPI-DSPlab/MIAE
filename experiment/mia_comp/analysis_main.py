@@ -1,3 +1,5 @@
+import argparse
+
 import utils
 import numpy as np
 
@@ -43,16 +45,21 @@ def analysis_preds_similarity(correctness_arr1, correctness_arr2, attack1_name, 
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='obtain_membership_inference_prediction')
+    parser.add_argument('--dataset', type=str, default="cifar10", help='the dataset to be used')
+    parser.add_argument('--model', type=str, default="resnet56", help='architecture of the model')
+    args = parser.parse_args()
+
     # loading predictions
-    pred_shokri = utils.load_predictions("/home/wangz56/comp_mia/preds/cifar10/resnet56/shokri/pred_shokri.npy")
-    pred_losstraj = utils.load_predictions("/home/wangz56/comp_mia/preds/cifar10/resnet56/losstraj/pred_losstraj.npy")
+    pred_shokri = utils.load_predictions(f"/home/wangz56/comp_mia/preds/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+    pred_losstraj = utils.load_predictions(f"/home/wangz56/comp_mia/preds/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
     print(f"pearson correlation: {utils.pearson_correlation(pred_shokri, pred_losstraj):.4f}")
 
     pred_shokri_binary = utils.predictions_to_labels(pred_shokri, threshold=0.5)
     pred_losstraj_binary = utils.predictions_to_labels(pred_losstraj, threshold=0.5)
 
     # loading the target_dataset
-    index_to_data, attack_set_membership = utils.load_target_dataset("/home/wangz56/comp_mia/dataset_save")
+    index_to_data, attack_set_membership = utils.load_target_dataset(f"/home/wangz56/comp_mia/dataset_save/{args.dataset}")
 
     correctness_shokri = correct_pred(pred_shokri_binary, attack_set_membership)
     correctness_losstraj = correct_pred(pred_losstraj_binary, attack_set_membership)
@@ -63,12 +70,18 @@ if __name__ == '__main__':
     # obtain different ensemble predictions
     pred_average = utils.averaging_predictions([pred_shokri, pred_losstraj])
     pred_majority_voting = utils.majority_voting([pred_shokri, pred_losstraj])
+    unanimous_voting = utils.unanimous_voting([pred_shokri, pred_losstraj])
 
     # calculate the accuracy
     print(f"\ncorrect rate of shokri: {utils.accuracy(pred_shokri, attack_set_membership):.4f}")
     print(f"correct rate of losstraj: {utils.accuracy(pred_losstraj, attack_set_membership):.4f}")
     print(f"correct rate of average: {utils.accuracy(pred_average, attack_set_membership):.4f}")
     print(f"correct rate of majority_voting: {utils.accuracy(pred_majority_voting, attack_set_membership):.4f}")
+    print(f"correct rate of unanimous_voting: {utils.accuracy(unanimous_voting, attack_set_membership):.4f}")
+
+    auc_graph_path = f"./{args.dataset}_{args.model}_auc.png"
+    auc_graph_name = f"{args.dataset} {args.model} auc"
 
     # plot aug_graph
-    utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting], ["shokri", "losstraj", "average", "majority_voting"], attack_set_membership, "AUC graph", "./auc.png")
+    # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
+    utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting], ["shokri", "losstraj", "average", "majority_voting"], attack_set_membership, auc_graph_name, auc_graph_path)

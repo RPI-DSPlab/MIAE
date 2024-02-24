@@ -18,6 +18,15 @@ cd /home/wangz56/MIAE/experiment/mia_comp
 conda activate conda-zhiqi
 
 for dataset in "${datasets[@]}"; do
+  # if assign different num_epoch for different dataset
+  if [ "$dataset" == "cifar10" ]; then
+    num_epoch=100
+  elif [ "$dataset" == "cifar100" ]; then
+    num_epoch=150
+  elif [ "$dataset" == "cinic10" ]; then
+    num_epoch=150
+  fi
+
   mkdir -p "$preds_dir/$dataset"
   # save the dataset
   echo "Saving dataset $dataset"
@@ -40,7 +49,12 @@ for dataset in "${datasets[@]}"; do
             mkdir -p "$result_dir"
             prepare_dir="./$mia"
             echo "Running $dataset $arch $mia"
-            python3 obtain_pred.py --dataset "$dataset" --target_model "$arch" --attack "$mia" --result_path "$result_dir" --seed "$seed" --delete-files "True" --preparation_path "$prepare_dir" --data_aug "False"  --target_model_path "$target_model_path"
+
+            python3 obtain_pred.py --dataset "$dataset" --target_model "$arch" --attack "$mia" \
+            --result_path "$result_dir" --seed "$seed" --delete-files "True" --preparation_path "$prepare_dir" \
+            --data_aug "False"  --target_model_path "$target_model_path" --attack_epochs "$num_epoch" \
+            --target_epochs "$num_epoch"
+
             rm -r "./$mia"
         done
     done

@@ -10,8 +10,40 @@ import numpy as np
 
 
 class Predictions:
+    def __init__(self, pred_arr: np.ndarray, ground_truth_arr: np.ndarray, name: str):
+        """
+        Initialize the Predictions object.
 
-    def __init__(self):
+        :param pred_arr: predictions as a numpy array
+        :param name: name of the attack
+        """
+        self.pred_arr = pred_arr
+        self.ground_truth_arr = ground_truth_arr
+        self.name = name
+
+
+def plot_venn_diagram(pred_list: List[Predictions], save_path: str):
+    """
+    Plot the Venn diagram for the predictions from different attacks.
+
+    :param pred_list: list of Predictions from different attacks
+    """
+
+    # TODO for Chengyu: Implement this function
+    pass
+
+
+def plot_t_sne(pred_list: List[Predictions], save_path: str, perplexity: int = 30):
+    """
+    Plot the t-SNE graph for the predictions from different attacks.
+
+    :param pred_list: list of Predictions from different attacks
+    :param save_path: path to save the graph
+    :param perplexity: perplexity for t-SNE (default: 30)
+    """
+
+    # TODO for Chengyu: Implement this function
+    pass
 
 
 
@@ -34,7 +66,7 @@ def predictions_to_labels(predictions: np.ndarray, threshold: float = 0.5) -> np
     :param threshold: threshold for converting predictions to binary labels
     :return: binary labels as a numpy array
     """
-    labels = (predictions > threshold).astype(int)
+    labels = (predictions < threshold).astype(int)
     return labels
 
 
@@ -47,8 +79,10 @@ def load_target_dataset(filepath: str):
     """
 
     # check if those 2 files exist
-    if not os.path.exists(filepath + "/index_to_data.pkl") or not os.path.exists(filepath + "/attack_set_membership.npy"):
-        raise FileNotFoundError(f"The files 'index_to_data.pkl' and 'attack_set_membership.npy' are not found in the given path: \n{filepath}.")
+    if not os.path.exists(filepath + "/index_to_data.pkl") or not os.path.exists(
+            filepath + "/attack_set_membership.npy"):
+        raise FileNotFoundError(
+            f"The files 'index_to_data.pkl' and 'attack_set_membership.npy' are not found in the given path: \n{filepath}.")
 
     # Load the dataset
     index_to_data = pickle.load(open(filepath + "/index_to_data.pkl", "rb"))
@@ -71,6 +105,7 @@ def accuracy(predictions: np.ndarray, ground_truth: np.ndarray) -> float:
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_auc_score, roc_curve
+
 
 def plot_auc_graph(pred_list: list[np.ndarray],
                    name_list: list[str],
@@ -115,14 +150,15 @@ def plot_auc_graph(pred_list: list[np.ndarray],
     # prints the auc, TPR@FPR=0.01, max accuracy
     for preds, name in zip(pred_list, name_list):
         fpr, tpr, _ = roc_curve(ground_truth_arr, preds)
-        print(f"{name}: AUC = {roc_auc_score(ground_truth_arr, preds):.2f}, TPR@FPR=0.01 = {tpr[np.argmin(np.abs(fpr - 0.01))]:.2f}, max accuracy = {max(tpr - fpr):.2f}")
+        print(
+            f"{name}: AUC = {roc_auc_score(ground_truth_arr, preds):.2f}, TPR@FPR=0.01 = {tpr[np.argmin(np.abs(fpr - 0.01))]:.2f}, max accuracy = {max(tpr - fpr):.2f}")
 
 
 def custom_auc(pred_list: List[np.ndarray],
-                   name_list: list[str],
-                   ground_truth_arr: np.ndarray,
-                   title: str, save_path: str = None
-                   ):
+               name_list: list[str],
+               ground_truth_arr: np.ndarray,
+               title: str, save_path: str = None
+               ):
     """
     plot the AUC graph for the predictions from different attacks (ported from Yuetian's code)
     :param pred_list: np.ndarray list of predictions
@@ -202,7 +238,6 @@ def custom_auc(pred_list: List[np.ndarray],
     plt.show()
 
 
-
 def pearson_correlation(pred1: np.ndarray, pred2: np.ndarray) -> float:
     """
     Calculate the Pearson correlation between two predictions.
@@ -239,3 +274,18 @@ def majority_voting(pred_list: list[np.ndarray]) -> np.ndarray:
     majority_voted_labels = (majority_voted_labels > 0.5).astype(int)
     return majority_voted_labels
 
+
+def unanimous_voting(pred_list: list[np.ndarray]) -> np.ndarray:
+    """
+    Unanimous voting for the predictions from different attacks.
+
+    :param pred_list: list of predictions
+    :return: unanimous voted prediction
+    """
+    # convert predictions to binary labels
+    labels_list = [predictions_to_labels(pred, threshold=0.5) for pred in pred_list]
+
+    # calculate the unanimous voted prediction
+    unanimous_voted_labels = np.mean(labels_list, axis=0)
+    unanimous_voted_labels = (unanimous_voted_labels == 1).astype(int)
+    return unanimous_voted_labels
