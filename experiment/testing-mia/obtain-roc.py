@@ -2,7 +2,7 @@ import os
 import torch
 import torchvision
 import torchvision.transforms as T
-from torch.utils.data import DataLoader, random_split, ConcatDataset, Dataset
+from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from typing import List
 import numpy as np
 from tqdm import tqdm
@@ -17,7 +17,7 @@ from miae.utils.set_seed import set_seed
 from miae.attacks import losstraj_mia, merlin_mia, lira_mia
 from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
-import models
+from experiment import models
 
 batch_size = 128
 targetset_ratio = 0.35  # percentage of training set to be used for training/test the target model
@@ -221,7 +221,7 @@ def main():
     attacks = [
         # losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
         # merlin_mia.MerlinAttack(merlin_target_model_access, merlin_aux_info),
-        lira_mia.LiraMiAttack(lira_target_model_access, lira_aux_info)
+        lira_mia.LiraAttack(lira_target_model_access, lira_aux_info)
     ]
 
     # -- prepare the attacks
