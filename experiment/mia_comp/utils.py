@@ -3,10 +3,10 @@ This file defines classes/functions for comparing the MIA's predictions down to 
 """
 import os
 import pickle
-import matplotlib.pyplot as plt
 from typing import List, Optional, Tuple, Callable, Union
 from sklearn.metrics import roc_auc_score, roc_curve, auc
 import numpy as np
+import matplotlib.pyplot as plt
 from matplotlib_venn import venn2, venn3
 
 
@@ -29,6 +29,7 @@ def plot_venn_diagram(pred_list: List[Predictions], save_path: str):
     Plot the Venn diagram for the predictions from different attacks.
 
     :param pred_list: list of Predictions from different attacks
+    :param save_path: path to save the graph
     """
     if len(pred_list) < 2:
         raise ValueError("At least 2 attacks are required for comparison.")
@@ -43,7 +44,7 @@ def plot_venn_diagram(pred_list: List[Predictions], save_path: str):
     venn3(subsets=venn_sets, set_labels=venn_labels)
 
     plt.title("Ven Diagram for the Predictions from Different Attacks")
-    plt.savefig(save_path)
+    # plt.savefig(save_path)
     plt.show()
 
 

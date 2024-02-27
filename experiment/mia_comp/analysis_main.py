@@ -37,10 +37,8 @@ def analysis_preds_similarity(correctness_arr1, correctness_arr2, attack1_name, 
     # - attack 2 only correctness: attacks 2 predicted correctly but attack 1 predicted incorrectly
     attack2_only_correctness = np.logical_and(np.logical_not(correctness_arr1), correctness_arr2)
     print(f"{attack2_name}_only_correctness = attack1_incorrect_pred AND attack2_correct_pred")
-    print(
-        f"num of {attack2_name}_only_correctness: {np.sum(attack2_only_correctness)} over {len(attack2_only_correctness)}")
-    print(
-        f"percentage of {attack2_name}_only_correctness: {np.sum(attack2_only_correctness) / len(attack2_only_correctness):.4f}")
+    print(f"num of {attack2_name}_only_correctness: {np.sum(attack2_only_correctness)} over {len(attack2_only_correctness)}")
+    print(f"percentage of {attack2_name}_only_correctness: {np.sum(attack2_only_correctness) / len(attack2_only_correctness):.4f}")
     print('------------------------------------------------------------------------------------')
 
 
@@ -51,15 +49,15 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # loading predictions
-    pred_shokri = utils.load_predictions(f"/home/wangz56/comp_mia/preds/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
-    pred_losstraj = utils.load_predictions(f"/home/wangz56/comp_mia/preds/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
+    pred_shokri = utils.load_predictions(f"/data/public/miae_experiment/preds/{args .dataset}/{args.model}/shokri/pred_shokri.npy")
+    pred_losstraj = utils.load_predictions(f"/data/public/miae_experiment/preds/{args .dataset}/{args.model}/losstraj/pred_losstraj.npy")
     print(f"pearson correlation: {utils.pearson_correlation(pred_shokri, pred_losstraj):.4f}")
 
     pred_shokri_binary = utils.predictions_to_labels(pred_shokri, threshold=0.5)
     pred_losstraj_binary = utils.predictions_to_labels(pred_losstraj, threshold=0.5)
 
     # loading the target_dataset
-    index_to_data, attack_set_membership = utils.load_target_dataset(f"/home/wangz56/comp_mia/dataset_save/{args.dataset}")
+    index_to_data, attack_set_membership = utils.load_target_dataset(f"/data/public/miae_experiment/dataset_save/{args.dataset}")
 
     correctness_shokri = correct_pred(pred_shokri_binary, attack_set_membership)
     correctness_losstraj = correct_pred(pred_losstraj_binary, attack_set_membership)
@@ -85,3 +83,6 @@ if __name__ == '__main__':
     # plot aug_graph
     # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
     utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting], ["shokri", "losstraj", "average", "majority_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
+
+    # plot venn diagram
+    utils.plot_venn_diagram([correctness_shokri, correctness_losstraj], ["shokri", "losstraj"])
