@@ -20,7 +20,7 @@ The main script of the project is `obtain-roc.py` and `analysis_main.py`, which 
 
 ## Usage
 
-We provide a bash script `experiment_scripts\obtain_pred.sh` to run the `obtain-roc.py` script and save the predictions to `/home/public/miae_experiment`. 
+We provide a bash script `experiment_scripts\obtain_pred.sh` to run the `obtain-roc.py` script and save the predictions to `/data/public/miae_experiment`. 
 
 The python environment needed is provided at `miae-conda-env.yaml`. To create the environment, run the following command:
 

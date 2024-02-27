@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from typing import List, Optional, Tuple, Callable, Union
 from sklearn.metrics import roc_auc_score, roc_curve, auc
 import numpy as np
+from matplotlib_venn import venn2, venn3
 
 
 class Predictions:
@@ -15,6 +16,7 @@ class Predictions:
         Initialize the Predictions object.
 
         :param pred_arr: predictions as a numpy array
+        :param ground_truth_arr: ground truth as a numpy array
         :param name: name of the attack
         """
         self.pred_arr = pred_arr
@@ -28,9 +30,21 @@ def plot_venn_diagram(pred_list: List[Predictions], save_path: str):
 
     :param pred_list: list of Predictions from different attacks
     """
+    if len(pred_list) < 2:
+        raise ValueError("At least 2 attacks are required for comparison.")
 
-    # TODO for Chengyu: Implement this function
-    pass
+    attacked_samples = {}
+    for pred in pred_list:
+        attacked_samples[pred.name] = set(np.where(pred.pred_arr == pred.ground_truth_arr)[0])
+        # attacked_samples[pred.name] = set(i for i, pred_value in enumerate(pred.pred_arr) if pred_value == 1)
+
+    venn_sets = [attacked_samples[pred.name] for pred in pred_list]
+    venn_labels = [pred.name for pred in pred_list]
+    venn3(subsets=venn_sets, set_labels=venn_labels)
+
+    plt.title("Ven Diagram for the Predictions from Different Attacks")
+    plt.savefig(save_path)
+    plt.show()
 
 
 def plot_t_sne(pred_list: List[Predictions], save_path: str, perplexity: int = 30):
