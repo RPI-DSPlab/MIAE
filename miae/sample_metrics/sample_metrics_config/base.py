@@ -16,8 +16,20 @@ class ExampleHardnessConfig(ABC):
         with the provided config dictionary.
         :param config: A dictionary containing the configuration parameters for ExampleHardnessMetric.
         """
-        if config is not None:
-            self.update(config)
+        # training configurations
+        self.num_epochs = config.get("num_epochs", 100)
+        self.crit = config.get("crit", "cross_entropy")
+        self.optimizer = config.get("optimizer", "sgd")
+        self.seeds = config.get("seeds", [0, 1, 2, 3])
+        self.batch_size = config.get("batch_size", 512)
+        self.lr = config.get("lr", 0.1)
+        self.momentum = config.get('momentum', 0.9)
+        self.weight_decay = config.get('weight_decay', 0.0001)
+
+        # saving/logging configurations
+        self.save_result = config.get("save_result", True)
+        self.save_path = config.get("save_path", "il_results")
+        self.log_path = config.get("log_path", None)
 
     def update(self, config):
         """
@@ -25,8 +37,6 @@ class ExampleHardnessConfig(ABC):
 
         :param config: A dictionary containing the configuration parameters to update.
         """
-        # Use the update method to overwrite the default values with the provided values
-        self.__dict__.update(config)
 
     def __repr__(self):
         """

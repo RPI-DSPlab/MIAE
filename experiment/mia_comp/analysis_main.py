@@ -61,6 +61,7 @@ if __name__ == '__main__':
     # loading the target_dataset
     index_to_data, attack_set_membership = utils.load_target_dataset(f"/home/wangz56/comp_mia/dataset_save/{args.dataset}")
 
+
     correctness_shokri = correct_pred(pred_shokri_binary, attack_set_membership)
     correctness_losstraj = correct_pred(pred_losstraj_binary, attack_set_membership)
 
