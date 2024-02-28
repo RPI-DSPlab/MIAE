@@ -3,10 +3,11 @@ This file defines classes/functions for comparing the MIA's predictions down to 
 """
 import os
 import pickle
-import matplotlib.pyplot as plt
 from typing import List, Optional, Tuple, Callable, Union
 from sklearn.metrics import roc_auc_score, roc_curve, auc
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib_venn import venn2, venn2_unweighted
 
 
 class Predictions:
@@ -15,22 +16,60 @@ class Predictions:
         Initialize the Predictions object.
 
         :param pred_arr: predictions as a numpy array
+        :param ground_truth_arr: ground truth as a numpy array
         :param name: name of the attack
         """
         self.pred_arr = pred_arr
         self.ground_truth_arr = ground_truth_arr
         self.name = name
 
+    def predictions_to_labels(self, threshold: float = 0.5) -> np.ndarray:
+        """
+        Convert predictions to binary labels.
 
-def plot_venn_diagram(pred_list: List[Predictions], save_path: str):
+        :param self: Predictions object
+        :param threshold: threshold for converting predictions to binary labels
+        :return: binary labels as a numpy array
+        """
+        labels = (self.pred_arr < threshold).astype(int)
+        return labels
+
+    def accuracy(self) -> float:
+        """
+        Calculate the accuracy of the predictions.
+
+        :param self: Predictions object
+        :return: accuracy of the predictions
+        """
+        return np.mean(self.predictions_to_labels() == self.ground_truth_arr)
+
+
+
+def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str, threshold: float = 0.5):
     """
     Plot the Venn diagram for the predictions from different attacks.
 
     :param pred_list: list of Predictions from different attacks
+    :param save_path: path to save the graph
     """
+    if len(pred_list) < 2:
+        raise ValueError("At least 2 attacks are required for comparison.")
 
-    # TODO for Chengyu: Implement this function
-    pass
+    # Create a dictionary to store attacked points for each implementation
+    attacked_points = {pred.name: set() for pred in pred_list}
+
+    # Populate the attacked_points dictionary
+    for pred in pred_list:
+        attacked_points[pred.name] = set(np.where(pred.predictions_to_labels(threshold) == pred.ground_truth_arr)[0])
+
+    # Plot the Venn diagram
+    plt.figure(figsize=(7, 7), dpi=300) # MUST HAVE
+    circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
+    venn_sets = [attacked_points[pred.name] for pred in pred_list]
+    venn_labels = [pred.name for pred in pred_list]
+    venn2(venn_sets, set_labels=venn_labels, set_colors=circle_colors)
+    plt.title(title)
+    plt.savefig(save_path, dpi=300)
 
 
 def plot_t_sne(pred_list: List[Predictions], save_path: str, perplexity: int = 30):
@@ -58,17 +97,6 @@ def load_predictions(file_path: str) -> np.ndarray:
     return prediction
 
 
-def predictions_to_labels(predictions: np.ndarray, threshold: float = 0.5) -> np.ndarray:
-    """
-    Convert predictions to binary labels.
-
-    :param predictions: predictions as a numpy array
-    :param threshold: threshold for converting predictions to binary labels
-    :return: binary labels as a numpy array
-    """
-    labels = (predictions < threshold).astype(int)
-    return labels
-
 
 def load_target_dataset(filepath: str):
     """
@@ -90,21 +118,6 @@ def load_target_dataset(filepath: str):
 
     return index_to_data, attack_set_membership
 
-
-def accuracy(predictions: np.ndarray, ground_truth: np.ndarray) -> float:
-    """
-    Calculate the accuracy of the predictions.
-
-    :param predictions: predictions as a numpy array
-    :param ground_truth: ground truth as a numpy array
-    :return: accuracy of the predictions
-    """
-    return np.mean(predictions_to_labels(predictions) == ground_truth)
-
-
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.metrics import roc_auc_score, roc_curve
 
 
 def plot_auc_graph(pred_list: list[np.ndarray],
@@ -249,25 +262,26 @@ def pearson_correlation(pred1: np.ndarray, pred2: np.ndarray) -> float:
     return np.corrcoef(pred1, pred2)[0, 1]
 
 
-def averaging_predictions(pred_list: list[np.ndarray]) -> np.ndarray:
+def averaging_predictions(pred_list: List[Predictions]) -> np.ndarray:
     """
     Average the predictions from different attacks.
 
-    :param pred_list: list of predictions
+    :param pred_list: list of Predictions
     :return: averaged prediction
     """
+    pred_list = [pred.pred_arr for pred in pred_list]
     return np.mean(pred_list, axis=0)
 
 
-def majority_voting(pred_list: list[np.ndarray]) -> np.ndarray:
+def majority_voting(pred_list: List[Predictions]) -> np.ndarray:
     """
     Majority voting for the predictions from different attacks.
 
-    :param pred_list: list of predictions
+    :param pred_list: list of Predictions
     :return: majority voted prediction
     """
     # convert predictions to binary labels
-    labels_list = [predictions_to_labels(pred, threshold=0.5) for pred in pred_list]
+    labels_list = [pred.predictions_to_labels(threshold=0.5) for pred in pred_list]
 
     # calculate the majority voted prediction
     majority_voted_labels = np.mean(labels_list, axis=0)
@@ -275,7 +289,7 @@ def majority_voting(pred_list: list[np.ndarray]) -> np.ndarray:
     return majority_voted_labels
 
 
-def unanimous_voting(pred_list: list[np.ndarray]) -> np.ndarray:
+def unanimous_voting(pred_list: List[Predictions]) -> np.ndarray:
     """
     Unanimous voting for the predictions from different attacks.
 
@@ -283,7 +297,7 @@ def unanimous_voting(pred_list: list[np.ndarray]) -> np.ndarray:
     :return: unanimous voted prediction
     """
     # convert predictions to binary labels
-    labels_list = [predictions_to_labels(pred, threshold=0.5) for pred in pred_list]
+    labels_list = [pred.predictions_to_labels(threshold=0.5) for pred in pred_list]
 
     # calculate the unanimous voted prediction
     unanimous_voted_labels = np.mean(labels_list, axis=0)
