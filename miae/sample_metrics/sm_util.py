@@ -34,14 +34,14 @@ def avg_result(dir, file_suf='.json', roundToInt=False):
         with open(file_path, "rb") as f:
             dict_load = json.load(f)
             pd_dict_list.append(dict_load)
-    pd_avg_dict = {}
+    avg_dict = {}
     for pd_dict in pd_dict_list:
         for i in pd_dict.keys():
-            pd_avg_dict[int(i)] = pd_avg_dict.get(int(i)) + pd_dict[i] if (int(i) in pd_avg_dict.keys()) else pd_dict[i]
-    for i in pd_avg_dict.keys():
+            avg_dict[int(i)] = avg_dict.get(int(i)) + pd_dict[i] if (int(i) in avg_dict.keys()) else pd_dict[i]
+    for i in avg_dict.keys():
         if not roundToInt:
-            pd_avg_dict[i] = pd_avg_dict[i] / len(pd_dict_list)
+            avg_dict[i] = avg_dict[i] / len(pd_dict_list)
         else:
-            pd_avg_dict[i] = int(pd_avg_dict[i] / len(pd_dict_list))
+            avg_dict[i] = int(avg_dict[i] / len(pd_dict_list))
 
-    return pd_avg_dict
+    return avg_dict
