@@ -2,26 +2,24 @@ import collections
 import copy
 import time
 from abc import ABC
-
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 from tqdm import tqdm
-from sample_metrics.base import ExampleMetric
 import sys
 import torch
 import os
 import numpy as np
 import json
 
-from utils import models as smmodels
-from utils import datasets as smdatasets
-from sample_metrics.sample_metrics_config.prediction_depth_config import PredictionDepthConfig
-from sample_metrics import sm_util
+from miae.sample_metrics.base import ExampleMetric
+from miae.sample_metrics.sample_metrics_config.prediction_depth_config import PredictionDepthConfig
+from miae.sample_metrics import sm_util
 
 
 class PdHardness(ExampleMetric, ABC):
     """Compute the hardness of a dataset based on the prediction depth metric"""
 
-    def __init__(self, config: PredictionDepthConfig, model: smmodels, dataset: smdatasets):
+    def __init__(self, config: PredictionDepthConfig, model, dataset):
         """
         Initialize the PredictionDepthMetric instance by providing a configuration object, a model, and a dataset.
         :param config: A PredictionDepthConfig object
@@ -33,9 +31,6 @@ class PdHardness(ExampleMetric, ABC):
         self.dataset = dataset
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.trainloader = None  # for training
-        self.testloader = None  # for testing during training
-        self.trainloader2 = None  # support dataset for training depth's KNN prediction
-        self.testloader2 = None  # support dataset for prediction depth's KNN prediction
         self.ready = False  # whether the metric is ready to be used (True means it's trained or loaded from a checkpoint)
 
         self.save_path = config.save_path  # path to save the model and results
@@ -52,10 +47,7 @@ class PdHardness(ExampleMetric, ABC):
             os.makedirs(self.result_avg_path)
 
         self.model = model
-        self.trainloader, self.testloader = dataset.loaders(batch_size=config.batch_size, shuffle_train=True,
-                                                            shuffle_test=False)
-        self.trainloader2, self.testloader2 = dataset.loaders(batch_size=config.batch_size, shuffle_train=True,
-                                                              shuffle_test=False)
+        self.trainloader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True, num_workers=2)
 
         if config.crit == 'cross_entropy':
             self.criterion = torch.nn.CrossEntropyLoss()
