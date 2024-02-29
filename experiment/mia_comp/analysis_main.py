@@ -1,4 +1,3 @@
-
 import argparse
 import os
 import utils
@@ -112,11 +111,15 @@ def analysis_image(dataset: Dataset, correctness_arr1, correctness_arr2):
         print(f"Not enough {attack2_name} only correctness points with label {fixed_label}.")
 
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='obtain_membership_inference_prediction')
+    parser.add_argument('--action', type=str, default="set_analysis",
+                        help='the action to be performed: [set_analysis, comp_eh]')
     parser.add_argument('--dataset', type=str, default="cifar10", help='the dataset to be used')
     parser.add_argument('--model', type=str, default="resnet56", help='architecture of the model')
+
+    # comp_eh arguments
+    parser.add_argument('--eh', type=str, default="il", help='[il]')
     args = parser.parse_args()
 
     # loading the dataset
@@ -126,11 +129,10 @@ if __name__ == '__main__':
 
     # loading predictions
     pred_shokri = utils.load_predictions \
-        (f"/data/public/miae_experiment/preds/{args .dataset}/{args.model}/shokri/pred_shokri.npy")
+        (f"/data/public/miae_experiment/preds/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
     pred_losstraj = utils.load_predictions \
-        (f"/data/public/miae_experiment/preds/{args .dataset}/{args.model}/losstraj/pred_losstraj.npy")
+        (f"/data/public/miae_experiment/preds/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
     print(f"pearson correlation: {utils.pearson_correlation(pred_shokri, pred_losstraj):.4f}")
-
     # loading the target_dataset
     index_to_data, attack_set_membership = utils.load_target_dataset \
         (f"/data/public/miae_experiment/dataset_save/{args.dataset}")
@@ -140,45 +142,58 @@ if __name__ == '__main__':
     pred_shokri_binary = pred_shokri_obj.predictions_to_labels(threshold=0.5)
     pred_losstraj_binary = pred_losstraj_obj.predictions_to_labels(threshold=0.5)
 
-    correctness_shokri = correct_pred(pred_shokri_obj)
-    correctness_losstraj = correct_pred(pred_losstraj_obj)
+    # -------------------------------------- set analysis --------------------------------------
+    if args.action == "set_analysis":
+        correctness_shokri = correct_pred(pred_shokri_obj)
+        correctness_losstraj = correct_pred(pred_losstraj_obj)
 
-    # analysis the similarity of the two correctness arrays
-    analysis_preds_similarity(correctness_shokri, correctness_losstraj, "shokri", "losstraj")
+        # analysis the similarity of the two correctness arrays
+        analysis_preds_similarity(correctness_shokri, correctness_losstraj, "shokri", "losstraj")
 
-    # obtain different ensemble predictions
-    pred_average = utils.averaging_predictions([pred_shokri_obj, pred_losstraj_obj])
-    pred_majority_voting = utils.majority_voting([pred_shokri_obj, pred_losstraj_obj])
-    unanimous_voting = utils.unanimous_voting([pred_shokri_obj, pred_losstraj_obj])
+        # obtain different ensemble predictions
+        pred_average = utils.averaging_predictions([pred_shokri_obj, pred_losstraj_obj])
+        pred_majority_voting = utils.majority_voting([pred_shokri_obj, pred_losstraj_obj])
+        unanimous_voting = utils.unanimous_voting([pred_shokri_obj, pred_losstraj_obj])
 
-    pred_average_obj = utils.Predictions(pred_average, attack_set_membership, "average")
-    pred_majority_voting_obj = utils.Predictions(pred_majority_voting, attack_set_membership, "majority_voting")
-    unanimous_voting_obj = utils.Predictions(unanimous_voting, attack_set_membership, "unanimous_voting")
+        pred_average_obj = utils.Predictions(pred_average, attack_set_membership, "average")
+        pred_majority_voting_obj = utils.Predictions(pred_majority_voting, attack_set_membership, "majority_voting")
+        unanimous_voting_obj = utils.Predictions(unanimous_voting, attack_set_membership, "unanimous_voting")
 
-    # calculate the accuracy
-    print(f"\ncorrect rate of shokri: {pred_shokri_obj.accuracy():.4f}")
-    print(f"correct rate of losstraj: {pred_losstraj_obj.accuracy():.4f}")
-    print(f"correct rate of average: {pred_average_obj.accuracy():.4f}")
-    print(f"correct rate of majority_voting: {pred_majority_voting_obj.accuracy():.4f}")
-    print(f"correct rate of unanimous_voting: {unanimous_voting_obj.accuracy():.4f}")
+        # calculate the accuracy
+        print(f"\ncorrect rate of shokri: {pred_shokri_obj.accuracy():.4f}")
+        print(f"correct rate of losstraj: {pred_losstraj_obj.accuracy():.4f}")
+        print(f"correct rate of average: {pred_average_obj.accuracy():.4f}")
+        print(f"correct rate of majority_voting: {pred_majority_voting_obj.accuracy():.4f}")
+        print(f"correct rate of unanimous_voting: {unanimous_voting_obj.accuracy():.4f}")
 
-    auc_graph_path = f"./{args.dataset}_{args.model}_auc.png"
-    auc_graph_name = f"{args.dataset} {args.model} auc"
+        auc_graph_path = f"./{args.dataset}_{args.model}_auc.png"
+        auc_graph_name = f"{args.dataset} {args.model} auc"
 
-    # plot aug_graph
-    # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
-    utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting], ["shokri", "losstraj", "average", "majority_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
+        # plot aug_graph
+        # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
+        utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting],
+                         ["shokri", "losstraj", "average", "majority_voting"], attack_set_membership, auc_graph_name,
+                         auc_graph_path)
 
-    # plot venn diagram
-    venn_graph_path = f"./{args.dataset}_{args.model}_venn.png"
-    venn_graph_name = f"{args.dataset} {args.model} venn"
-    utils.plot_venn_diagram([pred_shokri_obj, pred_losstraj_obj], venn_graph_name, venn_graph_path)
+        # plot venn diagram
+        venn_graph_path = f"./{args.dataset}_{args.model}_venn.png"
+        venn_graph_name = f"{args.dataset} {args.model} venn"
+        utils.plot_venn_diagram([pred_shokri_obj, pred_losstraj_obj], venn_graph_name, venn_graph_path)
 
-    # plot tsne graph
-    tsne_graph_path = f"./{args.dataset}_{args.model}_tsne.png"
-    tsne_graph_name = f"{args.dataset} {args.model} tsne"
-    utils.plot_t_sne([pred_shokri_obj, pred_losstraj_obj], tsne_graph_name, tsne_graph_path)
+        # plot tsne graph
+        tsne_graph_path = f"./{args.dataset}_{args.model}_tsne.png"
+        tsne_graph_name = f"{args.dataset} {args.model} tsne"
+        utils.plot_t_sne([pred_shokri_obj, pred_losstraj_obj], tsne_graph_name, tsne_graph_path)
 
-    # analysis the image
+        # analysis the image
 
-    analysis_image(fullset, correctness_shokri, correctness_losstraj)
+        analysis_image(fullset, correctness_shokri, correctness_losstraj)
+
+    # -------------------------------------- comp_eh --------------------------------------
+
+    if args.action == "comp_eh":
+        example_hardness_dir = f"/data/public/miae_experiment/example_hardness/{args.dataset}/{args.model}/{args.eh}/{args.eh}_score.pkl"
+        example_hardness = utils.load_example_hardness(example_hardness_dir)
+        utils.plot_example_hardness_dis(example_hardness, f"./{args.dataset}_{args.model}_{args.eh}_distribution.png", f"{args.dataset} {args.model} {args.eh} distribution")
+        utils.plot_example_hardness_vs_diff_pred_gt(example_hardness, pred_shokri_obj, f"./{args.dataset}_{args.model}_{args.eh}_shokri.png", f"{args.dataset} {args.model} {args.eh} vs_diff_pred_gt shokri")
+        utils.plot_example_hardness_vs_diff_pred_gt(example_hardness, pred_losstraj_obj, f"./{args.dataset}_{args.model}_{args.eh}_losstraj.png", f"{args.dataset} {args.model} {args.eh} vs_diff_pred_gt losstraj")

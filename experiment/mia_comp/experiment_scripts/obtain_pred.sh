@@ -1,4 +1,4 @@
-data_dir="/data/public/miae_experiment"
+data_dir="/data/public/miae_experiment_1"
 mkdir -p "$data_dir"
 
 preds_dir="$data_dir/preds"
