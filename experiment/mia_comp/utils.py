@@ -3,11 +3,20 @@ This file defines classes/functions for comparing the MIA's predictions down to 
 """
 import os
 import pickle
+import sys
+sys.path.append(os.path.join(os.getcwd(), "..", ".."))
+from experiment import models
 from typing import List, Optional, Tuple, Callable, Union
 from sklearn.metrics import roc_auc_score, roc_curve, auc
+from sklearn.manifold import TSNE
+from sklearn.preprocessing import StandardScaler
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib_venn import venn2, venn2_unweighted
+import torch
+from torch.utils.data import DataLoader, ConcatDataset, Dataset
+from torchvision import transforms
+
 
 
 class Predictions:
@@ -45,11 +54,12 @@ class Predictions:
 
 
 
-def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str, threshold: float = 0.5):
+def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str):
     """
     Plot the Venn diagram for the predictions from different attacks.
 
     :param pred_list: list of Predictions from different attacks
+    :param title: title of the graph
     :param save_path: path to save the graph
     """
     if len(pred_list) < 2:
@@ -60,7 +70,7 @@ def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str, 
 
     # Populate the attacked_points dictionary
     for pred in pred_list:
-        attacked_points[pred.name] = set(np.where(pred.predictions_to_labels(threshold) == pred.ground_truth_arr)[0])
+        attacked_points[pred.name] = set(np.where(pred.predictions_to_labels() == pred.ground_truth_arr)[0])
 
     # Plot the Venn diagram
     plt.figure(figsize=(7, 7), dpi=300) # MUST HAVE
@@ -72,19 +82,50 @@ def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str, 
     plt.savefig(save_path, dpi=300)
 
 
-def plot_t_sne(pred_list: List[Predictions], save_path: str, perplexity: int = 30):
+def plot_t_sne(pred_list: List[Predictions], title: str, save_path: str, perplexity: int = 30):
     """
     Plot the t-SNE graph for the predictions from different attacks.
 
     :param pred_list: list of Predictions from different attacks
+    :param title: title of the graph
     :param save_path: path to save the graph
     :param perplexity: perplexity for t-SNE (default: 30)
     """
+    # check if the number of attacks is less than 2
+    if len(pred_list) < 2:
+        raise ValueError("At least 2 attacks are required for comparison.")
 
-    # TODO for Chengyu: Implement this function
-    pass
+    # load ResNet56 model
 
+def load_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: str, save_path: str):
+    """
+    Load and plot the image by index from the dataset
+    :param dataset: the dataset
+    :param index_list: list of indices
+    :param title: title of the graph
+    :param save_path: path to save the graph
+    """
+    # Define the unnormalization transformation
+    unnormalize = transforms.Compose([
+        transforms.Normalize(mean=[0, 0, 0], std=[1 / 0.229, 1 / 0.224, 1 / 0.225]),
+        transforms.Normalize(mean=[-0.485, -0.456, -0.406], std=[1, 1, 1])
+    ])
 
+    # Create a subplot for each image in the index_list
+    num_images = len(index_list)
+    num_rows = 3
+    num_cols = num_images // num_rows
+    plt.figure(figsize=(num_cols * 3, num_rows * 3), dpi=300)
+    plt.axis('off')
+    plt.title(title)
+    for i, index in enumerate(index_list, 1):
+        img, _ = dataset[index]
+        img_unnormalized = unnormalize(img)
+        img_np = img_unnormalized.permute(1, 2, 0).numpy()
+        plt.subplot(num_rows, num_cols, i)
+        plt.imshow(img_np)
+
+    plt.savefig(save_path, bbox_inches='tight', dpi=300)
 
 def load_predictions(file_path: str) -> np.ndarray:
     """
@@ -118,7 +159,10 @@ def load_target_dataset(filepath: str):
 
     return index_to_data, attack_set_membership
 
-
+def load_dataset(file_path: str) -> Dataset:
+    with open(file_path, "rb") as f:
+        dataset = pickle.load(f)
+    return dataset
 
 def plot_auc_graph(pred_list: list[np.ndarray],
                    name_list: list[str],

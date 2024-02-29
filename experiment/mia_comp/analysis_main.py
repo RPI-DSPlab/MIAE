@@ -1,7 +1,10 @@
 
 import argparse
+import os
 import utils
 import numpy as np
+import torch
+from torch.utils.data import DataLoader, ConcatDataset, Dataset
 
 
 def correct_pred(pred: utils.Predictions) -> np.ndarray:
@@ -43,11 +46,83 @@ def analysis_preds_similarity(correctness_arr1, correctness_arr2, attack1_name, 
     print('------------------------------------------------------------------------------------')
 
 
+def analysis_image(dataset: Dataset, correctness_arr1, correctness_arr2):
+    """
+    load 9 images for each of the following sets
+    :param dataset: the dataset to be used
+    :param correctness_arr1: the correctness array of attack1
+    :param correctness_arr2: the correctness array of attack2
+    :param fixed_label: the label to be fixed
+    """
+    # Basic set up
+    attack1_name = "shokri"
+    attack2_name = "losstraj"
+    fixed_label = 2
+
+    # - common correctness: attack1's prediction corrects and attack2's prediction corrects
+    common_correctness = np.logical_and(correctness_arr1, correctness_arr2)
+    common_correctness_points = [
+        index for index, correct in enumerate(common_correctness) if correct and dataset[index][1] == fixed_label
+    ]
+    if len(common_correctness_points) >= 9:
+        common_correctness_points = np.random.choice(common_correctness_points, 9, replace=False)
+        title = f"common correctness with label {fixed_label}"
+        path = f"./common_correctness_label_{fixed_label}.png"
+        utils.load_image_by_index(dataset, common_correctness_points, title, path)
+    else:
+        print(f"Not enough common correctness points with label {fixed_label}.")
+
+    # - common incorrectness: attack1's prediction incorrects and attack2's prediction incorrects
+    common_incorrectness = np.logical_and(np.logical_not(correctness_arr1), np.logical_not(correctness_arr2))
+    common_incorrectness_points = [
+        index for index, correct in enumerate(common_incorrectness) if correct and dataset[index][1] == fixed_label
+    ]
+    if len(common_incorrectness_points) >= 9:
+        common_incorrectness_points = np.random.choice(common_incorrectness_points, 9, replace=False)
+        title = f"common incorrectness with label {fixed_label}"
+        path = f"./common_incorrectness_label_{fixed_label}.png"
+        utils.load_image_by_index(dataset, common_incorrectness_points, title, path)
+    else:
+        print(f"Not enough common incorrectness points with label {fixed_label}.")
+
+    # - attack 1 only correctness: attacks 1 predicted correctly but attack 2 predicted incorrectly
+    attack1_only_correctness = np.logical_and(correctness_arr1, np.logical_not(correctness_arr2))
+    attack1_only_correctness_points = [
+        index for index, correct in enumerate(attack1_only_correctness) if correct and dataset[index][1] == fixed_label
+    ]
+    if len(attack1_only_correctness_points) >= 9:
+        attack1_only_correctness_points = np.random.choice(attack1_only_correctness_points, 9, replace=False)
+        title = f"{attack1_name} only correctness with label {fixed_label}"
+        path = f"./{attack1_name}_only_correctness_label_{fixed_label}.png"
+        utils.load_image_by_index(dataset, attack1_only_correctness_points, title, path)
+    else:
+        print(f"Not enough {attack1_name} only correctness points with label {fixed_label}.")
+
+    # - attack 2 only correctness: attacks 2 predicted correctly but attack 1 predicted incorrectly
+    attack2_only_correctness = np.logical_and(np.logical_not(correctness_arr1), correctness_arr2)
+    attack2_only_correctness_points = [
+        index for index, correct in enumerate(attack2_only_correctness) if correct and dataset[index][1] == fixed_label
+    ]
+    if len(attack2_only_correctness_points) >= 9:
+        attack2_only_correctness_points = np.random.choice(attack2_only_correctness_points, 9, replace=False)
+        title = f"{attack2_name} only correctness with label {fixed_label}"
+        path = f"./{attack2_name}_only_correctness_label_{fixed_label}.png"
+        utils.load_image_by_index(dataset, attack2_only_correctness_points, title, path)
+    else:
+        print(f"Not enough {attack2_name} only correctness points with label {fixed_label}.")
+
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='obtain_membership_inference_prediction')
     parser.add_argument('--dataset', type=str, default="cifar10", help='the dataset to be used')
     parser.add_argument('--model', type=str, default="resnet56", help='architecture of the model')
     args = parser.parse_args()
+
+    # loading the dataset
+    trainset = utils.load_dataset(f"/data/public/miae_experiment/dataset_save/{args.dataset}/target_trainset.pkl")
+    testset = utils.load_dataset(f"/data/public/miae_experiment/dataset_save/{args.dataset}/target_testset.pkl")
+    fullset = ConcatDataset([trainset, testset])
 
     # loading predictions
     pred_shokri = utils.load_predictions \
@@ -59,7 +134,6 @@ if __name__ == '__main__':
     # loading the target_dataset
     index_to_data, attack_set_membership = utils.load_target_dataset \
         (f"/data/public/miae_experiment/dataset_save/{args.dataset}")
-
 
     pred_shokri_obj = utils.Predictions(pred_shokri, attack_set_membership, "shokri")
     pred_losstraj_obj = utils.Predictions(pred_losstraj, attack_set_membership, "losstraj")
@@ -99,3 +173,12 @@ if __name__ == '__main__':
     venn_graph_path = f"./{args.dataset}_{args.model}_venn.png"
     venn_graph_name = f"{args.dataset} {args.model} venn"
     utils.plot_venn_diagram([pred_shokri_obj, pred_losstraj_obj], venn_graph_name, venn_graph_path)
+
+    # plot tsne graph
+    tsne_graph_path = f"./{args.dataset}_{args.model}_tsne.png"
+    tsne_graph_name = f"{args.dataset} {args.model} tsne"
+    utils.plot_t_sne([pred_shokri_obj, pred_losstraj_obj], tsne_graph_name, tsne_graph_path)
+
+    # analysis the image
+
+    analysis_image(fullset, correctness_shokri, correctness_losstraj)
