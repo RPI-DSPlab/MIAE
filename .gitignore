@@ -162,4 +162,4 @@ cython_debug/
 # project files
 # something to do with data
 experiment/detection-rate-vs-example-hardness/datasets/
-mia/samples/
+miae/samples/

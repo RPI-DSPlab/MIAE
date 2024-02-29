@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch
 from torchvision.models import vgg16
 
-from mia.utils.models.base import BaseModel
+from miae.utils.models.base import BaseModel
 
 
 class VGG(BaseModel):
