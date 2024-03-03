@@ -129,9 +129,9 @@ if __name__ == '__main__':
 
     # loading predictions
     pred_shokri = utils.load_predictions \
-        (f"/data/public/miae_experiment/preds/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+        (f"/data/public/miae_experiment_1/preds/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
     pred_losstraj = utils.load_predictions \
-        (f"/data/public/miae_experiment/preds/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
+        (f"/data/public/miae_experiment_1/preds/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
     print(f"pearson correlation: {utils.pearson_correlation(pred_shokri, pred_losstraj):.4f}")
     # loading the target_dataset
     index_to_data, attack_set_membership = utils.load_target_dataset \

@@ -98,7 +98,7 @@ class IlHardness(ExampleMetric, ABC):
                 train_acc += (predicted == labels).sum().item()
                 train_loss += loss.item()
                 curr_iteration += 1
-                if config.learned_metric == "iteration":  # if we are using iteration learned metric
+                if config.learned_metric == "iteration_learned":  # if we are using iteration learned metric
                     self._evaluate_model(model, trainloader, learning_history_train_dict)
 
             cos_scheduler.step()
@@ -107,7 +107,7 @@ class IlHardness(ExampleMetric, ABC):
             history["train_loss"].append(train_loss)
             history["train_acc"].append(train_acc)
 
-            if config.learned_metric == "epoch":  # if we are using epoch learned metric
+            if config.learned_metric == "epoch_learned":  # if we are using epoch learned metric
                 self._evaluate_model(model, trainloader, learning_history_train_dict)
 
             if epoch % 20 == 0 or epoch == config.num_epochs - 1:
@@ -177,7 +177,6 @@ class IlHardness(ExampleMetric, ABC):
             for idx, _ in self.trainloader:
                 for i in idx:
                     learning_history_train_dict[i.item()] = list()
-            learning_history_test_dict = {}
             # train the model
             self._trainer(self.trainloader, model_copy, self.optimizer, self.criterion, self.device,
                           learning_history_train_dict, self.config)

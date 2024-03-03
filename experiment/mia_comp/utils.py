@@ -40,7 +40,7 @@ class Predictions:
         :param threshold: threshold for converting predictions to binary labels
         :return: binary labels as a numpy array
         """
-        labels = (self.pred_arr < threshold).astype(int)
+        labels = (self.pred_arr > threshold).astype(int)
         return labels
 
     def accuracy(self) -> float:
@@ -202,8 +202,7 @@ def custom_auc(pred_list: List[np.ndarray],
             Tuple[np.ndarray, np.ndarray, float, float]: The False Positive Rate (FPR),
             True Positive Rate (TPR), Area Under the Curve (AUC), and Accuracy.
         """
-        # TODO: change the score from -score to score
-        fpr, tpr, _ = roc_curve(x, -score)
+        fpr, tpr, _ = roc_curve(x, score)
         acc = np.max(1 - (fpr + (1 - tpr)) / 2)
         return fpr, tpr, auc(fpr, tpr), acc
 
@@ -329,13 +328,16 @@ def unanimous_voting(pred_list: List[Predictions]) -> np.ndarray:
 
 def load_example_hardness(file_path: str) -> np.ndarray:
     """
-    Load the example hardness from a file.
+    Load the example hardness from a file and parse it to a numpy int array
 
     :param file_path: path to the file containing the example hardness
     :return: example hardness as a numpy array
     """
     with open(file_path, "rb") as f:
         example_hardness = pickle.load(f)
+
+    # parse the example hardness to a numpy int array
+    example_hardness = np.array(example_hardness, dtype=int)
     return example_hardness
 
 
