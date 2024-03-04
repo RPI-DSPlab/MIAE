@@ -12,7 +12,7 @@ from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib_venn import venn2, venn2_unweighted
+from matplotlib_venn import venn2, venn2_unweighted, venn3
 import torch
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from torchvision import transforms
@@ -53,36 +53,46 @@ class Predictions:
         return np.mean(self.predictions_to_labels() == self.ground_truth_arr)
 
 
-
-def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str):
+def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str, threshold: float = 0.5, goal: str = "attack_compare"):
     """
-    Plot the Venn diagram for the predictions from different attacks.
+    Plot the Venn diagram for the predictions from different attacks or for one attack but with different seed.
 
     :param pred_list: list of Predictions from different attacks
     :param title: title of the graph
     :param save_path: path to save the graph
+    :param threshold: threshold for considering a point as attacked
+    :param goal: goal of the comparison ("attack_compare" or "seed_compare")
     """
-    if len(pred_list) < 2:
+    if len(pred_list) < 2 and goal == "attack_compare":
         raise ValueError("At least 2 attacks are required for comparison.")
+    elif len(pred_list) < 2 and goal == "seed_compare":
+        raise ValueError("At least from 2 different seeds are required for comparison.")
 
-    # Create a dictionary to store attacked points for each implementation
+    # get the attacked points
     attacked_points = {pred.name: set() for pred in pred_list}
+    plt.figure(figsize=(7, 7), dpi=300)
+    if goal == "attack_compare":
+        for pred in pred_list:
+            attacked_points[pred.name] = set(np.where(pred.predictions_to_labels() == pred.ground_truth_arr)[0])
+        venn_sets = [attacked_points[pred.name] for pred in pred_list]
+        venn_function = venn2
+    elif goal == "seed_compare":
+        for pred in pred_list:
+            attacked_points[pred.name].update(i for i, prob in enumerate(pred.pred_arr) if prob > threshold)
+        venn_sets = tuple(attacked_points[pred.name] for pred in pred_list)
+        venn_function = venn3
 
-    # Populate the attacked_points dictionary
-    for pred in pred_list:
-        attacked_points[pred.name] = set(np.where(pred.predictions_to_labels() == pred.ground_truth_arr)[0])
-
-    # Plot the Venn diagram
-    plt.figure(figsize=(7, 7), dpi=300) # MUST HAVE
     circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
-    venn_sets = [attacked_points[pred.name] for pred in pred_list]
+    venn_labels_empty = [" " for pred in pred_list] # remove the label
     venn_labels = [pred.name for pred in pred_list]
-    venn2(venn_sets, set_labels=venn_labels, set_colors=circle_colors)
+    venn_result = venn_function(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
+    # legend_labels = [f"{label}" for label, color in zip(venn_labels, circle_colors[:len(venn_labels)+1])]
+    # plt.legend(legend_labels, loc='lower left')
     plt.title(title)
     plt.savefig(save_path, dpi=300)
 
 
-def plot_t_sne(pred_list: List[Predictions], title: str, save_path: str, perplexity: int = 30):
+def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, title: str, save_path: str, perplexity: int = 30):
     """
     Plot the t-SNE graph for the predictions from different attacks.
 
@@ -95,12 +105,62 @@ def plot_t_sne(pred_list: List[Predictions], title: str, save_path: str, perplex
     if len(pred_list) < 2:
         raise ValueError("At least 2 attacks are required for comparison.")
 
-    # load ResNet56 model
+    # get the attacked points
+    attacked_points = {pred.name: set() for pred in pred_list}
+    for pred in pred_list:
+        attacked_points[pred.name] = (
+            set(np.where(pred.predictions_to_labels() == pred.ground_truth_arr)[0]))
+
+    # load image by index
+    index_list = np.array(list(attacked_points.values()))
+    high_dim_data = load_image_by_index(dataset, index_list, title, save_path)
+    print(f"the shape of the high-dimensional data is {high_dim_data.shape}")
+
+    # use t-sne
+    tsne = TSNE(n_components=2, perplexity=perplexity)
+    low_dim_data = tsne.fit_transform(high_dim_data)
+
+    # plot the t-sne graph with the label of the attack
+    plt.figure(figsize=(7, 7), dpi=300)
+    for i, pred in enumerate(pred_list):
+        plt.scatter(low_dim_data[i, 0], low_dim_data[i, 1], label=pred.name)
+    plt.title(title)
+    plt.legend()
+    plt.savefig(save_path, dpi=300)
+
 
 def load_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: str, save_path: str):
     """
-    Load and plot the image by index from the dataset
-    :param dataset: the dataset
+    load the image by index from the data set
+    :param dataset: the data set
+    :param index_list: list of indices  <---- can get from the attacked_points
+    :param title: title of the graph
+    :param save_path: path to save the graph
+
+    :return image_array: numpy array of a list of all the images
+    """
+    # print index_list
+    print(f"in the load_image_by_index function, the index_list is {index_list}")
+    # Define the unnormalization transformation
+    unnormalize = transforms.Compose([
+        transforms.Normalize(mean=[0, 0, 0], std=[1 / 0.229, 1 / 0.224, 1 / 0.225]),
+        transforms.Normalize(mean=[-0.485, -0.456, -0.406], std=[1, 1, 1])
+    ])
+
+    # load the images
+    image_array = []
+    for i, index in enumerate(index_list, 1):
+        img, _ = dataset[index]
+        img_unnormalized = unnormalize(img)
+        img_np = img_unnormalized.permute(1, 2, 0).numpy()
+        image_array.append(img_np)
+    return np.array(image_array)
+
+
+def plot_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: str, save_path: str):
+    """
+    plot the image by index from the data set
+    :param dataset: the data set
     :param index_list: list of indices
     :param title: title of the graph
     :param save_path: path to save the graph
@@ -136,7 +196,6 @@ def load_predictions(file_path: str) -> np.ndarray:
     """
     prediction = np.load(file_path)
     return prediction
-
 
 
 def load_target_dataset(filepath: str):

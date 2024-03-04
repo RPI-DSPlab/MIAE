@@ -68,7 +68,7 @@ def analysis_image(dataset: Dataset, correctness_arr1, correctness_arr2):
         common_correctness_points = np.random.choice(common_correctness_points, 9, replace=False)
         title = f"common correctness with label {fixed_label}"
         path = f"./common_correctness_label_{fixed_label}.png"
-        utils.load_image_by_index(dataset, common_correctness_points, title, path)
+        utils.plot_image_by_index(dataset, common_correctness_points, title, path)
     else:
         print(f"Not enough common correctness points with label {fixed_label}.")
 
@@ -81,7 +81,7 @@ def analysis_image(dataset: Dataset, correctness_arr1, correctness_arr2):
         common_incorrectness_points = np.random.choice(common_incorrectness_points, 9, replace=False)
         title = f"common incorrectness with label {fixed_label}"
         path = f"./common_incorrectness_label_{fixed_label}.png"
-        utils.load_image_by_index(dataset, common_incorrectness_points, title, path)
+        utils.plot_image_by_index(dataset, common_incorrectness_points, title, path)
     else:
         print(f"Not enough common incorrectness points with label {fixed_label}.")
 
@@ -94,7 +94,7 @@ def analysis_image(dataset: Dataset, correctness_arr1, correctness_arr2):
         attack1_only_correctness_points = np.random.choice(attack1_only_correctness_points, 9, replace=False)
         title = f"{attack1_name} only correctness with label {fixed_label}"
         path = f"./{attack1_name}_only_correctness_label_{fixed_label}.png"
-        utils.load_image_by_index(dataset, attack1_only_correctness_points, title, path)
+        utils.plot_image_by_index(dataset, attack1_only_correctness_points, title, path)
     else:
         print(f"Not enough {attack1_name} only correctness points with label {fixed_label}.")
 
@@ -107,7 +107,7 @@ def analysis_image(dataset: Dataset, correctness_arr1, correctness_arr2):
         attack2_only_correctness_points = np.random.choice(attack2_only_correctness_points, 9, replace=False)
         title = f"{attack2_name} only correctness with label {fixed_label}"
         path = f"./{attack2_name}_only_correctness_label_{fixed_label}.png"
-        utils.load_image_by_index(dataset, attack2_only_correctness_points, title, path)
+        utils.plot_image_by_index(dataset, attack2_only_correctness_points, title, path)
     else:
         print(f"Not enough {attack2_name} only correctness points with label {fixed_label}.")
 
@@ -120,23 +120,23 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # loading the dataset
-    trainset = utils.load_dataset(f"/data/public/miae_experiment/dataset_save/{args.dataset}/target_trainset.pkl")
-    testset = utils.load_dataset(f"/data/public/miae_experiment/dataset_save/{args.dataset}/target_testset.pkl")
+    trainset = utils.load_dataset(f"/data/public/miae_experiment_sd1/dataset_save/{args.dataset}/target_trainset.pkl")
+    testset = utils.load_dataset(f"/data/public/miae_experiment_sd1/dataset_save/{args.dataset}/target_testset.pkl")
     fullset = ConcatDataset([trainset, testset])
 
     # loading predictions
     pred_shokri = utils.load_predictions \
-        (f"/data/public/miae_experiment/preds/{args .dataset}/{args.model}/shokri/pred_shokri.npy")
+        (f"/data/public/miae_experiment_sd0/preds/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
     pred_losstraj = utils.load_predictions \
-        (f"/data/public/miae_experiment/preds/{args .dataset}/{args.model}/losstraj/pred_losstraj.npy")
+        (f"/data/public/miae_experiment_sd0/preds/{args .dataset}/{args.model}/losstraj/pred_losstraj.npy")
     print(f"pearson correlation: {utils.pearson_correlation(pred_shokri, pred_losstraj):.4f}")
 
     # loading the target_dataset
     index_to_data, attack_set_membership = utils.load_target_dataset \
-        (f"/data/public/miae_experiment/dataset_save/{args.dataset}")
+        (f"/data/public/miae_experiment_sd0/dataset_save/{args.dataset}")
 
-    pred_shokri_obj = utils.Predictions(pred_shokri, attack_set_membership, "shokri")
-    pred_losstraj_obj = utils.Predictions(pred_losstraj, attack_set_membership, "losstraj")
+    pred_shokri_obj = utils.Predictions(pred_shokri, attack_set_membership, "shokri (seed = 0)")
+    pred_losstraj_obj = utils.Predictions(pred_losstraj, attack_set_membership, "losstraj (seed = 0)")
     pred_shokri_binary = pred_shokri_obj.predictions_to_labels(threshold=0.5)
     pred_losstraj_binary = pred_losstraj_obj.predictions_to_labels(threshold=0.5)
 
@@ -155,6 +155,37 @@ if __name__ == '__main__':
     pred_majority_voting_obj = utils.Predictions(pred_majority_voting, attack_set_membership, "majority_voting")
     unanimous_voting_obj = utils.Predictions(unanimous_voting, attack_set_membership, "unanimous_voting")
 
+    # load the attack_set_membership for different seeds
+    index_to_data_1, attack_set_membership_1 = utils.load_target_dataset \
+        (f"/data/public/miae_experiment_sd1/dataset_save/{args.dataset}")
+    index_to_data_2, attack_set_membership_2 = utils.load_target_dataset \
+        (f"/data/public/miae_experiment_sd2/dataset_save/{args.dataset}")
+    index_to_data_3, attack_set_membership_3 = utils.load_target_dataset \
+        (f"/data/public/miae_experiment_sd3/dataset_save/{args.dataset}")
+
+    # obtain different seeds object for shokri, the number after the name is the seed
+    pred_shokri_1 = utils.load_predictions \
+        (f"/data/public/miae_experiment_sd1/preds/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+    pred_shokri_2 = utils.load_predictions \
+        (f"/data/public/miae_experiment_sd2/preds/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+    pred_shokri_3 = utils.load_predictions \
+        (f"/data/public/miae_experiment_sd3/preds/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+    pred_shokri_1_obj = utils.Predictions(pred_shokri_1, attack_set_membership_1, "shokri (seed = 1)")
+    pred_shokri_2_obj = utils.Predictions(pred_shokri_2, attack_set_membership_2, "shokri (seed = 2)")
+    pred_shokri_3_obj = utils.Predictions(pred_shokri_3, attack_set_membership_3, "shokri (seed = 3)")
+
+    # obtain different seeds object for losstraj, the number after the name is the seed
+    pred_losstraj_1 = utils.load_predictions \
+        (f"/data/public/miae_experiment_sd1/preds/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
+    pred_losstraj_2 = utils.load_predictions \
+        (f"/data/public/miae_experiment_sd2/preds/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
+    pred_losstraj_3 = utils.load_predictions \
+        (f"/data/public/miae_experiment_sd3/preds/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
+    pred_losstraj_1_obj = utils.Predictions(pred_losstraj_1, attack_set_membership_1, "losstraj (seed = 1)")
+    pred_losstraj_2_obj = utils.Predictions(pred_losstraj_2, attack_set_membership_2, "losstraj (seed = 2)")
+    pred_losstraj_3_obj = utils.Predictions(pred_losstraj_3, attack_set_membership_3, "losstraj (seed = 3)")
+
+
     # calculate the accuracy
     print(f"\ncorrect rate of shokri: {pred_shokri_obj.accuracy():.4f}")
     print(f"correct rate of losstraj: {pred_losstraj_obj.accuracy():.4f}")
@@ -162,23 +193,33 @@ if __name__ == '__main__':
     print(f"correct rate of majority_voting: {pred_majority_voting_obj.accuracy():.4f}")
     print(f"correct rate of unanimous_voting: {unanimous_voting_obj.accuracy():.4f}")
 
+    # plot aug_graph
     auc_graph_path = f"./{args.dataset}_{args.model}_auc.png"
     auc_graph_name = f"{args.dataset} {args.model} auc"
-
-    # plot aug_graph
     # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
-    utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting], ["shokri", "losstraj", "average", "majority_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
+    # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting], ["shokri", "losstraj", "average", "majority_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
 
-    # plot venn diagram
-    venn_graph_path = f"./{args.dataset}_{args.model}_venn.png"
-    venn_graph_name = f"{args.dataset} {args.model} venn"
-    utils.plot_venn_diagram([pred_shokri_obj, pred_losstraj_obj], venn_graph_name, venn_graph_path)
+    # plot venn diagram for different attacks to compare the similarity
+    # venn_graph_path = f"./{args.dataset}_{args.model}_venn.png"
+    # venn_graph_name = f"{args.dataset} {args.model} venn"
+    # utils.plot_venn_diagram([pred_shokri_obj, pred_losstraj_obj], venn_graph_name, venn_graph_path,
+    #                         threshold=0.5, goal="attack_compare")
+
+    # plot the venn diagram for one attack but with different seeds to test the randomness
+    venn_graph_path_shokri_seed = f"./{args.dataset}_{args.model}_venn for shokri with seeds.png"
+    venn_graph_name_shokri_seed = f"{args.dataset} {args.model} venn for shokri with different seeds"
+    utils.plot_venn_diagram([pred_shokri_obj, pred_shokri_1_obj, pred_shokri_2_obj], venn_graph_name_shokri_seed,
+                            venn_graph_path_shokri_seed, threshold=0.5, goal="seed_compare")
+
+    venn_graph_path_losstraj_seed = f"./{args.dataset}_{args.model}_venn for losstraj with seeds.png"
+    venn_graph_name_losstraj_seed = f"{args.dataset} {args.model} venn for losstraj with different seeds"
+    utils.plot_venn_diagram([pred_losstraj_obj, pred_losstraj_1_obj, pred_losstraj_2_obj], venn_graph_name_losstraj_seed,
+                            venn_graph_path_losstraj_seed, threshold=0.5, goal="seed_compare")
 
     # plot tsne graph
-    tsne_graph_path = f"./{args.dataset}_{args.model}_tsne.png"
-    tsne_graph_name = f"{args.dataset} {args.model} tsne"
-    utils.plot_t_sne([pred_shokri_obj, pred_losstraj_obj], tsne_graph_name, tsne_graph_path)
+    # tsne_graph_path = f"./{args.dataset}_{args.model}_tsne.png"
+    # tsne_graph_name = f"{args.dataset} {args.model} tsne"
+    # utils.plot_t_sne([pred_shokri_obj, pred_losstraj_obj], fullset, tsne_graph_name, tsne_graph_path)
 
     # analysis the image
-
-    analysis_image(fullset, correctness_shokri, correctness_losstraj)
+    # analysis_image(fullset, correctness_shokri, correctness_losstraj)
