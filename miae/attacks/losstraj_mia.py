@@ -674,5 +674,5 @@ class LosstrajAttack(MiAttack):
 
         target_pred = target_pred.detach().cpu().numpy()
         print(target_pred.shape)
-        target_pred = np.transpose(target_pred)[0]
+        target_pred = np.transpose(target_pred)[1]
         return target_pred

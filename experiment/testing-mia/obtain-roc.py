@@ -212,7 +212,7 @@ def main():
     merlin_aux_info = merlin_mia.MerlinAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': batch_size})
     lira_aux_info = lira_mia.LiraAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': target_train_epochs})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': target_train_epochs, 'log_path': attack_dir+'/lira'})
 
     losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model), untrained_target_model)
     merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model), untrained_target_model)
@@ -242,5 +242,5 @@ if __name__ == "__main__":
     main()
 
 
-        
+
 

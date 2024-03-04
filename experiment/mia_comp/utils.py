@@ -4,6 +4,7 @@ This file defines classes/functions for comparing the MIA's predictions down to 
 import os
 import pickle
 import sys
+
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 from experiment import models
 from typing import List, Optional, Tuple, Callable, Union
@@ -16,7 +17,6 @@ from matplotlib_venn import venn2, venn2_unweighted
 import torch
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from torchvision import transforms
-
 
 
 class Predictions:
@@ -40,7 +40,7 @@ class Predictions:
         :param threshold: threshold for converting predictions to binary labels
         :return: binary labels as a numpy array
         """
-        labels = (self.pred_arr < threshold).astype(int)
+        labels = (self.pred_arr > threshold).astype(int)
         return labels
 
     def accuracy(self) -> float:
@@ -52,6 +52,14 @@ class Predictions:
         """
         return np.mean(self.predictions_to_labels() == self.ground_truth_arr)
 
+    def difference_pred_gt(self):
+        """
+        Calculate the difference between the predictions and the ground truth.
+
+        :param self: Predictions object
+        :return: difference between the predictions and the ground truth
+        """
+        return self.pred_arr - self.ground_truth_arr
 
 
 
@@ -74,7 +82,7 @@ def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str):
         attacked_points[pred.name] = set(np.where(pred.predictions_to_labels() == pred.ground_truth_arr)[0])
 
     # Plot the Venn diagram
-    plt.figure(figsize=(7, 7), dpi=300) # MUST HAVE
+    plt.figure(figsize=(7, 7), dpi=300)  # MUST HAVE
     circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
     venn_sets = [attacked_points[pred.name] for pred in pred_list]
     venn_labels = [pred.name for pred in pred_list]
@@ -97,6 +105,7 @@ def plot_t_sne(pred_list: List[Predictions], title: str, save_path: str, perplex
         raise ValueError("At least 2 attacks are required for comparison.")
 
     # load ResNet56 model
+
 
 def load_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: str, save_path: str):
     """
@@ -128,6 +137,7 @@ def load_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: s
 
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
 
+
 def load_predictions(file_path: str) -> np.ndarray:
     """
     Load predictions from a file.
@@ -137,7 +147,6 @@ def load_predictions(file_path: str) -> np.ndarray:
     """
     prediction = np.load(file_path)
     return prediction
-
 
 
 def load_target_dataset(filepath: str):
@@ -160,56 +169,11 @@ def load_target_dataset(filepath: str):
 
     return index_to_data, attack_set_membership
 
+
 def load_dataset(file_path: str) -> Dataset:
     with open(file_path, "rb") as f:
         dataset = pickle.load(f)
     return dataset
-
-def plot_auc_graph(pred_list: list[np.ndarray],
-                   name_list: list[str],
-                   ground_truth_arr: np.ndarray,
-                   title: str, save_path: str = None,
-                   log_scale: bool = True
-                   ):
-    """
-    !! This function is deprecated. Use custom_auc instead. !!
-    plot the AUC graph for the predictions from different attacks
-    :param pred_list: np.ndarray list of predictions
-    :param name_list: list of names for the attacks
-    :param ground_truth_arr: np.ndarray of ground truth
-    :param title: title of the graph
-    :param save_path: path to save the graph
-    :param log_scale: whether to use log scale for both axes (default: False)
-    """
-
-    plt.figure(figsize=(10, 6))
-
-    for preds, name in zip(pred_list, name_list):
-        auc_score = roc_auc_score(ground_truth_arr, preds)
-        fpr, tpr, _ = roc_curve(ground_truth_arr, preds)
-        plt.plot(fpr, tpr, label=f'{name} (AUC = {auc_score:.2f})')
-
-    plt.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Random')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title(title)
-    plt.legend(loc='lower right')
-    plt.grid(True)
-
-    if log_scale:
-        plt.xscale('log')
-        plt.yscale('log')
-
-    if save_path:
-        plt.savefig(save_path)
-    else:
-        plt.show()
-
-    # prints the auc, TPR@FPR=0.01, max accuracy
-    for preds, name in zip(pred_list, name_list):
-        fpr, tpr, _ = roc_curve(ground_truth_arr, preds)
-        print(
-            f"{name}: AUC = {roc_auc_score(ground_truth_arr, preds):.2f}, TPR@FPR=0.01 = {tpr[np.argmin(np.abs(fpr - 0.01))]:.2f}, max accuracy = {max(tpr - fpr):.2f}")
 
 
 def custom_auc(pred_list: List[np.ndarray],
@@ -238,7 +202,7 @@ def custom_auc(pred_list: List[np.ndarray],
             Tuple[np.ndarray, np.ndarray, float, float]: The False Positive Rate (FPR),
             True Positive Rate (TPR), Area Under the Curve (AUC), and Accuracy.
         """
-        fpr, tpr, _ = roc_curve(x, -score)
+        fpr, tpr, _ = roc_curve(x, score)
         acc = np.max(1 - (fpr + (1 - tpr)) / 2)
         return fpr, tpr, auc(fpr, tpr), acc
 
@@ -317,6 +281,16 @@ def averaging_predictions(pred_list: List[Predictions]) -> np.ndarray:
     pred_list = [pred.pred_arr for pred in pred_list]
     return np.mean(pred_list, axis=0)
 
+def summation_predictions(pred_list: List[Predictions]) -> np.ndarray:
+    """
+    Sum the predictions from different attacks.
+
+    :param pred_list: list of Predictions
+    :return: summed prediction
+    """
+    pred_list = [pred.pred_arr for pred in pred_list]
+    return np.sum(pred_list, axis=0)
+
 
 def majority_voting(pred_list: List[Predictions]) -> np.ndarray:
     """
@@ -348,3 +322,57 @@ def unanimous_voting(pred_list: List[Predictions]) -> np.ndarray:
     unanimous_voted_labels = np.mean(labels_list, axis=0)
     unanimous_voted_labels = (unanimous_voted_labels == 1).astype(int)
     return unanimous_voted_labels
+
+
+# -------- below are the functions for comparing with example hardness --------
+
+def load_example_hardness(file_path: str) -> np.ndarray:
+    """
+    Load the example hardness from a file and parse it to a numpy int array
+
+    :param file_path: path to the file containing the example hardness
+    :return: example hardness as a numpy array
+    """
+    with open(file_path, "rb") as f:
+        example_hardness = pickle.load(f)
+
+    # parse the example hardness to a numpy int array
+    example_hardness = np.array(example_hardness, dtype=int)
+    return example_hardness
+
+
+def plot_example_hardness_dis(eh: np.ndarray, save_path: str, title: str):
+    """
+    Plot the example hardness distribution.
+
+    :param eh: example hardness as a numpy array
+    :param save_path: path to save the graph
+    :param title: title of the graph
+    """
+    print(eh)
+    num_bin = max(eh)
+    plt.figure(figsize=(6, 5))
+    plt.hist(eh, bins=num_bin, alpha=0.7, color='blue', edgecolor='black')
+    plt.title(title)
+    plt.xlabel("Example Hardness")
+    plt.ylabel("Frequency")
+    plt.savefig(save_path, dpi=300)
+
+
+def plot_example_hardness_vs_diff_pred_gt(eh: np.ndarray, predictions: Predictions, save_path: str, title: str):
+    """
+    Plot the example hardness vs the difference between the predictions and the ground truth.
+
+    :param eh: example hardness as a numpy array
+    :param predictions: Predictions object
+    :param save_path: path to save the graph
+    :param title: title of the graph
+    """
+    diff_pred_gt = predictions.difference_pred_gt()
+    plt.figure(figsize=(6, 5))
+    plt.scatter(eh, diff_pred_gt, alpha=0.7, color='blue')
+    plt.title(title)
+    plt.xlabel("Example Hardness")
+    plt.ylabel("Difference between the Predictions and the Ground Truth")
+    plt.savefig(save_path, dpi=300)
+
