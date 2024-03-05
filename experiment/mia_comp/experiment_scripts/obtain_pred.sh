@@ -1,5 +1,7 @@
-data_dir="/data/public/miae_experiment"
+seed=3
+data_dir="/data/public/miae_experiment_sd${seed}"
 mkdir -p "$data_dir"
+
 
 preds_dir="$data_dir/preds"
 mkdir -p "$preds_dir"
@@ -9,7 +11,8 @@ mkdir -p "$preds_dir"
 datasets=("cifar10" "cifar100")
 archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
 mias=("losstraj" "shokri")
-seed=0
+
+prepare_path="/data/public/prepare_sd${seed}"
 
 target_model_path="$data_dir/target_models"
 
@@ -42,12 +45,12 @@ for dataset in "${datasets[@]}"; do
                 continue
             fi
             # if the preparation directory is not empty, delete it
-            if [ -d "./$mia" ]; then
-                rm -r "./$mia"
+            if [ -d "./$prepare_path" ]; then
+                rm -r "./$prepare_path"
             fi
 
             mkdir -p "$result_dir"
-            prepare_dir="./$mia"
+            prepare_dir="./$prepare_path"
             echo "Running $dataset $arch $mia"
 
             python3 obtain_pred.py --dataset "$dataset" --target_model "$arch" --attack "$mia" \
@@ -55,7 +58,7 @@ for dataset in "${datasets[@]}"; do
             --data_aug "False"  --target_model_path "$target_model_path" --attack_epochs "$num_epoch" \
             --target_epochs "$num_epoch"
 
-            rm -r "./$mia"
+            rm -r "./$prepare_path"
         done
     done
 done
