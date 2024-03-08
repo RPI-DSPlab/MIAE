@@ -1,6 +1,6 @@
 # This script is used to partition the dataset into target dataset and shadow dataset, then train the target model
 seed=0
-data_dir="/data/public/miae_experiment/target"
+data_dir="/data/public/miae_experiment_aug/target"
 mkdir -p "$data_dir"
 
 
@@ -29,14 +29,14 @@ for dataset in "${datasets[@]}"; do
   mkdir -p "$data_dir/$dataset"
   # save the dataset
   echo "Saving dataset $dataset"
-  python3 obtain_pred.py --dataset "$dataset" --save_dataset "True" --data_path "$data_dir" --seed "$seed"
+  python3 obtain_pred.py --dataset "$dataset" --save_dataset "True" --data_path "$data_dir" --seed "$seed" --data_aug "True"
     for arch in "${archs[@]}"; do
       # for each arch, train the target model
       mkdir -p "$target_model_path/$dataset/$arch"
       target_model_save_path="$target_model_path/$dataset/$arch"
       echo "Obtaining target_model for $dataset $arch"
       python3 obtain_pred.py --train_target_model "True" --dataset "$dataset" --target_model "$arch" \
-       --seed "$seed" --delete-files "True" --data_aug "False"  --target_model_path "$target_model_save_path" \
+       --seed "$seed" --delete-files "True" --data_aug "True"  --target_model_path "$target_model_save_path" \
        --attack_epochs "$num_epoch" --target_epochs "$num_epoch" --data_path "$data_dir"
     done
 done
