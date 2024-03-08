@@ -40,7 +40,7 @@ class Predictions:
         :param threshold: threshold for converting predictions to binary labels
         :return: binary labels as a numpy array
         """
-        labels = (self.pred_arr < threshold).astype(int)
+        labels = (self.pred_arr > threshold).astype(int)
         return labels
 
     def accuracy(self) -> float:
@@ -83,11 +83,8 @@ def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str, 
         venn_function = venn3
 
     circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
-    venn_labels_empty = [" " for pred in pred_list] # remove the label
     venn_labels = [pred.name for pred in pred_list]
-    venn_result = venn_function(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
-    # legend_labels = [f"{label}" for label, color in zip(venn_labels, circle_colors[:len(venn_labels)+1])]
-    # plt.legend(legend_labels, loc='lower left')
+    venn_function(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
     plt.title(title)
     plt.savefig(save_path, dpi=300)
 
@@ -97,6 +94,7 @@ def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, title: str,
     Plot the t-SNE graph for the predictions from different attacks.
 
     :param pred_list: list of Predictions from different attacks
+    :param dataset: the dataset
     :param title: title of the graph
     :param save_path: path to save the graph
     :param perplexity: perplexity for t-SNE (default: 30)
@@ -105,56 +103,49 @@ def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, title: str,
     if len(pred_list) < 2:
         raise ValueError("At least 2 attacks are required for comparison.")
 
-    # get the attacked points
-    attacked_points = {pred.name: set() for pred in pred_list}
-    for pred in pred_list:
-        attacked_points[pred.name] = (
-            set(np.where(pred.predictions_to_labels() == pred.ground_truth_arr)[0]))
+    # get the high-dimensional data
+    high_dim_data = []
+    for i in range(len(dataset)):
+        img, _ = dataset[i]
+        high_dim_data.append(img.numpy().flatten())
+    high_dim_data = np.array(high_dim_data)
+    print(f"the shape of the high_dim_data: {high_dim_data.shape} and the 1st image: {high_dim_data[0]}")
 
-    # load image by index
-    index_list = np.array(list(attacked_points.values()))
-    high_dim_data = load_image_by_index(dataset, index_list, title, save_path)
-    print(f"the shape of the high-dimensional data is {high_dim_data.shape}")
-
-    # use t-sne
-    tsne = TSNE(n_components=2, perplexity=perplexity)
+    # get the low-dimensional data by applying t-SNE
+    tsne = TSNE(n_components=2, perplexity=20)
     low_dim_data = tsne.fit_transform(high_dim_data)
+    print(f"the shape of the low_dim_data: {low_dim_data.shape} and the 1st image: {low_dim_data[0]}")
 
-    # plot the t-sne graph with the label of the attack
-    plt.figure(figsize=(7, 7), dpi=300)
-    for i, pred in enumerate(pred_list):
-        plt.scatter(low_dim_data[i, 0], low_dim_data[i, 1], label=pred.name)
+    # Separate the data into four categories
+    # Create indices for different attack categories
+    indices_by_attack1 = np.where(pred_list[0].predictions_to_labels() == pred_list[0].ground_truth_arr)[0]
+    indices_by_attack2 = np.where(pred_list[1].predictions_to_labels() == pred_list[1].ground_truth_arr)[0]
+    indices_by_both = np.intersect1d(indices_by_attack1, indices_by_attack2)
+    indices_by_none = np.setdiff1d(np.arange(len(dataset)), np.union1d(indices_by_attack1, indices_by_attack2))
+    # print the number of points in each category
+    print(f"Number of points in {pred_list[0].name}: {len(indices_by_attack1)}")
+    print(f"Number of points in {pred_list[1].name}: {len(indices_by_attack2)}")
+    print(f"Number of points in both: {len(indices_by_both)}")
+    print(f"Number of points in none: {len(indices_by_none)}")
+
+    # plot the t-SNE graph based on the low-dimensional data
+    plt.figure(figsize=(10, 10), dpi=300)
+    plt.scatter(low_dim_data[indices_by_attack1, 0], low_dim_data[indices_by_attack1, 1], label=pred_list[0].name, c='r', s=1)
+    plt.scatter(low_dim_data[indices_by_attack2, 0], low_dim_data[indices_by_attack2, 1], label=pred_list[1].name, c='b', s=1)
+    plt.scatter(low_dim_data[indices_by_both, 0], low_dim_data[indices_by_both, 1], label="Both", c='g', s=1)
+    plt.scatter(low_dim_data[indices_by_none, 0], low_dim_data[indices_by_none, 1], label="None", c='k', s=1)
+
+    # Set limits for the plot based on the range of low-dimensional data
+    min_x, min_y = np.min(low_dim_data, axis=0)
+    max_x, max_y = np.max(low_dim_data, axis=0)
+    margin = 5  # Add some margin for better visualization
+
+    plt.xlim(min_x - margin, max_x + margin)
+    plt.ylim(min_y - margin, max_y + margin)
     plt.title(title)
     plt.legend()
     plt.savefig(save_path, dpi=300)
 
-
-def load_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: str, save_path: str):
-    """
-    load the image by index from the data set
-    :param dataset: the data set
-    :param index_list: list of indices  <---- can get from the attacked_points
-    :param title: title of the graph
-    :param save_path: path to save the graph
-
-    :return image_array: numpy array of a list of all the images
-    """
-    # print index_list
-    print(f"in the load_image_by_index function, the index_list is {index_list}")
-    # Define the unnormalization transformation
-    unnormalize = transforms.Compose([
-        transforms.Normalize(mean=[0, 0, 0], std=[1 / 0.229, 1 / 0.224, 1 / 0.225]),
-        transforms.Normalize(mean=[-0.485, -0.456, -0.406], std=[1, 1, 1])
-    ])
-
-    # load the images
-    image_array = []
-    for i, index in enumerate(index_list, 1):
-        img, _ = dataset[index]
-        img_unnormalized = unnormalize(img)
-        img_np = img_unnormalized.permute(1, 2, 0).numpy()
-        image_array.append(img_np)
-    return np.array(image_array)
 
 
 def plot_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: str, save_path: str):
@@ -196,7 +187,6 @@ def load_predictions(file_path: str) -> np.ndarray:
     """
     prediction = np.load(file_path)
     return prediction
-
 
 def load_target_dataset(filepath: str):
     """
@@ -296,7 +286,7 @@ def custom_auc(pred_list: List[np.ndarray],
             Tuple[np.ndarray, np.ndarray, float, float]: The False Positive Rate (FPR),
             True Positive Rate (TPR), Area Under the Curve (AUC), and Accuracy.
         """
-        fpr, tpr, _ = roc_curve(x, -score)
+        fpr, tpr, _ = roc_curve(x, score)
         acc = np.max(1 - (fpr + (1 - tpr)) / 2)
         return fpr, tpr, auc(fpr, tpr), acc
 

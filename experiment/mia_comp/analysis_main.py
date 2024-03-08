@@ -119,22 +119,18 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, default="resnet56", help='architecture of the model')
     args = parser.parse_args()
 
-    # loading the dataset
-    trainset = utils.load_dataset(f"/data/public/miae_experiment_sd1/dataset_save/{args.dataset}/target_trainset.pkl")
-    testset = utils.load_dataset(f"/data/public/miae_experiment_sd1/dataset_save/{args.dataset}/target_testset.pkl")
-    fullset = ConcatDataset([trainset, testset])
-
     # loading predictions
     pred_shokri = utils.load_predictions \
-        (f"/data/public/miae_experiment_sd0/preds/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+        (f"/data/public/miae_experiment_aug/preds_sd0/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
     pred_losstraj = utils.load_predictions \
-        (f"/data/public/miae_experiment_sd0/preds/{args .dataset}/{args.model}/losstraj/pred_losstraj.npy")
+        (f"/data/public/miae_experiment_aug/preds_sd0/{args .dataset}/{args.model}/losstraj/pred_losstraj.npy")
     print(f"pearson correlation: {utils.pearson_correlation(pred_shokri, pred_losstraj):.4f}")
 
     # loading the target_dataset
     index_to_data, attack_set_membership = utils.load_target_dataset \
-        (f"/data/public/miae_experiment_sd0/dataset_save/{args.dataset}")
+        (f"/data/public/miae_experiment_aug/target/{args.dataset}")
 
+    # creating the Predictions object
     pred_shokri_obj = utils.Predictions(pred_shokri, attack_set_membership, "shokri (seed = 0)")
     pred_losstraj_obj = utils.Predictions(pred_losstraj, attack_set_membership, "losstraj (seed = 0)")
     pred_shokri_binary = pred_shokri_obj.predictions_to_labels(threshold=0.5)
@@ -157,33 +153,48 @@ if __name__ == '__main__':
 
     # load the attack_set_membership for different seeds
     index_to_data_1, attack_set_membership_1 = utils.load_target_dataset \
-        (f"/data/public/miae_experiment_sd1/dataset_save/{args.dataset}")
+        (f"/data/public/miae_experiment_aug/target/{args.dataset}")
     index_to_data_2, attack_set_membership_2 = utils.load_target_dataset \
-        (f"/data/public/miae_experiment_sd2/dataset_save/{args.dataset}")
+        (f"/data/public/miae_experiment_aug/target/{args.dataset}")
     index_to_data_3, attack_set_membership_3 = utils.load_target_dataset \
-        (f"/data/public/miae_experiment_sd3/dataset_save/{args.dataset}")
+        (f"/data/public/miae_experiment_aug/target/{args.dataset}")
+    attack_set_membership_union = np.logical_or(
+        np.logical_and(np.logical_and(attack_set_membership, attack_set_membership_1), attack_set_membership_2),
+        attack_set_membership_3)
 
     # obtain different seeds object for shokri, the number after the name is the seed
     pred_shokri_1 = utils.load_predictions \
-        (f"/data/public/miae_experiment_sd1/preds/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+        (f"/data/public/miae_experiment_aug/preds_sd1/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
     pred_shokri_2 = utils.load_predictions \
-        (f"/data/public/miae_experiment_sd2/preds/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+        (f"/data/public/miae_experiment_aug/preds_sd2/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
     pred_shokri_3 = utils.load_predictions \
-        (f"/data/public/miae_experiment_sd3/preds/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+        (f"/data/public/miae_experiment_aug/preds_sd3/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+    # get the union of the four seeds: 0, 1, 2, 3
+    pred_shokri_union = np.logical_and(np.logical_and(np.logical_and(pred_shokri, pred_shokri_1), pred_shokri_2), pred_shokri_3)
+    print(f"there are {len(pred_shokri_union)} attack set members in the union of the four seeds")
     pred_shokri_1_obj = utils.Predictions(pred_shokri_1, attack_set_membership_1, "shokri (seed = 1)")
     pred_shokri_2_obj = utils.Predictions(pred_shokri_2, attack_set_membership_2, "shokri (seed = 2)")
     pred_shokri_3_obj = utils.Predictions(pred_shokri_3, attack_set_membership_3, "shokri (seed = 3)")
+    pred_shokri_union_obj = utils.Predictions(pred_shokri_union, attack_set_membership_union, "shokri_union")
+
 
     # obtain different seeds object for losstraj, the number after the name is the seed
     pred_losstraj_1 = utils.load_predictions \
-        (f"/data/public/miae_experiment_sd1/preds/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
+        (f"/data/public/miae_experiment_aug/preds_sd1/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
     pred_losstraj_2 = utils.load_predictions \
-        (f"/data/public/miae_experiment_sd2/preds/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
+        (f"/data/public/miae_experiment_aug/preds_sd2/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
     pred_losstraj_3 = utils.load_predictions \
-        (f"/data/public/miae_experiment_sd3/preds/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
+        (f"/data/public/miae_experiment_aug/preds_sd3/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
+    pred_losstraj_union = np.logical_and(np.logical_and(np.logical_and(pred_losstraj, pred_losstraj_1), pred_losstraj_2), pred_losstraj_3)
+    print(f"there are {len(pred_losstraj_union)} attack set members in the union of the four seeds")
     pred_losstraj_1_obj = utils.Predictions(pred_losstraj_1, attack_set_membership_1, "losstraj (seed = 1)")
     pred_losstraj_2_obj = utils.Predictions(pred_losstraj_2, attack_set_membership_2, "losstraj (seed = 2)")
     pred_losstraj_3_obj = utils.Predictions(pred_losstraj_3, attack_set_membership_3, "losstraj (seed = 3)")
+    pred_losstraj_union_obj = utils.Predictions(pred_losstraj_union, attack_set_membership_union, "losstraj_union")
+
+    pred_average3 = utils.averaging_predictions([pred_shokri_3_obj, pred_losstraj_3_obj])
+    pred_majority_voting3 = utils.majority_voting([pred_shokri_3_obj, pred_losstraj_3_obj])
+    unanimous_voting3 = utils.unanimous_voting([pred_shokri_3_obj, pred_losstraj_3_obj])
 
 
     # calculate the accuracy
@@ -194,27 +205,33 @@ if __name__ == '__main__':
     print(f"correct rate of unanimous_voting: {unanimous_voting_obj.accuracy():.4f}")
 
     # plot aug_graph
-    auc_graph_path = f"./{args.dataset}_{args.model}_auc.png"
-    auc_graph_name = f"{args.dataset} {args.model} auc"
-    # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
+    # auc_graph_path = f"./{args.dataset}_{args.model}_auc with seeds.png"
+    # auc_graph_name = f"{args.dataset} {args.model} auc with seeds"
+    # # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
     # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting], ["shokri", "losstraj", "average", "majority_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
 
     # plot venn diagram for different attacks to compare the similarity
-    # venn_graph_path = f"./{args.dataset}_{args.model}_venn.png"
-    # venn_graph_name = f"{args.dataset} {args.model} venn"
-    # utils.plot_venn_diagram([pred_shokri_obj, pred_losstraj_obj], venn_graph_name, venn_graph_path,
-    #                         threshold=0.5, goal="attack_compare")
+    venn_graph_path = f"./{args.dataset}_{args.model}_venn.png"
+    venn_graph_name = f"{args.dataset} {args.model} venn with data augmentation for union"
+    utils.plot_venn_diagram([pred_shokri_union_obj, pred_losstraj_union_obj], venn_graph_name, venn_graph_path,
+                            threshold=0.5, goal="attack_compare")
 
-    # plot the venn diagram for one attack but with different seeds to test the randomness
-    venn_graph_path_shokri_seed = f"./{args.dataset}_{args.model}_venn for shokri with seeds.png"
-    venn_graph_name_shokri_seed = f"{args.dataset} {args.model} venn for shokri with different seeds"
-    utils.plot_venn_diagram([pred_shokri_obj, pred_shokri_1_obj, pred_shokri_2_obj], venn_graph_name_shokri_seed,
-                            venn_graph_path_shokri_seed, threshold=0.5, goal="seed_compare")
-
+    # plot the venn diagram for one attack but with different seeds
+    # venn_graph_path_shokri_seed = f"./{args.dataset}_{args.model}_venn for shokri with seeds.png"
+    # venn_graph_name_shokri_seed = f"{args.dataset} {args.model} venn for shokri with different seeds and data augmentation"
+    # utils.plot_venn_diagram([pred_shokri_obj, pred_shokri_1_obj, pred_shokri_2_obj], venn_graph_name_shokri_seed,
+    #                         venn_graph_path_shokri_seed, threshold=0.5, goal="seed_compare")
+    #
     venn_graph_path_losstraj_seed = f"./{args.dataset}_{args.model}_venn for losstraj with seeds.png"
-    venn_graph_name_losstraj_seed = f"{args.dataset} {args.model} venn for losstraj with different seeds"
+    venn_graph_name_losstraj_seed = f"{args.dataset} {args.model} venn for losstraj with different seeds and data augmentation"
     utils.plot_venn_diagram([pred_losstraj_obj, pred_losstraj_1_obj, pred_losstraj_2_obj], venn_graph_name_losstraj_seed,
                             venn_graph_path_losstraj_seed, threshold=0.5, goal="seed_compare")
+
+    # loading the dataset
+    # trainset = utils.load_dataset(f"/data/public/miae_experiment/target/{args.dataset}/target_trainset.pkl")
+    # testset = utils.load_dataset(f"/data/public/miae_experiment/target/{args.dataset}/target_testset.pkl")
+    # fullset = ConcatDataset([trainset, testset])
+
 
     # plot tsne graph
     # tsne_graph_path = f"./{args.dataset}_{args.model}_tsne.png"
