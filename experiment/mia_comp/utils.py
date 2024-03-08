@@ -73,12 +73,12 @@ def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str, 
     plt.figure(figsize=(7, 7), dpi=300)
     if goal == "attack_compare":
         for pred in pred_list:
-            attacked_points[pred.name] = set(np.where(pred.predictions_to_labels() == pred.ground_truth_arr)[0])
+            attacked_points[pred.name] = set(np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
         venn_sets = [attacked_points[pred.name] for pred in pred_list]
         venn_function = venn2
     elif goal == "seed_compare":
         for pred in pred_list:
-            attacked_points[pred.name].update(i for i, prob in enumerate(pred.pred_arr) if prob > threshold)
+            attacked_points[pred.name] = set(np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
         venn_sets = tuple(attacked_points[pred.name] for pred in pred_list)
         venn_function = venn3
 
