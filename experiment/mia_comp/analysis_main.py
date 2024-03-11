@@ -133,11 +133,14 @@ if __name__ == '__main__':
     # creating the Predictions object
     pred_shokri_obj = utils.Predictions(pred_shokri, attack_set_membership, "shokri (seed = 0)")
     pred_losstraj_obj = utils.Predictions(pred_losstraj, attack_set_membership, "losstraj (seed = 0)")
+    pred_yeom_obj = utils.Predictions(pred_yeom, attack_set_membership, "yeom (seed = 0)")
     pred_shokri_binary = pred_shokri_obj.predictions_to_labels(threshold=0.5)
     pred_losstraj_binary = pred_losstraj_obj.predictions_to_labels(threshold=0.5)
+    pred_yeom_binary = pred_yeom_obj.predictions_to_labels(threshold=0.5)
 
     correctness_shokri = correct_pred(pred_shokri_obj)
     correctness_losstraj = correct_pred(pred_losstraj_obj)
+    correctness_yeom = correct_pred(pred_yeom_obj)
 
     # analysis the similarity of the two correctness arrays
     analysis_preds_similarity(correctness_shokri, correctness_losstraj, "shokri", "losstraj")
@@ -171,7 +174,7 @@ if __name__ == '__main__':
         (f"/data/public/miae_experiment_aug/preds_sd3/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
     # get the union of the four seeds: 0, 1, 2, 3
     pred_shokri_union = np.logical_and(np.logical_and(np.logical_and(pred_shokri, pred_shokri_1), pred_shokri_2), pred_shokri_3)
-    print(f"there are {pred_shokri_union} attack set members in the union of the four seeds")
+    print(f"there are {len(pred_shokri_union)} attack set members in the union of the four seeds")
     pred_shokri_1_obj = utils.Predictions(pred_shokri_1, attack_set_membership_1, "shokri (seed = 1)")
     pred_shokri_2_obj = utils.Predictions(pred_shokri_2, attack_set_membership_2, "shokri (seed = 2)")
     pred_shokri_3_obj = utils.Predictions(pred_shokri_3, attack_set_membership_3, "shokri (seed = 3)")
@@ -207,29 +210,34 @@ if __name__ == '__main__':
     # plot aug_graph
     # auc_graph_path = f"./{args.dataset}_{args.model}_auc with seeds.png"
     # auc_graph_name = f"{args.dataset} {args.model} auc with seeds"
-    # # utils.plot_roc_graph([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
-    # utils.plot_roc_graph([pred_shokri, pred_losstraj, pred_average, pred_majority_voting], ["shokri", "losstraj", "average", "majority_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
+    # # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
+    # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting], ["shokri", "losstraj", "average", "majority_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
 
     # plot venn diagram for different attacks to compare the similarity
-    venn_graph_path = f"./{args.dataset}_{args.model}_venn.png"
-    venn_graph_name = f"{args.dataset} {args.model} venn with data augmentation for union"
-    utils.plot_venn_diagram([pred_shokri_union_obj, pred_losstraj_union_obj], venn_graph_name, venn_graph_path,
+    venn_graph_path = f"./{args.dataset}_{args.model}_venn_s0.png"
+    venn_graph_name = f"{args.dataset} {args.model} Venn Diagram for Different Attacks’TP on seed = 0"
+    utils.plot_venn_diagram([pred_shokri_obj, pred_losstraj_obj, pred_yeom_obj], venn_graph_name, venn_graph_path,
                             threshold=0.5, goal="attack_compare")
 
     # plot the venn diagram for one attack but with different seeds
-    # venn_graph_path_shokri_seed = f"./{args.dataset}_{args.model}_venn for shokri with seeds.png"
-    # venn_graph_name_shokri_seed = f"{args.dataset} {args.model} venn for shokri with different seeds and data augmentation"
-    # utils.plot_venn_diagram([pred_shokri_obj, pred_shokri_1_obj, pred_shokri_2_obj], venn_graph_name_shokri_seed,
-    #                         venn_graph_path_shokri_seed, threshold=0.5, goal="seed_compare")
-    #
+    venn_graph_path_shokri_seed = f"./{args.dataset}_{args.model}_venn for shokri with seeds.png"
+    venn_graph_name_shokri_seed = f"{args.dataset} {args.model} Venn Diagram for Shokri with Different Seeds"
+    utils.plot_venn_diagram([pred_shokri_obj, pred_shokri_1_obj, pred_shokri_2_obj], venn_graph_name_shokri_seed,
+                            venn_graph_path_shokri_seed, threshold=0.5, goal="seed_compare")
+
     venn_graph_path_losstraj_seed = f"./{args.dataset}_{args.model}_venn for losstraj with seeds.png"
-    venn_graph_name_losstraj_seed = f"{args.dataset} {args.model} venn for losstraj with different seeds and data augmentation"
+    venn_graph_name_losstraj_seed = f"{args.dataset} {args.model} Venn Diagram for Losstraj with Different Seeds"
     utils.plot_venn_diagram([pred_losstraj_obj, pred_losstraj_1_obj, pred_losstraj_2_obj], venn_graph_name_losstraj_seed,
                             venn_graph_path_losstraj_seed, threshold=0.5, goal="seed_compare")
 
+    venn_graph_path_yeom_seed = f"./{args.dataset}_{args.model}_venn for yeom with seeds.png"
+    venn_graph_name_yeom_seed = f"{args.dataset} {args.model} venn for yeom with different seeds"
+    utils.plot_venn_diagram([pred_yeom_obj, pred_yeom_1_obj, pred_yeom_2_obj], venn_graph_name_yeom_seed,
+                            venn_graph_path_yeom_seed, threshold=0.5, goal="seed_compare")
+
     # loading the dataset
-    # trainset = utils.load_dataset(f"/data/public/miae_experiment/target/{args.dataset}/target_trainset.pkl")
-    # testset = utils.load_dataset(f"/data/public/miae_experiment/target/{args.dataset}/target_testset.pkl")
+    # trainset = utils.load_dataset(f"/data/public/miae_experiment_aug/target/{args.dataset}/target_trainset.pkl")
+    # testset = utils.load_dataset(f"/data/public/miae_experiment_aug/target/{args.dataset}/target_testset.pkl")
     # fullset = ConcatDataset([trainset, testset])
 
 
