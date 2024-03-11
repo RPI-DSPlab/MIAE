@@ -213,58 +213,12 @@ def load_dataset(file_path: str) -> Dataset:
         dataset = pickle.load(f)
     return dataset
 
-def plot_auc_graph(pred_list: list[np.ndarray],
+
+def plot_roc_graph(pred_list: List[np.ndarray],
                    name_list: list[str],
                    ground_truth_arr: np.ndarray,
-                   title: str, save_path: str = None,
-                   log_scale: bool = True
+                   title: str, save_path: str = None
                    ):
-    """
-    !! This function is deprecated. Use custom_auc instead. !!
-    plot the AUC graph for the predictions from different attacks
-    :param pred_list: np.ndarray list of predictions
-    :param name_list: list of names for the attacks
-    :param ground_truth_arr: np.ndarray of ground truth
-    :param title: title of the graph
-    :param save_path: path to save the graph
-    :param log_scale: whether to use log scale for both axes (default: False)
-    """
-
-    plt.figure(figsize=(10, 6))
-
-    for preds, name in zip(pred_list, name_list):
-        auc_score = roc_auc_score(ground_truth_arr, preds)
-        fpr, tpr, _ = roc_curve(ground_truth_arr, preds)
-        plt.plot(fpr, tpr, label=f'{name} (AUC = {auc_score:.2f})')
-
-    plt.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Random')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title(title)
-    plt.legend(loc='lower right')
-    plt.grid(True)
-
-    if log_scale:
-        plt.xscale('log')
-        plt.yscale('log')
-
-    if save_path:
-        plt.savefig(save_path)
-    else:
-        plt.show()
-
-    # prints the auc, TPR@FPR=0.01, max accuracy
-    for preds, name in zip(pred_list, name_list):
-        fpr, tpr, _ = roc_curve(ground_truth_arr, preds)
-        print(
-            f"{name}: AUC = {roc_auc_score(ground_truth_arr, preds):.2f}, TPR@FPR=0.01 = {tpr[np.argmin(np.abs(fpr - 0.01))]:.2f}, max accuracy = {max(tpr - fpr):.2f}")
-
-
-def custom_auc(pred_list: List[np.ndarray],
-               name_list: list[str],
-               ground_truth_arr: np.ndarray,
-               title: str, save_path: str = None
-               ):
     """
     plot the AUC graph for the predictions from different attacks (ported from Yuetian's code)
     :param pred_list: np.ndarray list of predictions

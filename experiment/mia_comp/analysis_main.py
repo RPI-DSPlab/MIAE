@@ -171,7 +171,7 @@ if __name__ == '__main__':
         (f"/data/public/miae_experiment_aug/preds_sd3/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
     # get the union of the four seeds: 0, 1, 2, 3
     pred_shokri_union = np.logical_and(np.logical_and(np.logical_and(pred_shokri, pred_shokri_1), pred_shokri_2), pred_shokri_3)
-    print(f"there are {len(pred_shokri_union)} attack set members in the union of the four seeds")
+    print(f"there are {pred_shokri_union} attack set members in the union of the four seeds")
     pred_shokri_1_obj = utils.Predictions(pred_shokri_1, attack_set_membership_1, "shokri (seed = 1)")
     pred_shokri_2_obj = utils.Predictions(pred_shokri_2, attack_set_membership_2, "shokri (seed = 2)")
     pred_shokri_3_obj = utils.Predictions(pred_shokri_3, attack_set_membership_3, "shokri (seed = 3)")
@@ -207,8 +207,8 @@ if __name__ == '__main__':
     # plot aug_graph
     # auc_graph_path = f"./{args.dataset}_{args.model}_auc with seeds.png"
     # auc_graph_name = f"{args.dataset} {args.model} auc with seeds"
-    # # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
-    # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting], ["shokri", "losstraj", "average", "majority_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
+    # # utils.plot_roc_graph([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
+    # utils.plot_roc_graph([pred_shokri, pred_losstraj, pred_average, pred_majority_voting], ["shokri", "losstraj", "average", "majority_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
 
     # plot venn diagram for different attacks to compare the similarity
     venn_graph_path = f"./{args.dataset}_{args.model}_venn.png"
