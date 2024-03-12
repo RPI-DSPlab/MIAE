@@ -19,7 +19,7 @@ def sweep(score: np.ndarray, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray, flo
         Tuple[np.ndarray, np.ndarray, float, float]: The False Positive Rate (FPR),
         True Positive Rate (TPR), Area Under the Curve (AUC), and Accuracy.
     """
-    fpr, tpr, _ = roc_curve(x, -score)
+    fpr, tpr, _ = roc_curve(x, score)
     acc = np.max(1 - (fpr + (1 - tpr)) / 2)
     return fpr, tpr, auc(fpr, tpr), acc
 

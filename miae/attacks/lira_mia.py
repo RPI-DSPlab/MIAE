@@ -13,35 +13,12 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import ConcatDataset, DataLoader, Subset, Dataset
 import torch.nn as nn
 from torchvision.transforms import transforms
+from tqdm import tqdm
 
 from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
 from miae.utils.dataset_utils import get_xy_from_dataset
 from torch.cuda.amp import GradScaler, autocast
 from miae.utils.set_seed import set_seed
-
-
-class EMA(nn.Module):
-    def __init__(self, model, decay=0.9999, device=None):
-        super(EMA, self).__init__()
-        self.module = copy.deepcopy(model)
-        self.module.eval()
-        self.decay = decay
-        self.device = device
-        if self.device is not None:
-            self.module.to(device=device)
-
-    def _update(self, model, update_fn):
-        with torch.no_grad():
-            for ema_v, model_v in zip(self.module.state_dict().values(), model.state_dict().values()):
-                if self.device is not None:
-                    model_v = model_v.to(device=self.device)
-                ema_v.copy_(update_fn(ema_v, model_v))
-
-    def update(self, model):
-        self._update(model, update_fn=lambda e, m: self.decay * e + (1. - self.decay) * m)
-
-    def set(self, model):
-        self._update(model, update_fn=lambda e, m: m)
 
 
 class LiraModelAccess(ModelAccess):
@@ -120,6 +97,13 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
 
+        if self.log_path is not None:
+            self.lira_logger = logging.getLogger('lira_logger')
+            self.lira_logger.setLevel(logging.INFO)
+            fh = logging.FileHandler(self.log_path + '/lira.log')
+            fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+            self.lira_logger.addHandler(fh)
+
 
 def _split_data(fullset, expid, iteration_range):
     keep = np.random.uniform(0, 1, size=(iteration_range, len(fullset)))
@@ -158,48 +142,24 @@ class LIRAUtil:
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
 
-            # forward
-            if amp:
-                with autocast():
-                    output = model(data)
-                    cross_entropy_loss = nn.CrossEntropyLoss()(output, target)
+            output = model(data)
+            cross_entropy_loss = nn.CrossEntropyLoss()(output, target)
 
-                    # weight decay loss
-                    l2_reg = torch.tensor(0., requires_grad=True)
-                    for name, param in model.named_parameters():
-                        if 'weight' in name:
-                            l2_reg = l2_reg + torch.norm(param, 2)
-                    loss_wd = 0.5 * l2_reg  # weight decay loss
+            # weight decay loss
+            l2_reg = torch.tensor(0., requires_grad=True)
+            for name, param in model.named_parameters():
+                if 'weight' in name:
+                    l2_reg = l2_reg + torch.norm(param, 2)
+            loss_wd = 0.5 * l2_reg  # weight decay loss
 
-                    # total loss = cross entropy loss + weight decay loss
-                    loss = cross_entropy_loss + weight_decay * loss_wd
+            # total loss = cross entropy loss + weight decay loss
+            loss = cross_entropy_loss + weight_decay * loss_wd
 
-                # backward
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
-            else:  # NO amp
-                output = model(data)
-                cross_entropy_loss = nn.CrossEntropyLoss()(output, target)
-
-                # weight decay loss
-                l2_reg = torch.tensor(0., requires_grad=True)
-                for name, param in model.named_parameters():
-                    if 'weight' in name:
-                        l2_reg = l2_reg + torch.norm(param, 2)
-                loss_wd = 0.5 * l2_reg  # weight decay loss
-
-                # total loss = cross entropy loss + weight decay loss
-                loss = cross_entropy_loss + weight_decay * loss_wd
-
-                # backward
-                loss.backward()
-                optimizer.step()
+            # backward
+            loss.backward()
+            optimizer.step()
 
             optimizer.zero_grad()
-
-            # update EMA
-            # ema.update(model)
 
             # calculate running loss and correct prediction count for accuracy
             running_loss += loss.item() * data.size(0)
@@ -284,11 +244,9 @@ class LIRAUtil:
             # Define the directory path
             folder_name = expid
             dir_path = f"{info.shadow_path}/{folder_name}"
-            log_path = f"{info.log_path}/{folder_name}"
 
             # Check if the directory exists and create
             cls._make_directory_if_not_exists(dir_path)
-            cls._make_directory_if_not_exists(log_path)
 
             set_seed(expid + seed_base + skip_index)
 
@@ -301,21 +259,6 @@ class LIRAUtil:
             shadow_out_loader = DataLoader(Subset(dataset, shadow_out_indices), batch_size=info.batch_size,
                                            shuffle=False)
 
-            # Logging
-            if info.log_path is None:
-                logging.basicConfig(level=logging.INFO,
-                                    format='%(asctime)s - %(levelname)s - %(message)s',
-                                    handlers=[
-                                        logging.FileHandler(f"{log_path}/log_expid_{expid}.log"),
-                                        logging.StreamHandler()
-                                    ])
-            else:
-                logging.basicConfig(level=logging.INFO,
-                                    format='%(asctime)s - %(levelname)s - %(message)s',
-                                    handlers=[
-                                        logging.FileHandler(f"{info.log_path}/lira_mia_log/log_expid_{expid}.log"),
-                                    ])
-
             curr_model = copy.deepcopy(model)
             curr_model.to(device)
 
@@ -323,25 +266,29 @@ class LIRAUtil:
                                         lr=info.lr, momentum=info.momentum, weight_decay=info.weight_decay)
             scheduler = CosineAnnealingLR(optimizer, info.epochs)
 
-            logging.info(
-                f"training shadow model #{expid} with "
-                f"train size: {len(shadow_train_indices)} and test size: {len(shadow_out_indices)}")
-
+            if info.log_path is not None:
+                info.lira_logger.info(
+                    f"training shadow model #{expid} with "
+                    f"train size: {len(shadow_train_indices)} and test size: {len(shadow_out_indices)}")
+            print(f"training shadow model #{expid} with "
+                  f"train size: {len(shadow_train_indices)} and test size: {len(shadow_out_indices)}")
             train_complete = False
+
             while not train_complete:  # if the model is not learned well, retrain it
                 train_acc = 0
-                for epoch in range(1, info.epochs + 1):
+                for epoch in tqdm(range(1, info.epochs + 1)):
                     # print the length of the train and test set
                     loss, train_acc = LIRAUtil.train(curr_model, device, shadow_train_loader, optimizer, scheduler)
                     test_acc = LIRAUtil.test(curr_model, device, shadow_out_loader)
-                    logging.info(
-                        f"Train Shadow Model #{expid}: {epoch}/{info.epochs}: TRAIN loss: {loss:.3f}, "
-                        f"TRAIN acc: {train_acc * 100:.3f}%, TEST acc: {test_acc * 100:.3f}%")
+                    if info.log_path is not None:
+                        info.lira_logger.info(
+                            f"Train Shadow Model #{expid}: {epoch}/{info.epochs}: TRAIN loss: {loss:.3f}, "
+                            f"TRAIN acc: {train_acc * 100:.3f}%, TEST acc: {test_acc * 100:.3f}%")
                 if train_acc > 0.5:
                     train_complete = True
                 else:
                     skip_index += 1
-                    logging.info(f"model {expid} is too bad, skip this record")
+                    info.lira_logger.info(f"model {expid} is too bad, skip this record") if info.log_path is not None else None
                     set_seed(expid + seed_base + skip_index)
 
             # save model
@@ -448,7 +395,6 @@ class LIRAUtil:
         """
         fullsetloader = torch.utils.data.DataLoader(auxiliary_dataset, batch_size=20, shuffle=False, num_workers=8)
 
-        # Combine the targets from trainset and testset
         _, fullset_targets = get_xy_from_dataset(auxiliary_dataset)
 
         score_list = []
@@ -494,7 +440,6 @@ class LIRAUtil:
         """
         dataset_loader = torch.utils.data.DataLoader(dataset, batch_size=20, shuffle=False, num_workers=8)
 
-        # Combine the targets from trainset and testset
         _, fullset_targets = get_xy_from_dataset(dataset)
 
         score_list = []
@@ -569,6 +514,11 @@ class LiraAttack(MiAttack):
         attack_config (dict): The attack configuration dictionary.
         """
         self.auxiliary_dataset = auxiliary_dataset
+
+        # create directories
+        for dir in [self.auxiliary_info.save_path, self.auxiliary_info.shadow_path, self.auxiliary_info.log_path]:
+            if dir is not None:
+                os.makedirs(dir, exist_ok=True)
         self.prepared = True
 
     def infer(self, dataset: torch.utils.data.Dataset) -> np.ndarray:
@@ -578,13 +528,6 @@ class LiraAttack(MiAttack):
         :param dataset: The target data points to be inferred.
         :return: The inferred membership status of the data point.
         """
-
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            filename=f'{self.auxiliary_info.log_path}/lira_mia.log',
-        )
-
         TEST = True  # if True, we save scores and keep to the file
 
         shadow_model = self.target_model_access.get_untrained_model()
@@ -625,4 +568,4 @@ class LiraAttack(MiAttack):
                                         np.array(target_scores))
 
         # return the predictions on the target data
-        return predictions[:len(dataset)]
+        return 1 - predictions[-len(dataset):]
