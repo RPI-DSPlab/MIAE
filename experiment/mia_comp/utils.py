@@ -4,6 +4,7 @@ This file defines classes/functions for comparing the MIA's predictions down to 
 import os
 import pickle
 import sys
+
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 from experiment import models
 from typing import List, Optional, Tuple, Callable, Union
@@ -16,7 +17,6 @@ from matplotlib_venn import venn2, venn2_unweighted, venn3
 import torch
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from torchvision import transforms
-
 
 
 class Predictions:
@@ -53,7 +53,41 @@ class Predictions:
         return np.mean(self.predictions_to_labels() == self.ground_truth_arr)
 
 
-def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str, threshold: float = 0.5, goal: str = "attack_compare"):
+class SampleHardness:
+    def __init__(self, score_arr, name: str):
+        """
+
+        """
+        self.score_arr = score_arr
+        self.name = name
+
+        self.max_score = np.max(self.score_arr)
+        self.min_score = np.min(self.score_arr)
+
+    def plot_distribution(self, save_dir):
+        """
+        plot a histogram of the sample hardness scores
+        """
+        plt.hist(self.score_arr, bins=20, range=(self.min_score, self.max_score))
+        plt.title(f"Distribution of {self.name}")
+        plt.xlabel(f"{self.name}")
+        plt.ylabel("Number of Samples")
+        plt.savefig(save_dir)
+
+    def plot_distribution_pred_TP(self, pred: Predictions, save_dir):
+        """
+        plot a histogram of the sample hardness scores for the true positive samples
+        """
+        TP = np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0]
+        plt.hist(self.score_arr[TP], bins=20, range=(self.min_score, self.max_score))
+        plt.title(f"Distribution of {self.name} for True Positives")
+        plt.xlabel(f"{self.name}")
+        plt.ylabel("Number of Samples")
+        plt.savefig(save_dir)
+
+
+def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str, threshold: float = 0.5,
+                      goal: str = "attack_compare"):
     """
     Plot the Venn diagram for the predictions from different attacks or for one attack but with different seed.
 
@@ -73,12 +107,14 @@ def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str, 
     plt.figure(figsize=(7, 7), dpi=300)
     if goal == "attack_compare":
         for pred in pred_list:
-            attacked_points[pred.name] = set(np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
+            attacked_points[pred.name] = set(
+                np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
         venn_sets = [attacked_points[pred.name] for pred in pred_list]
         venn_function = venn2
     elif goal == "seed_compare":
         for pred in pred_list:
-            attacked_points[pred.name] = set(np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
+            attacked_points[pred.name] = set(
+                np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
         venn_sets = tuple(attacked_points[pred.name] for pred in pred_list)
         venn_function = venn3
 
@@ -130,8 +166,10 @@ def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, title: str,
 
     # plot the t-SNE graph based on the low-dimensional data
     plt.figure(figsize=(10, 10), dpi=300)
-    plt.scatter(low_dim_data[indices_by_attack1, 0], low_dim_data[indices_by_attack1, 1], label=pred_list[0].name, c='r', s=1)
-    plt.scatter(low_dim_data[indices_by_attack2, 0], low_dim_data[indices_by_attack2, 1], label=pred_list[1].name, c='b', s=1)
+    plt.scatter(low_dim_data[indices_by_attack1, 0], low_dim_data[indices_by_attack1, 1], label=pred_list[0].name,
+                c='r', s=1)
+    plt.scatter(low_dim_data[indices_by_attack2, 0], low_dim_data[indices_by_attack2, 1], label=pred_list[1].name,
+                c='b', s=1)
     plt.scatter(low_dim_data[indices_by_both, 0], low_dim_data[indices_by_both, 1], label="Both", c='g', s=1)
     plt.scatter(low_dim_data[indices_by_none, 0], low_dim_data[indices_by_none, 1], label="None", c='k', s=1)
 
@@ -145,7 +183,6 @@ def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, title: str,
     plt.title(title)
     plt.legend()
     plt.savefig(save_path, dpi=300)
-
 
 
 def plot_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: str, save_path: str):
@@ -178,6 +215,7 @@ def plot_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: s
 
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
 
+
 def load_predictions(file_path: str) -> np.ndarray:
     """
     Load predictions from a file.
@@ -187,6 +225,19 @@ def load_predictions(file_path: str) -> np.ndarray:
     """
     prediction = np.load(file_path)
     return prediction
+
+
+def load_example_hardness(file_path: str) -> np.ndarray:
+    """
+    Load example hardness scores from a file.
+
+    :param file_path: path to the file containing the example hardness scores
+    :return: example hardness scores as a numpy array
+    """
+    with open(file_path, "rb") as f:
+        example_hardness = pickle.load(f)
+    return example_hardness
+
 
 def load_target_dataset(filepath: str):
     """
@@ -208,56 +259,11 @@ def load_target_dataset(filepath: str):
 
     return index_to_data, attack_set_membership
 
+
 def load_dataset(file_path: str) -> Dataset:
     with open(file_path, "rb") as f:
         dataset = pickle.load(f)
     return dataset
-
-def plot_auc_graph(pred_list: list[np.ndarray],
-                   name_list: list[str],
-                   ground_truth_arr: np.ndarray,
-                   title: str, save_path: str = None,
-                   log_scale: bool = True
-                   ):
-    """
-    !! This function is deprecated. Use custom_auc instead. !!
-    plot the AUC graph for the predictions from different attacks
-    :param pred_list: np.ndarray list of predictions
-    :param name_list: list of names for the attacks
-    :param ground_truth_arr: np.ndarray of ground truth
-    :param title: title of the graph
-    :param save_path: path to save the graph
-    :param log_scale: whether to use log scale for both axes (default: False)
-    """
-
-    plt.figure(figsize=(10, 6))
-
-    for preds, name in zip(pred_list, name_list):
-        auc_score = roc_auc_score(ground_truth_arr, preds)
-        fpr, tpr, _ = roc_curve(ground_truth_arr, preds)
-        plt.plot(fpr, tpr, label=f'{name} (AUC = {auc_score:.2f})')
-
-    plt.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Random')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title(title)
-    plt.legend(loc='lower right')
-    plt.grid(True)
-
-    if log_scale:
-        plt.xscale('log')
-        plt.yscale('log')
-
-    if save_path:
-        plt.savefig(save_path)
-    else:
-        plt.show()
-
-    # prints the auc, TPR@FPR=0.01, max accuracy
-    for preds, name in zip(pred_list, name_list):
-        fpr, tpr, _ = roc_curve(ground_truth_arr, preds)
-        print(
-            f"{name}: AUC = {roc_auc_score(ground_truth_arr, preds):.2f}, TPR@FPR=0.01 = {tpr[np.argmin(np.abs(fpr - 0.01))]:.2f}, max accuracy = {max(tpr - fpr):.2f}")
 
 
 def custom_auc(pred_list: List[np.ndarray],
