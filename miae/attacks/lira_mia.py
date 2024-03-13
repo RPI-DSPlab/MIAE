@@ -126,16 +126,13 @@ class LIRAUtil:
             os.makedirs(dir_path)
 
     @classmethod
-    def train(cls, model, device, train_loader, optimizer, scheduler=None, amp=False):
+    def train(cls, model, device, train_loader, optimizer, scheduler=None):
         """
         train function for the shadow_model
         """
         model.train()
         # ema = EMA(model, 0.999)
-        weight_decay = 0.01
 
-        if amp:
-            scaler = GradScaler()  # for mixed precision training
         running_loss = 0.0
         correct = 0
 
@@ -143,22 +140,11 @@ class LIRAUtil:
             data, target = data.to(device), target.to(device)
 
             output = model(data)
-            cross_entropy_loss = nn.CrossEntropyLoss()(output, target)
-
-            # weight decay loss
-            l2_reg = torch.tensor(0., requires_grad=True)
-            for name, param in model.named_parameters():
-                if 'weight' in name:
-                    l2_reg = l2_reg + torch.norm(param, 2)
-            loss_wd = 0.5 * l2_reg  # weight decay loss
-
-            # total loss = cross entropy loss + weight decay loss
-            loss = cross_entropy_loss + weight_decay * loss_wd
+            loss = nn.CrossEntropyLoss()(output, target)
 
             # backward
             loss.backward()
             optimizer.step()
-
             optimizer.zero_grad()
 
             # calculate running loss and correct prediction count for accuracy
@@ -278,12 +264,12 @@ class LIRAUtil:
                 train_acc = 0
                 for epoch in tqdm(range(1, info.epochs + 1)):
                     # print the length of the train and test set
-                    loss, train_acc = LIRAUtil.train(curr_model, device, shadow_train_loader, optimizer, scheduler)
+                    loss, train_acc = LIRAUtil.train(curr_model, device, shadow_train_loader, optimizer, scheduler=scheduler)
                     test_acc = LIRAUtil.test(curr_model, device, shadow_out_loader)
-                    if info.log_path is not None:
+                    if (epoch % 20 == 0 or epoch == info.epochs) and info.log_path is not None:
                         info.lira_logger.info(
                             f"Train Shadow Model #{expid}: {epoch}/{info.epochs}: TRAIN loss: {loss:.3f}, "
-                            f"TRAIN acc: {train_acc * 100:.3f}%, TEST acc: {test_acc * 100:.3f}%")
+                            f"TRAIN acc: {train_acc * 100:.3f}%, TEST acc: {test_acc * 100:.3f}%, lr: {scheduler.get_last_lr()[0]: .4f}")
                 if train_acc > 0.5:
                     train_complete = True
                 else:
@@ -477,7 +463,6 @@ class LIRAUtil:
         # Select the true class predictions
         y_true = predictions[np.arange(COUNT), :, :, labels[:COUNT]]
         mean_acc = np.mean(predictions[:, 0, 0, :].argmax(1) == labels[:COUNT])
-        # print(f'mean accuracy: {mean_acc:.4f}')
 
         # Zero out the true class predictions
         predictions[np.arange(COUNT), :, :, labels[:COUNT]] = 0
@@ -510,8 +495,7 @@ class LiraAttack(MiAttack):
         """
         Since LIRA trains shadow models with/without the target dataset, we don't need to prepare anything here.
 
-        Args:
-        attack_config (dict): The attack configuration dictionary.
+        :param auxiliary_dataset: The auxiliary dataset to be used for the attack.
         """
         self.auxiliary_dataset = auxiliary_dataset
 
@@ -568,4 +552,4 @@ class LiraAttack(MiAttack):
                                         np.array(target_scores))
 
         # return the predictions on the target data
-        return 1 - predictions[-len(dataset):]
+        return -predictions[-len(dataset):]
