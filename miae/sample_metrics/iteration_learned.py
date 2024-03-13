@@ -132,18 +132,18 @@ class IlHardness(ExampleMetric, ABC):
             learned_bool = False
             curr_itr = 0
             for j in learning_history_dict[i]:
-                if j == True:  # if the model has learned this datapoint
-                    if learned_bool == False:
+                if j is True:  # if the model has learned this datapoint
+                    if learned_bool is False:
                         learned_itr = curr_itr
                     learned_bool = True
                 else:  # if the model has not learned this datapoint or has forgotten it
                     learned_bool = False
                 curr_itr += 1
 
-            if learned_bool == True:
+            if learned_bool is True:
                 learned_metric_dict[i] = learned_itr
             else:
-                learned_metric_dict[i] = -1
+                learned_metric_dict[i] = self.config.num_epochs+1
 
         return learned_metric_dict
 

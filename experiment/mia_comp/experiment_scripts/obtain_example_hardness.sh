@@ -1,8 +1,18 @@
-data_dir="/data/public/miae_experiment"
+data_aug=1 # 1 for data augmentation, 0 for no data augmentation
+
+if [ "$data_aug" -eq 1 ]; then
+    data_dir="/data/public/miae_experiment_aug_overfit/target"
+else
+    data_dir="/data/public/miae_experiment_overfit/target"
+fi
 mkdir -p "$data_dir"
 
-preds_dir="$data_dir/example_hardness"
-mkdir -p "$preds_dir"
+if [ "$data_aug" -eq 1 ]; then
+    eh_dir="/data/public/example_hardness_aug_overfit"
+else
+    eh_dir="/data/public/example_hardness_overfit"
+fi
+mkdir -p "$eh_dir"
 
 
 #datasets=("cifar10" "cifar100" "cinic10")
@@ -11,7 +21,7 @@ archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
 #example_hardness=("il" "pd" "cs")
 example_hardness=("il")
 
-cd /home/wangz56/MIAE/experiment/mia_comp
+cd /home/wangz56/MIAE_training_dir/MIAE/experiment/mia_comp
 
 conda activate conda-zhiqi
 
@@ -25,11 +35,11 @@ for dataset in "${datasets[@]}"; do
       num_epoch=150
     fi
 
-    mkdir -p "$preds_dir/$dataset"
+    mkdir -p "$eh_dir/$dataset"
     for arch in "${archs[@]}"; do
-        mkdir -p "$preds_dir/$dataset/$arch"
+        mkdir -p "$eh_dir/$dataset/$arch"
         for eh in "${example_hardness[@]}"; do
-            result_dir="$preds_dir/$dataset/$arch/$eh"
+            result_dir="$eh_dir/$dataset/$arch/$eh"
             # if the predictions are already saved, skip
             if [ -f "$result_dir/${eh}_score.pkl" ]; then
                 echo "Scores already saved for $dataset $arch $eh"
