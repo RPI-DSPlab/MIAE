@@ -507,4 +507,4 @@ class ShokriAttack(MiAttack):
                 member_pred = member_pred.cpu().detach().numpy()
                 membership.append(member_pred.reshape(-1))
 
-        return np.array(np.transpose(membership)[0])
+        return np.array(np.transpose(membership)[1])

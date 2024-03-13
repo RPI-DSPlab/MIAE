@@ -7,7 +7,7 @@ from torchvision import transforms as T
 from torchvision.datasets import CIFAR100, ImageFolder
 
 
-def get_cifar10(aug:bool=True) -> ConcatDataset:
+def get_cifar10(aug: bool = True) -> ConcatDataset:
     mean = [0.485, 0.456, 0.406]
     std = [0.229, 0.224, 0.225]
     regular_transform = T.Compose([T.ToTensor(),

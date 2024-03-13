@@ -270,6 +270,7 @@ class LIRAUtil:
                         info.lira_logger.info(
                             f"Train Shadow Model #{expid}: {epoch}/{info.epochs}: TRAIN loss: {loss:.3f}, "
                             f"TRAIN acc: {train_acc * 100:.3f}%, TEST acc: {test_acc * 100:.3f}%, lr: {scheduler.get_last_lr()[0]: .4f}")
+
                 if train_acc > 0.5:
                     train_complete = True
                 else:
@@ -553,3 +554,4 @@ class LiraAttack(MiAttack):
 
         # return the predictions on the target data
         return -predictions[-len(dataset):]
+

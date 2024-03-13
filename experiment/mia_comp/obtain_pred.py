@@ -8,16 +8,12 @@ Work flow:
 """
 import argparse
 import os
-import os
 import torch
-import torchvision
-import torchvision.transforms as T
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from typing import List
 import numpy as np
 from tqdm import tqdm
 from copy import deepcopy
-from matplotlib import pyplot as plt
 import logging
 
 # add miae to path
@@ -238,7 +234,7 @@ if __name__ == '__main__':
 
     # optional arguments (eg. training hyperparameters)
     parser.add_argument('--seed', type=int, default=0, help='random seed')
-    parser.add_argument('--data_aug', type=bool, default=True, help='whether to use data augmentation')
+    parser.add_argument('--data_aug', type=bool, default=False, help='whether to use data augmentation')
     parser.add_argument('--attack_lr', type=float, default=0.1, help='learning rate for MIA training')
     parser.add_argument('--attack_epochs', type=int, default=100, help='number of epochs for MIA training')
     parser.add_argument('--target_epochs', type=int, default=100, help='number of epochs for target model training')

@@ -13,11 +13,10 @@ class ExampleMetric(ABC):
         """
 
     @abstractmethod
-    def get_score(self, idx: int, train: bool = True):
+    def get_score(self, idx: int):
         """
         get the score of the metric for the sample with index idx
         :param idx: index of the sample
-        :param train: whether the sample is from the training set
         :return: the score of the metric
         """
         pass

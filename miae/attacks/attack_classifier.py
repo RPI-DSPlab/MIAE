@@ -64,7 +64,7 @@ class AttackClassifier(ABC):
         """
         if self.model is None:
             raise ValueError('Model is not trained yet.')
-        elif self.model is "Threshold":
+        elif self.model == "Threshold":
             return self.model(input_signals)
         return self.model.predict_proba(input_signals)[:, 1]
 
