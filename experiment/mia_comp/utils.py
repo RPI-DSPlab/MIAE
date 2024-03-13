@@ -13,10 +13,11 @@ from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib_venn import venn2, venn2_unweighted, venn3
+from matplotlib_venn import venn2, venn2_unweighted, venn3, venn3_unweighted
 import torch
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from torchvision import transforms
+
 
 
 class Predictions:
@@ -52,6 +53,36 @@ class Predictions:
         """
         return np.mean(self.predictions_to_labels() == self.ground_truth_arr)
 
+    def compute_fpr(self):
+        """
+        Compute the false positive rate (FPR) of the predictions.
+        """
+        # Convert predictions and ground truth to PyTorch tensors if they are not already
+        pred_tensor = torch.tensor(self.pred_arr)
+        ground_truth_tensor = torch.tensor(self.ground_truth_arr)
+        false_positive = torch.logical_and(pred_tensor == 1, ground_truth_tensor == 0).sum().item()
+        true_negative = torch.logical_and(pred_tensor == 0, ground_truth_tensor == 0).sum().item()
+        total_negative = true_negative + false_positive
+        FPR = false_positive / total_negative if total_negative > 0 else 0
+        return FPR
+
+    def adjust_fpr(self, target_fpr):
+        """
+        Adjust the predictions to achieve a target FPR.
+        :param target_fpr: target FPR
+        :return: adjusted predictions as a numpy array
+        """
+        pred_tensor = torch.tensor(self.pred_arr)
+        ground_truth_tensor = torch.tensor(self.ground_truth_arr)
+
+        current_fpr = self.compute_fpr()
+        if current_fpr < target_fpr:
+            print(f"The current FPR is {current_fpr:.4f}, which is less than the target FPR {target_fpr:.4f}. "
+                  f"No adjustment is needed.")
+            return self.pred_arr
+
+        threshold = torch.quantile(pred_tensor, 1 - target_fpr)
+        adjusted_pred_arr = (pred_tensor >= threshold).float().numpy()
 
 class SampleHardness:
     def __init__(self, score_arr, name: str):
@@ -95,28 +126,38 @@ def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str, 
     :param title: title of the graph
     :param save_path: path to save the graph
     :param threshold: threshold for considering a point as attacked
-    :param goal: goal of the comparison ("attack_compare" or "seed_compare")
+    :param goal: goal of the comparison [single_attack, different_attacks_seed, or different_attacks_fpr]
+    :param target_fpr: target FPR for the comparison (only used when goal is "different_attacks_fpr")
     """
-    if len(pred_list) < 2 and goal == "attack_compare":
+    if len(pred_list) < 2 and goal == "different_attacks_seed":
         raise ValueError("At least 2 attacks are required for comparison.")
-    elif len(pred_list) < 2 and goal == "seed_compare":
+    elif len(pred_list) < 2 and goal == "single_attack":
         raise ValueError("At least from 2 different seeds are required for comparison.")
 
     # get the attacked points
     attacked_points = {pred.name: set() for pred in pred_list}
     plt.figure(figsize=(7, 7), dpi=300)
-    if goal == "attack_compare":
+    if goal == "different_attacks_seed":
         for pred in pred_list:
-            attacked_points[pred.name] = set(
-                np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
+            # attacked_points[pred.name] = set(
+            #     np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
+            attacked_points[pred.name] = set(np.where(pred.predictions_to_labels() == pred.ground_truth_arr)[0])
         venn_sets = [attacked_points[pred.name] for pred in pred_list]
-        venn_function = venn2
-    elif goal == "seed_compare":
+        venn_function = venn2_unweighted if len(pred_list) == 2 else venn3_unweighted
+    elif goal == "single_attack":
         for pred in pred_list:
-            attacked_points[pred.name] = set(
-                np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
+            attacked_points[pred.name] = set(np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
         venn_sets = tuple(attacked_points[pred.name] for pred in pred_list)
-        venn_function = venn3
+        venn_function = venn3_unweighted
+    elif goal == "different_attacks_fpr" and target_fpr is not None:
+        adjusted_preds = [pred.adjust_fpr(target_fpr) for pred in pred_list]
+        for i, pred in enumerate(pred_list):
+            # attacked_points[pred.name] = set(np.where((adjusted_preds[i] == 1) & (pred.ground_truth_arr == 1))[0])
+            attacked_points[pred.name] = set(np.where(adjusted_preds[i] == pred.ground_truth_arr)[0])
+        venn_sets = [attacked_points[pred.name] for pred in pred_list]
+        venn_function = venn2_unweighted if len(pred_list) == 2 else venn3_unweighted
+    else:
+        raise ValueError("Invalid goal for comparison.")
 
     circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
     venn_labels = [pred.name for pred in pred_list]
@@ -166,10 +207,8 @@ def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, title: str,
 
     # plot the t-SNE graph based on the low-dimensional data
     plt.figure(figsize=(10, 10), dpi=300)
-    plt.scatter(low_dim_data[indices_by_attack1, 0], low_dim_data[indices_by_attack1, 1], label=pred_list[0].name,
-                c='r', s=1)
-    plt.scatter(low_dim_data[indices_by_attack2, 0], low_dim_data[indices_by_attack2, 1], label=pred_list[1].name,
-                c='b', s=1)
+    plt.scatter(low_dim_data[indices_by_attack1, 0], low_dim_data[indices_by_attack1, 1], label=pred_list[0].name, c='r', s=1)
+    plt.scatter(low_dim_data[indices_by_attack2, 0], low_dim_data[indices_by_attack2, 1], label=pred_list[1].name, c='b', s=1)
     plt.scatter(low_dim_data[indices_by_both, 0], low_dim_data[indices_by_both, 1], label="Both", c='g', s=1)
     plt.scatter(low_dim_data[indices_by_none, 0], low_dim_data[indices_by_none, 1], label="None", c='k', s=1)
 
@@ -183,6 +222,7 @@ def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, title: str,
     plt.title(title)
     plt.legend()
     plt.savefig(save_path, dpi=300)
+
 
 
 def plot_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: str, save_path: str):
@@ -258,7 +298,6 @@ def load_target_dataset(filepath: str):
     attack_set_membership = np.load(filepath + "/attack_set_membership.npy")
 
     return index_to_data, attack_set_membership
-
 
 def load_dataset(file_path: str) -> Dataset:
     with open(file_path, "rb") as f:

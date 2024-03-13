@@ -21,30 +21,6 @@ from torch.cuda.amp import GradScaler, autocast
 from miae.utils.set_seed import set_seed
 
 
-class EMA(nn.Module):
-    def __init__(self, model, decay=0.9999, device=None):
-        super(EMA, self).__init__()
-        self.module = copy.deepcopy(model)
-        self.module.eval()
-        self.decay = decay
-        self.device = device
-        if self.device is not None:
-            self.module.to(device=device)
-
-    def _update(self, model, update_fn):
-        with torch.no_grad():
-            for ema_v, model_v in zip(self.module.state_dict().values(), model.state_dict().values()):
-                if self.device is not None:
-                    model_v = model_v.to(device=self.device)
-                ema_v.copy_(update_fn(ema_v, model_v))
-
-    def update(self, model):
-        self._update(model, update_fn=lambda e, m: self.decay * e + (1. - self.decay) * m)
-
-    def set(self, model):
-        self._update(model, update_fn=lambda e, m: m)
-
-
 class LiraModelAccess(ModelAccess):
     """
     Your implementation of ModelAccess for Lira.
@@ -150,64 +126,26 @@ class LIRAUtil:
             os.makedirs(dir_path)
 
     @classmethod
-    def train(cls, model, device, train_loader, optimizer, scheduler=None, amp=False):
+    def train(cls, model, device, train_loader, optimizer, scheduler=None):
         """
         train function for the shadow_model
         """
         model.train()
         # ema = EMA(model, 0.999)
-        weight_decay = 0.01
 
-        if amp:
-            scaler = GradScaler()  # for mixed precision training
         running_loss = 0.0
         correct = 0
 
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
 
-            # forward
-            if amp:
-                with autocast():
-                    output = model(data)
-                    cross_entropy_loss = nn.CrossEntropyLoss()(output, target)
+            output = model(data)
+            loss = nn.CrossEntropyLoss()(output, target)
 
-                    # weight decay loss
-                    l2_reg = torch.tensor(0., requires_grad=True)
-                    for name, param in model.named_parameters():
-                        if 'weight' in name:
-                            l2_reg = l2_reg + torch.norm(param, 2)
-                    loss_wd = 0.5 * l2_reg  # weight decay loss
-
-                    # total loss = cross entropy loss + weight decay loss
-                    loss = cross_entropy_loss + weight_decay * loss_wd
-
-                # backward
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
-            else:  # NO amp
-                output = model(data)
-                cross_entropy_loss = nn.CrossEntropyLoss()(output, target)
-
-                # weight decay loss
-                l2_reg = torch.tensor(0., requires_grad=True)
-                for name, param in model.named_parameters():
-                    if 'weight' in name:
-                        l2_reg = l2_reg + torch.norm(param, 2)
-                loss_wd = 0.5 * l2_reg  # weight decay loss
-
-                # total loss = cross entropy loss + weight decay loss
-                loss = cross_entropy_loss + weight_decay * loss_wd
-
-                # backward
-                loss.backward()
-                optimizer.step()
-
+            # backward
+            loss.backward()
+            optimizer.step()
             optimizer.zero_grad()
-
-            # update EMA
-            # ema.update(model)
 
             # calculate running loss and correct prediction count for accuracy
             running_loss += loss.item() * data.size(0)
@@ -326,12 +264,13 @@ class LIRAUtil:
                 train_acc = 0
                 for epoch in tqdm(range(1, info.epochs + 1)):
                     # print the length of the train and test set
-                    loss, train_acc = LIRAUtil.train(curr_model, device, shadow_train_loader, optimizer, scheduler)
+                    loss, train_acc = LIRAUtil.train(curr_model, device, shadow_train_loader, optimizer, scheduler=scheduler)
                     test_acc = LIRAUtil.test(curr_model, device, shadow_out_loader)
-                    if info.log_path is not None:
+                    if (epoch % 20 == 0 or epoch == info.epochs) and info.log_path is not None:
                         info.lira_logger.info(
                             f"Train Shadow Model #{expid}: {epoch}/{info.epochs}: TRAIN loss: {loss:.3f}, "
-                            f"TRAIN acc: {train_acc * 100:.3f}%, TEST acc: {test_acc * 100:.3f}%")
+                            f"TRAIN acc: {train_acc * 100:.3f}%, TEST acc: {test_acc * 100:.3f}%, lr: {scheduler.get_last_lr()[0]: .4f}")
+
                 if train_acc > 0.5:
                     train_complete = True
                 else:
@@ -443,7 +382,6 @@ class LIRAUtil:
         """
         fullsetloader = torch.utils.data.DataLoader(auxiliary_dataset, batch_size=20, shuffle=False, num_workers=8)
 
-        # Combine the targets from trainset and testset
         _, fullset_targets = get_xy_from_dataset(auxiliary_dataset)
 
         score_list = []
@@ -489,7 +427,6 @@ class LIRAUtil:
         """
         dataset_loader = torch.utils.data.DataLoader(dataset, batch_size=20, shuffle=False, num_workers=8)
 
-        # Combine the targets from trainset and testset
         _, fullset_targets = get_xy_from_dataset(dataset)
 
         score_list = []
@@ -527,7 +464,6 @@ class LIRAUtil:
         # Select the true class predictions
         y_true = predictions[np.arange(COUNT), :, :, labels[:COUNT]]
         mean_acc = np.mean(predictions[:, 0, 0, :].argmax(1) == labels[:COUNT])
-        # print(f'mean accuracy: {mean_acc:.4f}')
 
         # Zero out the true class predictions
         predictions[np.arange(COUNT), :, :, labels[:COUNT]] = 0
@@ -560,8 +496,7 @@ class LiraAttack(MiAttack):
         """
         Since LIRA trains shadow models with/without the target dataset, we don't need to prepare anything here.
 
-        Args:
-        attack_config (dict): The attack configuration dictionary.
+        :param auxiliary_dataset: The auxiliary dataset to be used for the attack.
         """
         self.auxiliary_dataset = auxiliary_dataset
 
@@ -618,4 +553,5 @@ class LiraAttack(MiAttack):
                                         np.array(target_scores))
 
         # return the predictions on the target data
-        return predictions[-len(dataset):]
+        return -predictions[-len(dataset):]
+
