@@ -11,6 +11,9 @@ def correct_pred(pred: utils.Predictions) -> np.ndarray:
     """element-wise comparison of the prediction and the attack_set_membership, return a boolean array"""
     return pred.predictions_to_labels() == pred.ground_truth_arr
 
+def correct_pred_with_fpr(pred: utils.Predictions, target_fpr: float) -> np.ndarray:
+    """element-wise comparison of the prediction and the attack_set_membership, return a boolean array"""
+    return pred.adjust_fpr(target_fpr) == pred.ground_truth_arr
 
 def analysis_preds_similarity(correctness_arr1, correctness_arr2, attack1_name, attack2_name):
     """analysis the similarity of the two correctness arrays"""
@@ -114,37 +117,38 @@ def analysis_image(dataset: Dataset, correctness_arr1, correctness_arr2):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='obtain_membership_inference_prediction')
+    parser = argparse.ArgumentParser(description='obtain_membership_inference_sample_level_analysis')
     parser.add_argument('--dataset', type=str, default="cifar10", help='the dataset to be used')
     parser.add_argument('--model', type=str, default="resnet56", help='architecture of the model')
     args = parser.parse_args()
 
     # loading predictions
     pred_shokri = utils.load_predictions \
-        (f"/data/public/miae_experiment/preds_sd0/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+        (f"/data/public/miae_experiment_overfit/preds_sd0/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
     pred_losstraj = utils.load_predictions \
-        (f"/data/public/miae_experiment/preds_sd0/{args .dataset}/{args.model}/losstraj/pred_losstraj.npy")
-    pred_yeom = utils.load_predictions \
-        (f"/data/public/miae_experiment_aug/preds_sd0/{args.dataset}/{args.model}/yeom/pred_yeom.npy")
+        (f"/data/public/miae_experiment_overfit/preds_sd0/{args .dataset}/{args.model}/losstraj/pred_losstraj.npy")
+    # pred_yeom = utils.load_predictions \
+    #     (f"/data/public/miae_experiment_overfit/preds_sd0/{args.dataset}/{args.model}/yeom/pred_yeom.npy")
     print(f"pearson correlation: {utils.pearson_correlation(pred_shokri, pred_losstraj):.4f}")
 
     # loading the target_dataset
     index_to_data, attack_set_membership = utils.load_target_dataset \
-        (f"/data/public/miae_experiment/target/{args.dataset}")
+        (f"/data/public/miae_experiment_overfit/target/{args.dataset}")
 
     # creating the Predictions object
     pred_shokri_obj = utils.Predictions(pred_shokri, attack_set_membership, "shokri (seed = 0)")
-    pred_losstraj_obj = utils.Predictions(pred_losstraj, attack_set_membership, "losstraj (seed = 0)")
-    pred_yeom_obj = utils.Predictions(pred_yeom, attack_set_membership, "yeom (seed = 0)")
     pred_shokri_binary = pred_shokri_obj.predictions_to_labels(threshold=0.5)
+    pred_losstraj_obj = utils.Predictions(pred_losstraj, attack_set_membership, "losstraj (seed = 0)")
     pred_losstraj_binary = pred_losstraj_obj.predictions_to_labels(threshold=0.5)
-    pred_yeom_binary = pred_yeom_obj.predictions_to_labels(threshold=0.5)
+    # pred_yeom_obj = utils.Predictions(pred_yeom, attack_set_membership, "yeom (seed = 0)")
+    # pred_yeom_binary = pred_yeom_obj.predictions_to_labels(threshold=0.5)
 
     correctness_shokri = correct_pred(pred_shokri_obj)
     correctness_losstraj = correct_pred(pred_losstraj_obj)
-    correctness_yeom = correct_pred(pred_yeom_obj)
+    # correctness_yeom = correct_pred(pred_yeom_obj)
 
     # analysis the similarity of the two correctness arrays
+    print(f"analysis of the similarity of the two correctness arrays using threshold = 0.5")
     analysis_preds_similarity(correctness_shokri, correctness_losstraj, "shokri", "losstraj")
 
     # obtain different ensemble predictions
@@ -158,11 +162,11 @@ if __name__ == '__main__':
 
     # obtain different seeds object for shokri, the number after the name is the seed
     pred_shokri_1 = utils.load_predictions \
-        (f"/data/public/miae_experiment_aug/preds_sd1/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+        (f"/data/public/miae_experiment_overfit/preds_sd1/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
     pred_shokri_2 = utils.load_predictions \
-        (f"/data/public/miae_experiment_aug/preds_sd2/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+        (f"/data/public/miae_experiment_overfit/preds_sd2/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
     pred_shokri_3 = utils.load_predictions \
-        (f"/data/public/miae_experiment_aug/preds_sd3/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+        (f"/data/public/miae_experiment_overfit/preds_sd3/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
     pred_shokri_1_obj = utils.Predictions(pred_shokri_1, attack_set_membership, "shokri (seed = 1)")
     pred_shokri_2_obj = utils.Predictions(pred_shokri_2, attack_set_membership, "shokri (seed = 2)")
     pred_shokri_3_obj = utils.Predictions(pred_shokri_3, attack_set_membership, "shokri (seed = 3)")
@@ -175,11 +179,11 @@ if __name__ == '__main__':
 
     # obtain different seeds object for losstraj, the number after the name is the seed
     pred_losstraj_1 = utils.load_predictions \
-        (f"/data/public/miae_experiment_aug/preds_sd1/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
+        (f"/data/public/miae_experiment_overfit/preds_sd1/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
     pred_losstraj_2 = utils.load_predictions \
-        (f"/data/public/miae_experiment_aug/preds_sd2/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
+        (f"/data/public/miae_experiment_overfit/preds_sd2/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
     pred_losstraj_3 = utils.load_predictions \
-        (f"/data/public/miae_experiment_aug/preds_sd3/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
+        (f"/data/public/miae_experiment_overfit/preds_sd3/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
     pred_losstraj_1_obj = utils.Predictions(pred_losstraj_1, attack_set_membership, "losstraj (seed = 1)")
     pred_losstraj_2_obj = utils.Predictions(pred_losstraj_2, attack_set_membership, "losstraj (seed = 2)")
     pred_losstraj_3_obj = utils.Predictions(pred_losstraj_3, attack_set_membership, "losstraj (seed = 3)")
@@ -190,33 +194,36 @@ if __name__ == '__main__':
     pred_losstraj_union_obj = utils.Predictions(pred_losstraj_union, attack_set_membership, "losstraj_union")
 
     # obtain different seeds object for yeom, the number after the name is the seed
-    pred_yeom_1 = utils.load_predictions \
-        (f"/data/public/miae_experiment_aug/preds_sd1/{args.dataset}/{args.model}/yeom/pred_yeom.npy")
-    pred_yeom_2 = utils.load_predictions \
-        (f"/data/public/miae_experiment_aug/preds_sd2/{args.dataset}/{args.model}/yeom/pred_yeom.npy")
-    pred_yeom_3 = utils.load_predictions \
-        (f"/data/public/miae_experiment_aug/preds_sd3/{args.dataset}/{args.model}/yeom/pred_yeom.npy")
-    pred_yeom_1_obj = utils.Predictions(pred_yeom_1, attack_set_membership, "yeom (seed = 1)")
-    pred_yeom_2_obj = utils.Predictions(pred_yeom_2, attack_set_membership, "yeom (seed = 2)")
-    pred_yeom_3_obj = utils.Predictions(pred_yeom_3, attack_set_membership, "yeom (seed = 3)")
-    pred_yeom_1_binary = pred_yeom_1_obj.predictions_to_labels(threshold=0.5)
-    pred_yeom_2_binary = pred_yeom_2_obj.predictions_to_labels(threshold=0.5)
-    pred_yeom_3_binary = pred_yeom_3_obj.predictions_to_labels(threshold=0.5)
-    pred_yeom_union = np.logical_and(np.logical_and(pred_yeom_binary, pred_yeom_1_binary), pred_yeom_2_binary)
-    pred_yeom_union_obj = utils.Predictions(pred_yeom_union, attack_set_membership, "yeom_union")
-
-
-    pred_average3 = utils.averaging_predictions([pred_shokri_3_obj, pred_losstraj_3_obj])
-    pred_majority_voting3 = utils.majority_voting([pred_shokri_3_obj, pred_losstraj_3_obj])
-    unanimous_voting3 = utils.unanimous_voting([pred_shokri_3_obj, pred_losstraj_3_obj])
-
+    # pred_yeom_1 = utils.load_predictions \
+    #     (f"/data/public/miae_experiment_overfit/preds_sd1/{args.dataset}/{args.model}/yeom/pred_yeom.npy")
+    # pred_yeom_2 = utils.load_predictions \
+    #     (f"/data/public/miae_experiment_overfit/preds_sd2/{args.dataset}/{args.model}/yeom/pred_yeom.npy")
+    # pred_yeom_3 = utils.load_predictions \
+    #     (f"/data/public/miae_experiment_overfit/preds_sd3/{args.dataset}/{args.model}/yeom/pred_yeom.npy")
+    # pred_yeom_1_obj = utils.Predictions(pred_yeom_1, attack_set_membership, "yeom (seed = 1)")
+    # pred_yeom_2_obj = utils.Predictions(pred_yeom_2, attack_set_membership, "yeom (seed = 2)")
+    # pred_yeom_3_obj = utils.Predictions(pred_yeom_3, attack_set_membership, "yeom (seed = 3)")
+    # pred_yeom_1_binary = pred_yeom_1_obj.predictions_to_labels(threshold=0.5)
+    # pred_yeom_2_binary = pred_yeom_2_obj.predictions_to_labels(threshold=0.5)
+    # pred_yeom_3_binary = pred_yeom_3_obj.predictions_to_labels(threshold=0.5)
+    # pred_yeom_union = np.logical_and(np.logical_and(pred_yeom_binary, pred_yeom_1_binary), pred_yeom_2_binary)
+    # pred_yeom_union_obj = utils.Predictions(pred_yeom_union, attack_set_membership, "yeom_union")
 
     # calculate the accuracy
     print(f"\ncorrect rate of shokri: {pred_shokri_obj.accuracy():.4f}")
     print(f"correct rate of losstraj: {pred_losstraj_obj.accuracy():.4f}")
-    print(f"correct rate of average: {pred_average_obj.accuracy():.4f}")
-    print(f"correct rate of majority_voting: {pred_majority_voting_obj.accuracy():.4f}")
-    print(f"correct rate of unanimous_voting: {unanimous_voting_obj.accuracy():.4f}")
+    # print(f"correct rate of average: {pred_average_obj.accuracy():.4f}")
+    # print(f"correct rate of majority_voting: {pred_majority_voting_obj.accuracy():.4f}")
+    # print(f"correct rate of unanimous_voting: {unanimous_voting_obj.accuracy():.4f}")
+
+    print(f"analysis of the similarity of the two correctness arrays using FPR = 0.1")
+    correctness_shokri_fpr = correct_pred_with_fpr(pred_shokri_obj, 0.1)
+    correctness_losstraj_fpr = correct_pred_with_fpr(pred_losstraj_obj, 0.1)
+    analysis_preds_similarity(correctness_shokri_fpr, correctness_losstraj_fpr, "shokri", "losstraj")
+
+    print(f"\ncorrect rate of shokri: {pred_shokri_obj.accuracy_at_fpr(0.1):.4f}")
+    print(f"correct rate of losstraj: {pred_losstraj_obj.accuracy_at_fpr(0.1):.4f}")
+
 
     # plot aug_graph
     # auc_graph_path = f"./{args.dataset}_{args.model}_auc with seeds.png"
@@ -225,30 +232,35 @@ if __name__ == '__main__':
     # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting], ["shokri", "losstraj", "average", "majority_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
 
     # plot venn diagram for different attacks to compare the similarity
-    venn_graph_path = f"./{args.dataset}_{args.model}_venn_s0.png"
-    venn_graph_name = f"{args.dataset} {args.model} Venn Diagram for Different Attacks’TP on seed = 0"
-    utils.plot_venn_diagram([pred_shokri_obj, pred_losstraj_obj, pred_yeom_obj], venn_graph_name, venn_graph_path,
-                            threshold=0.5, goal="attack_compare")
+    venn_graph_path_fpr = f"./{args.dataset}_{args.model}_venn_fix_fpr.png"
+    venn_graph_name_fpr = f"{args.dataset} {args.model} Venn Diagram for Different Attacks With Fixed FPR = 0.1"
+    utils.plot_venn_diagram([pred_shokri_obj, pred_losstraj_obj], venn_graph_name_fpr, venn_graph_path_fpr,
+                            goal="different_attacks_fpr", target_fpr=0.1)
+
+    venn_graph_path = f"./{args.dataset}_{args.model}_venn.png"
+    venn_graph_name = f"{args.dataset} {args.model} Venn Diagram for Different Attacks"
+    utils.plot_venn_diagram([pred_shokri_obj, pred_losstraj_obj], venn_graph_name, venn_graph_path,
+                            goal="different_attacks_seed", target_fpr=0)
 
     # plot the venn diagram for one attack but with different seeds
-    venn_graph_path_shokri_seed = f"./{args.dataset}_{args.model}_venn for shokri with seeds.png"
-    venn_graph_name_shokri_seed = f"{args.dataset} {args.model} Venn Diagram for Shokri with Different Seeds"
-    utils.plot_venn_diagram([pred_shokri_obj, pred_shokri_1_obj, pred_shokri_2_obj], venn_graph_name_shokri_seed,
-                            venn_graph_path_shokri_seed, threshold=0.5, goal="seed_compare")
+    # venn_graph_path_shokri_seed = f"./{args.dataset}_{args.model}_venn for shokri with seeds.png"
+    # venn_graph_name_shokri_seed = f"{args.dataset} {args.model} Venn Diagram for Shokri with Different Seeds, no aug"
+    # utils.plot_venn_diagram([pred_shokri_obj, pred_shokri_1_obj, pred_shokri_2_obj], venn_graph_name_shokri_seed,
+    #                         venn_graph_path_shokri_seed, goal="seed_compare")
+    #
+    # venn_graph_path_losstraj_seed = f"./{args.dataset}_{args.model}_venn for losstraj with seeds.png"
+    # venn_graph_name_losstraj_seed = f"{args.dataset} {args.model} Venn Diagram for Losstraj with Different Seeds, no aug"
+    # utils.plot_venn_diagram([pred_losstraj_obj, pred_losstraj_1_obj, pred_losstraj_2_obj], venn_graph_name_losstraj_seed,
+    #                         venn_graph_path_losstraj_seed, goal="seed_compare")
 
-    venn_graph_path_losstraj_seed = f"./{args.dataset}_{args.model}_venn for losstraj with seeds.png"
-    venn_graph_name_losstraj_seed = f"{args.dataset} {args.model} Venn Diagram for Losstraj with Different Seeds"
-    utils.plot_venn_diagram([pred_losstraj_obj, pred_losstraj_1_obj, pred_losstraj_2_obj], venn_graph_name_losstraj_seed,
-                            venn_graph_path_losstraj_seed, threshold=0.5, goal="seed_compare")
-
-    venn_graph_path_yeom_seed = f"./{args.dataset}_{args.model}_venn for yeom with seeds.png"
-    venn_graph_name_yeom_seed = f"{args.dataset} {args.model} venn for yeom with different seeds"
-    utils.plot_venn_diagram([pred_yeom_obj, pred_yeom_1_obj, pred_yeom_2_obj], venn_graph_name_yeom_seed,
-                            venn_graph_path_yeom_seed, threshold=0.5, goal="seed_compare")
+    # venn_graph_path_yeom_seed = f"./{args.dataset}_{args.model}_venn for yeom with seeds.png"
+    # venn_graph_name_yeom_seed = f"{args.dataset} {args.model} venn for yeom with different seeds, with aug"
+    # utils.plot_venn_diagram([pred_yeom_obj, pred_yeom_1_obj, pred_yeom_2_obj], venn_graph_name_yeom_seed,
+    #                         venn_graph_path_yeom_seed, goal="seed_compare")
 
     # loading the dataset
-    # trainset = utils.load_dataset(f"/data/public/miae_experiment_aug/target/{args.dataset}/target_trainset.pkl")
-    # testset = utils.load_dataset(f"/data/public/miae_experiment_aug/target/{args.dataset}/target_testset.pkl")
+    # trainset = utils.load_dataset(f"/data/public/miae_experiment_overfit_aug/target/{args.dataset}/target_trainset.pkl")
+    # testset = utils.load_dataset(f"/data/public/miae_experiment_overfit_aug/target/{args.dataset}/target_testset.pkl")
     # fullset = ConcatDataset([trainset, testset])
 
 
