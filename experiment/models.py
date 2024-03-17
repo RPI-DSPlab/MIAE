@@ -52,6 +52,10 @@ def create_mobilenet(num_classes=10, input_size=32):
     return MobileNet(cfg=cfg, num_classes=num_classes, input_size=input_size)
 
 
+def create_wrn28_10(num_classes=10, input_size=32):
+    return WideResNet_Yuetian(depth=28, in_channels=3, num_classes=num_classes,
+                      widen_factor=1, init_weights=True, data_scale=4)
+
 class Flatten(nn.Module):
     def forward(self, input):
         return input.view(input.size(0), -1)
@@ -432,3 +436,98 @@ class MobileNet(nn.Module):
 
         fwd = self.end_layers(fwd)
         return fwd
+
+
+class WideResidualBlock(nn.Module):
+    def __init__(self, in_planes, out_planes, stride, dropout_rate, widen_factor):
+        super(WideResidualBlock, self).__init__()
+        assert widen_factor > 0, "Widen factor must be greater than 0"
+        mid_planes = out_planes * widen_factor
+
+        self.bn1 = nn.BatchNorm2d(in_planes)
+        self.conv1 = nn.Conv2d(in_planes, mid_planes, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.dropout = nn.Dropout(p=dropout_rate)
+        self.bn2 = nn.BatchNorm2d(mid_planes)
+        self.conv2 = nn.Conv2d(mid_planes, out_planes, kernel_size=3, stride=1, padding=1, bias=False)
+        self.relu = nn.ReLU(inplace=True)
+
+        self.shortcut = nn.Sequential()
+        if stride != 1 or in_planes != out_planes:
+            self.shortcut = nn.Sequential(
+                nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False),
+            )
+
+    def forward(self, x):
+        out = self.conv1(F.relu(self.bn1(x)))
+        out = self.dropout(out)
+        out = self.conv2(F.relu(self.bn2(out)))
+        out += self.shortcut(x)
+        out = self.relu(out)
+        return out
+
+
+class WideResNet_Yuetian(nn.Module):
+    def __init__(self, depth, num_classes, data_scale, in_channels=3, widen_factor=1,
+                 dropout_rate=0.0, init_weights=True):
+        super(WideResNet_Yuetian, self).__init__()
+        self.in_planes = 16
+
+        self.depth = depth
+        self.widen_factor = widen_factor
+        self.data_scale = data_scale
+
+        assert ((depth - 4) % 6 == 0), 'Wide-resnet depth should be 6n+4'
+        n = (depth - 4) // 6
+
+        nStages = [16, 16 * self.widen_factor, 32 * self.widen_factor, 64 * self.widen_factor]
+
+        self.conv1 = nn.Conv2d(in_channels, nStages[0], kernel_size=3, stride=1, padding=1, bias=True)
+        self.layer1 = self._wide_layer(WideResidualBlock, nStages[1], n, stride=1,
+                                       dropout_rate=dropout_rate, widen_factor=self.widen_factor)
+        self.layer2 = self._wide_layer(WideResidualBlock, nStages[2], n, stride=2,
+                                       dropout_rate=dropout_rate, widen_factor=self.widen_factor)
+        self.layer3 = self._wide_layer(WideResidualBlock, nStages[3], n, stride=2,
+                                       dropout_rate=dropout_rate, widen_factor=self.widen_factor)
+        self.bn1 = nn.BatchNorm2d(nStages[3])
+
+        self.linear = nn.Linear(nStages[3], num_classes)
+
+        if init_weights:
+            self._initialize_weights()
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.Linear):
+                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+    def _wide_layer(self, block, planes, num_blocks, stride, dropout_rate, widen_factor):
+        strides = [stride] + [1] * (num_blocks - 1)
+        layers = []
+        for stride in strides:
+            layers.append(block(self.in_planes, planes, stride, dropout_rate, widen_factor))
+            self.in_planes = planes
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        out = self.conv1(x)
+
+        out = self.layer1(out)
+        out = self.layer2(out)
+        out = self.layer3(out)
+
+        out = F.relu(self.bn1(out))
+
+        out = F.avg_pool2d(out, self.data_scale * 2)
+        out = out.view(out.size(0), -1)
+        out = self.linear(out)
+
+        return out
+
+    def __str__(self):
+        return f"wrn{self.depth}-{self.widen_factor}"

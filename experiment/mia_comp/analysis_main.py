@@ -178,7 +178,7 @@ if __name__ == '__main__':
     auc_graph_path = f"./{args.dataset}_{args.model}_auc with seeds.png"
     auc_graph_name = f"{args.dataset} {args.model} auc with seeds"
     # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
-    utils.custom_auc([pred_shokri, pred_losstraj, pred_yeom], ["shokri", "losstraj", "yeom"], attack_set_membership, auc_graph_name, auc_graph_path)
+    utils.plot_auc([pred_shokri, pred_losstraj, pred_yeom], ["shokri", "losstraj", "yeom"], attack_set_membership, auc_graph_name, auc_graph_path)
 
 
     pred_average_obj = utils.Predictions(pred_average, attack_set_membership, "average")

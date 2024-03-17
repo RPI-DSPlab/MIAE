@@ -19,7 +19,6 @@ from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from torchvision import transforms
 
 
-
 class Predictions:
     def __init__(self, pred_arr: np.ndarray, ground_truth_arr: np.ndarray, name: str):
         """
@@ -72,17 +71,24 @@ class Predictions:
         :param target_fpr: target FPR
         :return: adjusted predictions as a numpy array
         """
-        pred_tensor = torch.tensor(self.pred_arr)
-        ground_truth_tensor = torch.tensor(self.ground_truth_arr)
+        pred_tensor = torch.tensor(self.pred_arr).float()
 
         current_fpr = self.compute_fpr()
         if current_fpr < target_fpr:
-            print(f"The current FPR is {current_fpr:.4f}, which is less than the target FPR {target_fpr:.4f}. "
-                  f"No adjustment is needed.")
-            return self.pred_arr
+            adjusted_pred_arr = self.pred_arr.copy()
+            return adjusted_pred_arr
 
         threshold = torch.quantile(pred_tensor, 1 - target_fpr)
         adjusted_pred_arr = (pred_tensor >= threshold).float().numpy()
+
+        return adjusted_pred_arr
+
+    def get_tp(self):
+        """
+        Get the indices of the true positive samples.
+        """
+        return np.where((self.predictions_to_labels() == 1) & (self.ground_truth_arr == 1))[0]
+
 
 class SampleHardness:
     def __init__(self, score_arr, name: str):
@@ -92,8 +98,8 @@ class SampleHardness:
         self.score_arr = score_arr
         self.name = name
 
-        self.max_score = np.max(self.score_arr)
-        self.min_score = np.min(self.score_arr)
+        self.max_score = int(np.max(self.score_arr))
+        self.min_score = int(np.min(self.score_arr))
 
     def plot_distribution(self, save_dir):
         """
@@ -105,16 +111,58 @@ class SampleHardness:
         plt.ylabel("Number of Samples")
         plt.savefig(save_dir)
 
-    def plot_distribution_pred_TP(self, pred: Predictions, save_dir):
+    def plot_distribution_pred_TP(self, tp, save_path, title=None):
         """
-        plot a histogram of the sample hardness scores for the true positive samples
+        Plot the distribution of the sample hardness scores for the true positive samples and entire score_arr.
+
+        :param tp: true positive samples
+        :param score_arr: sample hardness scores
         """
-        TP = np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0]
-        plt.hist(self.score_arr[TP], bins=20, range=(self.min_score, self.max_score))
-        plt.title(f"Distribution of {self.name} for True Positives")
+        # Define colors for each distribution
+        plt.clf()
+        all_samples_color = 'blue'
+        true_positives_color = 'orange'
+
+        # Plot histogram for all samples
+        plt.hist(self.score_arr, bins=self.max_score, range=(np.min(self.score_arr), np.max(self.score_arr)),
+                 color=all_samples_color, alpha=0.5, label='All Samples')
+
+        # Plot histogram for true positive samples
+        plt.hist(self.score_arr[list(tp)], bins=self.max_score, range=(np.min(self.score_arr), np.max(self.score_arr)),
+                 color=true_positives_color, alpha=0.5, label='TP Sample')
+
+        # Set plot title and labels
+        if title is not None:
+            plt.title(title)
+        else:
+            plt.title(f"Distribution of {self.name} for True Positives and All Samples")
         plt.xlabel(f"{self.name}")
         plt.ylabel("Number of Samples")
-        plt.savefig(save_dir)
+
+        # Add legend
+        plt.legend()
+
+        # Save the plot
+        plt.savefig(save_path, dpi=300)
+
+
+def common_tp(preds: List[Predictions], fpr=None):
+    """
+    Find the common true positive samples among the predictions
+    Note that this is used for both different attacks or same attack with different seeds.
+
+    :param preds: list of Predictions
+    :param fpr: FPR values for adjusting the predictions
+    """
+    if fpr is None:
+        TP = [np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0] for pred in preds]
+    else:
+        adjusted_preds = [pred.adjust_fpr(fpr) for pred in preds]
+        TP = [np.where((adjusted_preds[i] == 1) & (preds[i].ground_truth_arr == 1))[0] for i in range(len(preds))]
+    common_TP = set(TP[0])
+    for i in range(1, len(TP)):
+        common_TP = common_TP.intersection(set(TP[i]))
+    return common_TP
 
 
 def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str, threshold: float = 0.5,
@@ -146,7 +194,8 @@ def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str, 
         venn_function = venn2_unweighted if len(pred_list) == 2 else venn3_unweighted
     elif goal == "single_attack":
         for pred in pred_list:
-            attacked_points[pred.name] = set(np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
+            attacked_points[pred.name] = set(
+                np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
         venn_sets = tuple(attacked_points[pred.name] for pred in pred_list)
         venn_function = venn3_unweighted
     elif goal == "different_attacks_fpr" and target_fpr is not None:
@@ -207,8 +256,10 @@ def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, title: str,
 
     # plot the t-SNE graph based on the low-dimensional data
     plt.figure(figsize=(10, 10), dpi=300)
-    plt.scatter(low_dim_data[indices_by_attack1, 0], low_dim_data[indices_by_attack1, 1], label=pred_list[0].name, c='r', s=1)
-    plt.scatter(low_dim_data[indices_by_attack2, 0], low_dim_data[indices_by_attack2, 1], label=pred_list[1].name, c='b', s=1)
+    plt.scatter(low_dim_data[indices_by_attack1, 0], low_dim_data[indices_by_attack1, 1], label=pred_list[0].name,
+                c='r', s=1)
+    plt.scatter(low_dim_data[indices_by_attack2, 0], low_dim_data[indices_by_attack2, 1], label=pred_list[1].name,
+                c='b', s=1)
     plt.scatter(low_dim_data[indices_by_both, 0], low_dim_data[indices_by_both, 1], label="Both", c='g', s=1)
     plt.scatter(low_dim_data[indices_by_none, 0], low_dim_data[indices_by_none, 1], label="None", c='k', s=1)
 
@@ -222,7 +273,6 @@ def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, title: str,
     plt.title(title)
     plt.legend()
     plt.savefig(save_path, dpi=300)
-
 
 
 def plot_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: str, save_path: str):
@@ -299,24 +349,29 @@ def load_target_dataset(filepath: str):
 
     return index_to_data, attack_set_membership
 
+
 def load_dataset(file_path: str) -> Dataset:
     with open(file_path, "rb") as f:
         dataset = pickle.load(f)
     return dataset
 
 
-def custom_auc(pred_list: List[np.ndarray],
-               name_list: list[str],
-               ground_truth_arr: np.ndarray,
-               title: str, save_path: str = None
-               ):
+def plot_auc(pred_list: List[np.ndarray],
+             name_list: List[str],
+             ground_truth_arr: np.ndarray,
+             title: str,
+             fpr_values: List[float] = None,
+             log_scale: bool = True,
+             save_path: str = None):
     """
-    plot the AUC graph for the predictions from different attacks (ported from Yuetian's code)
-    :param pred_list: np.ndarray list of predictions
-    :param name_list: list of names for the attacks
-    :param ground_truth_arr: np.ndarray of ground truth
-    :param title: title of the graph
-    :param save_path: path to save the graph
+    Plot the AUC graph for the predictions from different attacks, the code is adapted from tensorflow_privacy.
+    :param pred_list: List of predictions.
+    :param name_list: List of names for the attacks.
+    :param ground_truth_arr: Ground truth array.
+    :param title: Title of the graph.
+    :param fpr_values: list of FPR values to plot vertical lines
+    :param log_scale: Whether to plot in log scale. Defaults to True.
+    :param save_path: Path to save the graph.
     """
 
     def sweep(score: np.ndarray, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float, float]:
@@ -372,15 +427,25 @@ def custom_auc(pred_list: List[np.ndarray],
         do_plot(prediction, answer,
                 f"{legend}\n")
 
-    plt.semilogx()
-    plt.semilogy()
+    if log_scale:
+        plt.semilogx()
+        plt.semilogy()
+    else:
+        plt.xscale('linear')
+        plt.yscale('linear')
+
     plt.xlim(1e-5, 1)
     plt.ylim(1e-5, 1)
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
     plt.plot([0, 1], [0, 1], ls='--', color='gray')
-    # plt.subplots_adjust(bottom=.18, left=.18, top=.96, right=.96)
     plt.legend(fontsize=8)
+
+    # Draw vertical lines on specified FPR values
+    if fpr_values:
+        for fpr_value in fpr_values:
+            plt.axvline(x=fpr_value, color='r', linestyle='--', linewidth=1)
+            plt.text(fpr_value, 0.5, f'FPR={fpr_value:.3f}', color='r', rotation=90)
 
     if save_path is not None:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)

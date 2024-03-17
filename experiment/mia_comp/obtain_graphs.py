@@ -22,36 +22,31 @@ import utils
 
 import utils
 import sys
+
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 
-def load_and_create_predictions(attack: List[str], dataset: str, architecture: str, seeds: List[int] = None,
-                                data_aug: str = "True") -> Dict[str, List[utils.Predictions]]:
+def load_and_create_predictions(attack: List[str], dataset: str, architecture: str, data_path: str, seeds: List[int] = None,
+                                ) -> Dict[str, List[utils.Predictions]]:
     """
     load the predictions of the attack of all seeds and create the Predictions objects
     :param attack: List[str]: list of attack names
     :param dataset: str: dataset name
     :param architecture: str: target model architecture
     :param seeds: List[int]: list of random seeds
-    :param data_aug: str: whether data augmentation is enabled
-    :return: Dict[str, List[Predictions]]: dictionary with attack names as keys and corresponding Predictions objects list as values
+    :return: Dict[str, List[Predictions]]: dictionary with attack names as keys and corresponding Predictions objects
+    for different seed list as values
     """
-    if seeds is None:
-        seeds = [0]
-    if data_aug == "True":
-        aug_str = "_aug"
-    else:
-        aug_str = ""
 
     # load the target_dataset
-    target_dataset_path = f"/data/public/miae_experiment{aug_str}/target/{dataset}/"
+    target_dataset_path = f"{data_path}/target/{dataset}/"
     index_to_data, attack_set_membership = utils.load_target_dataset(target_dataset_path)
 
     pred_dict = {}
     for att in attack:
         pred_list = []
         for s in seeds:
-            pred_path = f"/data/public/miae_experiment{aug_str}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
+            pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
             pred_arr = utils.load_predictions(pred_path)
             pred_obj = utils.Predictions(pred_arr, attack_set_membership, att)
             pred_list.append(pred_obj)
@@ -59,7 +54,8 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
     return pred_dict
 
 
-def plot_venn(pred_dict: Dict[str, List[utils.Predictions]], graph_type: str, graph_title: str, graph_path: str, seed: int = None, fpr: float = None):
+def plot_venn(pred_dict: Dict[str, List[utils.Predictions]], graph_type: str, graph_title: str, graph_path: str,
+              seed: int = None, fpr: float = None):
     """
     plot the venn diagrams and save them
     :param pred_dict: dictionary with attack names as keys and corresponding Predictions objects list as values
@@ -89,6 +85,65 @@ def plot_venn(pred_dict: Dict[str, List[utils.Predictions]], graph_type: str, gr
         raise ValueError(f"Invalid graph type: {graph_type}")
 
 
+def plot_auc(predictions: Dict[str, utils.Predictions], graph_title: str, graph_path: str,
+             fprs: List[float] = None, log_scale: bool = True):
+    """
+    plot the AUC of the different attacks
+    :param predictions: List[utils.Predictions]: list of Predictions objects
+    :param graph_title: str: title of the graph
+    :param graph_path: str: path to save the graph
+    :param fprs: List[float]: list of false positive rates to be plotted as vertical lines on auc graph,
+    if None, no need to plot any vertical line
+    :param log_scale: bool: whether to plot the graph in log scale
+
+    :return: None
+    """
+    attack_names, prediction_list = [], []
+    ground_truth = None
+    for attack, pred in predictions.items():
+        attack_names.append(attack)
+        prediction_list.append(pred.pred_arr)
+        ground_truth = pred.ground_truth_arr if ground_truth is None else ground_truth
+
+    utils.plot_auc(prediction_list, attack_names, ground_truth, graph_title, fprs, log_scale, graph_path)
+
+
+def plot_hardness_distribution(predictions: Dict[str, List[utils.Predictions]] or Dict[str, utils.Predictions],
+                               hardness: utils.SampleHardness,
+                               graph_title: str, graph_path: str, fpr_list: List[float] = None):
+    """
+    plot the hardness distribution of the different attacks
+    :param predictions: List[utils.Predictions]: list of Predictions objects
+    :param graph_title: str: title of the graph
+    :param graph_path: str: path to save the graph
+    :param hardness: str: type of hardness: [il]
+    :return: None
+    """
+    attack_names, prediction_list = [], []
+    for attack, pred in predictions.items():
+        attack_names.append(attack)
+        prediction_list.append(pred)
+
+        if fpr_list is None:  # prediction is determined by 0.5 threshold
+            attack_tp = pred.get_tp()
+            hardness.plot_distribution_pred_TP(attack_tp, save_path=graph_path+f"_vs_{attack}_tp.png", title=graph_title+f" {attack} TP")
+
+        else:  # prediction is determined by fpr threshold
+            for fpr in fpr_list:
+                attack_tp = utils.common_tp(pred, fpr)
+                hardness.plot_distribution_pred_TP(attack_tp, save_path=graph_path+f"_vs_{attack}_tp_fpr{fpr}.png", title=graph_title+f" {attack} TP at {fpr} FPR")
+
+    # if fpr_list is None:  # prediction is determined by 0.5 threshold
+    #     common_tp = utils.common_tp(prediction_list)
+    #     hardness.plot_distribution_pred_TP(common_tp, save_path=graph_path+"_vs_common_tp.png", title=graph_title+" common TP")
+    #
+    # else:  # prediction is determined by fpr threshold
+    #     for fpr in fpr_list:
+    #         common_tp = utils.common_tp(prediction_list, fpr)
+    #         hardness.plot_distribution_pred_TP(common_tp, save_path=graph_path+f"_vs_common_tp_fpr{fpr}.png", title=graph_title+f" common TP at {fpr} FPR")
+    #
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='obtain_membership_inference_graphs')
     # Required arguments
@@ -96,22 +151,47 @@ if __name__ == '__main__':
     parser.add_argument("--dataset", type=str, default="cifar10", help='dataset: [cifar10, cifar100, cinic10]')
     parser.add_argument("--architecture", type=str, default="resnet56",
                         help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet]')
-    parser.add_argument("--graph-type", type=str, default="venn", help="Type of graph")
+    parser.add_argument("--graph-type", type=str, default="venn",
+                        help="Type of graph: [venn, auc, hardness_distribution]")
     parser.add_argument("--graph-title", type=str, help="Title of the graph")
+    parser.add_argument("--data-path", type=str, help="Path to the data directory")
     parser.add_argument("--graph-path", type=str, help="Path to save the graph")
 
     # Optional arguments
     parser.add_argument("--seed", type=int, nargs="+", help="Random seed")
     parser.add_argument("--data_aug", type=str, default="True", help="Whether data augmentation is enabled")
 
+    # graph specific arguments
+    # for venn diagram
+
+    # for auc graph
+    parser.add_argument("--fpr", type=float, nargs="+",
+                        help="True positive rate to be plotted as vertical line on auc graph")
+    parser.add_argument("--log-scale", type=bool, default="True", help="Whether to plot the graph in log scale")
+
+    # for hardness distribution graph
+    parser.add_argument("--hardness", type=str, default="None", help="Type of hardness: [il]")
+    parser.add_argument("--hardness-path", type=str, help="Path to the hardness file")
+
     args = parser.parse_args()
 
     # load the predictions of the target model on the dataset for different seeds
-    pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.seed, args.data_aug)
+    pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path, args.seed)
 
     # plot and save the graphs
-    plot_venn(pred_dict, args.graph_type, args.graph_title, args.graph_path, args.seed[0])
+    if args.graph_type == "venn":
+        plot_venn(pred_dict, args.graph_type, args.graph_title, args.graph_path, args.seed[0])
 
+    elif args.graph_type == "auc":
+        for i, seed in enumerate(args.seed):
+            pred_dict_seed = {k: v[i] for k, v in pred_dict.items()}
+            plot_auc(pred_dict_seed, args.graph_title+f" sd{seed}", args.graph_path+f"_sd{seed}.png", args.fpr, args.log_scale)
 
+    elif args.graph_type == "hardness_distribution":
+        path_to_load = f"{args.hardness_path}/{args.dataset}/{args.architecture}/{args.hardness}/{args.hardness}_score.pkl"
+        hardness_arr = utils.load_example_hardness(path_to_load)
+        hardness = utils.SampleHardness(hardness_arr, args.hardness)
+        plot_hardness_distribution(pred_dict, hardness, args.graph_title, args.graph_path, args.fpr)
 
-
+    else:
+        raise ValueError(f"Invalid graph type: {args.graph_type}")
