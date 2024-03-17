@@ -19,11 +19,16 @@ conda activate conda-zhiqi
 for dataset in "${datasets[@]}"; do
   # if assign different num_epoch for different dataset
   if [ "$dataset" == "cifar10" ]; then
-    num_epoch=100
+    num_epoch=60
   elif [ "$dataset" == "cifar100" ]; then
-    num_epoch=150
+    num_epoch=100
   elif [ "$dataset" == "cinic10" ]; then
-    num_epoch=150
+    num_epoch=100
+  fi
+
+  # adjustment for wrn32_4
+  if ["$archs" == "wrn32_4"]; then
+    num_epoch=$num_epoch + 20
   fi
 
   mkdir -p "$data_dir/$dataset"

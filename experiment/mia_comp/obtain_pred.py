@@ -176,6 +176,10 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
         return shokri_mia.ShokriAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+    if args.attack == "lira":
+        return lira_mia(
+            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
+             'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
     else:
         raise ValueError("Invalid attack type")
 

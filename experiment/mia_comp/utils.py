@@ -16,7 +16,6 @@ from matplotlib_venn import venn2, venn2_unweighted, venn3, venn3_unweighted
 import torch
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from torchvision import transforms
-from typing import List, Dict
 
 
 
@@ -81,58 +80,38 @@ class Predictions:
 
         threshold = torch.quantile(pred_tensor, 1 - target_fpr)
         adjusted_pred_arr = (pred_tensor >= threshold).float().numpy()
-
         return adjusted_pred_arr
-
-    def accuracy_at_fpr(self, target_fpr):
+class SampleHardness:
+    def __init__(self, score_arr, name: str):
         """
-        Compute the accuracy at a given FPR.
-        :param target_fpr: target FPR
-        :return: accuracy at the given FPR
-        """
-        adjusted_pred_arr = self.adjust_fpr(target_fpr)
-        return np.mean(adjusted_pred_arr == self.ground_truth_arr)
 
-    def compute_tpr(self):
         """
-        Compute the true positive rate (TPR) of the predictions.
+        self.score_arr = score_arr
+        self.name = name
+
+        self.max_score = np.max(self.score_arr)
+        self.min_score = np.min(self.score_arr)
+
+    def plot_distribution(self, save_dir):
         """
-        # Convert predictions and ground truth to PyTorch tensors if they are not already
-        pred_tensor = torch.tensor(self.pred_arr)
-        ground_truth_tensor = torch.tensor(self.ground_truth_arr)
-        true_positive = torch.sum(pred_tensor * ground_truth_tensor)
-        total_positives = torch.sum(ground_truth_tensor)
-        TPR = true_positive.float() / total_positives.float()
-        return TPR.item()
-
-    def adjust_tpr(self, target_tpr):
+        plot a histogram of the sample hardness scores
         """
-        Adjust the predictions to achieve a target TPR.
-        :param target_tpr: target TPR
-        :return: adjusted predictions as a numpy array
+        plt.hist(self.score_arr, bins=20, range=(self.min_score, self.max_score))
+        plt.title(f"Distribution of {self.name}")
+        plt.xlabel(f"{self.name}")
+        plt.ylabel("Number of Samples")
+        plt.savefig(save_dir)
+
+    def plot_distribution_pred_TP(self, pred: Predictions, save_dir):
         """
-        pred_tensor = torch.tensor(self.pred_arr)
-
-        current_tpr = self.compute_tpr()
-        if current_tpr > target_tpr:
-            print(f"No adjustment is needed. " 
-                    f"The current TPR is greater than the target TPR.")
-            return self.pred_arr
-
-        threshold = torch.quantile(pred_tensor, 1 - target_tpr)
-        adjusted_pred_arr = (pred_tensor >= threshold).float().numpy()
-
-        return adjusted_pred_arr
-
-
-    def accuracy_at_tpr(self, target_tpr):
+        plot a histogram of the sample hardness scores for the true positive samples
         """
-        Compute the accuracy at a given TPR.
-        :param target_tpr: target TPR
-        :return: accuracy at the given TPR
-        """
-        adjusted_pred_arr = self.adjust_tpr(target_tpr)
-        return np.mean(adjusted_pred_arr == self.ground_truth_arr)
+        TP = np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0]
+        plt.hist(self.score_arr[TP], bins=20, range=(self.min_score, self.max_score))
+        plt.title(f"Distribution of {self.name} for True Positives")
+        plt.xlabel(f"{self.name}")
+        plt.ylabel("Number of Samples")
+        plt.savefig(save_dir)
 
 def common_tp_preds(pred_list: List[Predictions]) -> Predictions:
     """
@@ -210,7 +189,6 @@ def plot_venn_diagram(pred_list: List[Predictions], title: str, save_path: str, 
             attacked_points[pred.name] = set(np.where((pred.pred_arr == 1) & (pred.ground_truth_arr == 1))[0])
         venn_sets = [attacked_points[pred.name] for pred in pred_list]
         venn_function = venn2_unweighted if len(pred_list) == 2 else venn3_unweighted
-        # venn_function = venn2 if len(pred_list) == 2 else venn3
     elif goal == "single_attack":
         for pred in pred_list:
             attacked_points[pred.name] = set(
@@ -341,6 +319,19 @@ def load_predictions(file_path: str) -> np.ndarray:
     """
     prediction = np.load(file_path)
     return prediction
+
+
+def load_example_hardness(file_path: str) -> np.ndarray:
+    """
+    Load example hardness scores from a file.
+
+    :param file_path: path to the file containing the example hardness scores
+    :return: example hardness scores as a numpy array
+    """
+    with open(file_path, "rb") as f:
+        example_hardness = pickle.load(f)
+    return example_hardness
+
 
 def load_target_dataset(filepath: str):
     """
