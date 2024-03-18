@@ -4,7 +4,7 @@
 datasets=("cifar10")
 archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
 mias=("losstraj" "shokri" "yeom")
-categories=("threshold/single_attack" "threshold/common_TP" "FPR/single_attack" "FPR/common_TP")
+categories=("threshold/common_TP" "single_attack" "FPR/common_TP")
 seeds=(0 1 2 3)
 
 # Prepare the parameter lists for the experiment
@@ -19,7 +19,7 @@ for seed in "${seeds[@]}"; do
 done
 
 
-experiment_dir="/data/public/miae_experiment_aug"
+experiment_dir="/data/public/comp_mia_data/miae_experiment_aug"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 
@@ -34,7 +34,7 @@ fi
 venn_dir="$graph_dir/venn"
 mkdir -p "$venn_dir"
 if [ -d "$venn_dir" ]; then
-    echo "Directory '$graph_dir' already exists. Skipping..."
+    echo "Directory '$venn_dir' already exists. Skipping..."
 else
     echo "Error: Failed to create directory '$venn_dir'."
     exit 1
@@ -42,6 +42,12 @@ fi
 
 for category in "${categories[@]}"; do
     mkdir -p "$venn_dir/$category"
+    if [ -d "$venn_dir/$category" ]; then
+        echo "Directory '$venn_dir/$category' already exists. Skipping..."
+    else
+        echo "Error: Failed to create directory '$venn_dir/$category'."
+        exit 1
+    fi
 done
 
 cd /home/zhangc26/MIAE/experiment/mia_comp
@@ -62,19 +68,26 @@ for category in "${categories[@]}"; do
                 python obtain_graphs.py --dataset "$dataset" \
                                         --architecture "$arch" \
                                         --attacks ${mialist}\
+                                        --threshold "None" \
+                                        --fpr "0.1" \
+                                        --single_attack_name "None" \
                                         --graph_type "venn" \
                                         --graph_title "Venn Diagram for $dataset, $arch" \
                                         --graph_path "$miae_dir" \
                                         --seed ${seedlist}\
                                         --data_aug "True"
 
-                # Check if the Venn diagram was created
-#                if [ -f "$miae_dir/Venn Diagram for $dataset, $arch.png" ]; then
-#                    echo "Venn diagram for $dataset, $arch successfully created."
-#                else
-#                    echo "Error: Failed to create Venn diagram for $dataset, $arch."
-#                    exit 1
-#                fi
+
+#                 Check if the Venn diagram was created
+                if [ -f "$miae_dir/Venn Diagram for $dataset, $arch.png" ]; then
+                    echo "Venn diagram for $dataset, $arch successfully created."
+                    # echo the address
+                    echo "$miae_dir/Venn Diagram for $dataset, $arch.png"
+                else
+                    echo "Error 001: Failed to create Venn diagram for $dataset, $arch."
+
+                    exit 1
+                fi
             done
         done
     else
@@ -88,19 +101,21 @@ for category in "${categories[@]}"; do
                     python obtain_graphs.py --dataset "$dataset" \
                                             --architecture "$arch" \
                                             --attacks ${mialist}\
+                                            --threshold "None" \
+                                            --fpr "0.1" \
                                             --graph_type "venn" \
                                             --graph_title "Venn Diagram for $dataset, $arch, $mia" \
                                             --graph_path "$miae_dir" \
                                             --seed ${seedlist}\
                                             --data_aug "True"
 
-                    # Check if the Venn diagram was created
-#                    if [ -f "$miae_dir/Venn Diagram for $dataset, $arch, $mia.png" ]; then
-#                        echo "Venn diagram for $dataset, $arch, $mia successfully created."
-#                    else
-#                        echo "Error: Failed to create Venn diagram for $dataset, $arch, $mia."
-#                        exit 1
-#                    fi
+#                     Check if the Venn diagram was created
+                    if [ -f "$miae_dir/Venn Diagram for $dataset, $arch, $mia.png" ]; then
+                        echo "Venn diagram for $dataset, $arch, $mia successfully created."
+                    else
+                        echo "Error: Failed to create Venn diagram for $dataset, $arch, $mia."
+                        exit 1
+                    fi
                 done
             done
         done

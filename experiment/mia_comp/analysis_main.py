@@ -185,60 +185,6 @@ if __name__ == '__main__':
     pred_majority_voting_obj = utils.Predictions(pred_majority_voting, attack_set_membership, "majority_voting")
     unanimous_voting_obj = utils.Predictions(unanimous_voting, attack_set_membership, "unanimous_voting")
 
-    # # obtain different seeds object for shokri, the number after the name is the seed
-    # pred_shokri_1 = utils.load_predictions \
-    #     (f"/data/public/miae_experiment_overfit/preds_sd1/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
-    # pred_shokri_2 = utils.load_predictions \
-    #     (f"/data/public/miae_experiment_overfit/preds_sd2/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
-    # pred_shokri_3 = utils.load_predictions \
-    #     (f"/data/public/miae_experiment_overfit/preds_sd3/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
-    # pred_shokri_1_obj = utils.Predictions(pred_shokri_1, attack_set_membership, "shokri (seed = 1)")
-    # pred_shokri_2_obj = utils.Predictions(pred_shokri_2, attack_set_membership, "shokri (seed = 2)")
-    # pred_shokri_3_obj = utils.Predictions(pred_shokri_3, attack_set_membership, "shokri (seed = 3)")
-    # pred_shokri_1_binary = pred_shokri_1_obj.predictions_to_labels(threshold=0.5)
-    # pred_shokri_2_binary = pred_shokri_2_obj.predictions_to_labels(threshold=0.5)
-    # pred_shokri_3_binary = pred_shokri_3_obj.predictions_to_labels(threshold=0.5)
-    # pred_shokri_union = np.logical_and(np.logical_and(pred_shokri_binary, pred_shokri_1_binary), pred_shokri_2_binary)
-    # pred_shokri_union_obj = utils.Predictions(pred_shokri_union, attack_set_membership, "shokri_union")
-
-
-    # obtain different seeds object for losstraj, the number after the name is the seed
-    # pred_losstraj_1 = utils.load_predictions \
-    #     (f"/data/public/miae_experiment_aug/preds_sd1/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
-    # pred_losstraj_2 = utils.load_predictions \
-    #     (f"/data/public/miae_experiment_aug/preds_sd2/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
-    # pred_losstraj_3 = utils.load_predictions \
-    #     (f"/data/public/miae_experiment_aug/preds_sd3/{args.dataset}/{args.model}/losstraj/pred_losstraj.npy")
-    # pred_losstraj_1_obj = utils.Predictions(pred_losstraj_1, attack_set_membership, "losstraj (seed = 1)")
-    # pred_losstraj_2_obj = utils.Predictions(pred_losstraj_2, attack_set_membership, "losstraj (seed = 2)")
-    # pred_losstraj_3_obj = utils.Predictions(pred_losstraj_3, attack_set_membership, "losstraj (seed = 3)")
-    # pred_losstraj_1_binary = pred_losstraj_1_obj.predictions_to_labels(threshold=0.5)
-    # pred_losstraj_2_binary = pred_losstraj_2_obj.predictions_to_labels(threshold=0.5)
-    # pred_losstraj_3_binary = pred_losstraj_3_obj.predictions_to_labels(threshold=0.5)
-    # pred_losstraj_union = np.logical_and(np.logical_and(pred_losstraj_binary, pred_losstraj_1_binary), pred_losstraj_2_binary)
-    # pred_losstraj_union_obj = utils.Predictions(pred_losstraj_union, attack_set_membership, "losstraj_union")
-
-    # # obtain different seeds object for yeom, the number after the name is the seed
-    # pred_yeom_1 = utils.load_predictions \
-    #     (f"/data/public/miae_experiment_aug/preds_sd1/{args.dataset}/{args.model}/yeom/pred_yeom.npy")
-    # pred_yeom_2 = utils.load_predictions \
-    #     (f"/data/public/miae_experiment_aug/preds_sd2/{args.dataset}/{args.model}/yeom/pred_yeom.npy")
-    # pred_yeom_3 = utils.load_predictions \
-    #     (f"/data/public/miae_experiment_aug/preds_sd3/{args.dataset}/{args.model}/yeom/pred_yeom.npy")
-    # pred_yeom_1_obj = utils.Predictions(pred_yeom_1, attack_set_membership, "yeom (seed = 1)")
-    # pred_yeom_2_obj = utils.Predictions(pred_yeom_2, attack_set_membership, "yeom (seed = 2)")
-    # pred_yeom_3_obj = utils.Predictions(pred_yeom_3, attack_set_membership, "yeom (seed = 3)")
-    # pred_yeom_1_binary = pred_yeom_1_obj.predictions_to_labels(threshold=0.5)
-    # pred_yeom_2_binary = pred_yeom_2_obj.predictions_to_labels(threshold=0.5)
-    # pred_yeom_3_binary = pred_yeom_3_obj.predictions_to_labels(threshold=0.5)
-    # pred_yeom_union = np.logical_and(np.logical_and(pred_yeom_binary, pred_yeom_1_binary), pred_yeom_2_binary)
-    # pred_yeom_union_obj = utils.Predictions(pred_yeom_union, attack_set_membership, "yeom_union")
-
-
-    # pred_average3 = utils.averaging_predictions([pred_shokri_3_obj, pred_losstraj_3_obj])
-    # pred_majority_voting3 = utils.majority_voting([pred_shokri_3_obj, pred_losstraj_3_obj])
-    # unanimous_voting3 = utils.unanimous_voting([pred_shokri_3_obj, pred_losstraj_3_obj])
-
 
     # calculate the accuracy
     print(f"\ncorrect rate of shokri: {pred_shokri_obj.accuracy():.4f}")
