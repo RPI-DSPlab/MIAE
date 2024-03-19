@@ -37,26 +37,26 @@ for dataset in "${datasets[@]}"; do
         graph_path="${plot_dir}/${dataset}/${arch}/auc_log_scale"
         python3 obtain_graphs.py --graph-type "auc"\
                                   --dataset "${dataset}"\
-                                  --graph-title "${graph_title}"\
-                                  --data-path "${experiment_dir}"\
-                                  --graph-path "${graph_path}"\
+                                  --graph_title "${graph_title}"\
+                                  --data_path "${experiment_dir}"\
+                                  --graph_path "${graph_path}"\
                                   --architecture "${arch}"\
                                   --attacks ${mialist}\
                                   --fpr ${fprlist}\
                                   --seed ${seedlist}\
-                                  --log-scale "True"
+                                  --log_scale "True"
 
         graph_title="auc for ${dataset} ${arch}"
         graph_path="${plot_dir}/${dataset}/${arch}/auc_linear_scale"
-        python3 obtain_graphs.py --graph-type "auc"\
+        python3 obtain_graphs.py --graph_type "auc"\
                                   --dataset "${dataset}"\
-                                  --graph-title "${graph_title}"\
-                                  --data-path "${experiment_dir}"\
-                                  --graph-path "${graph_path}"\
+                                  --graph_title "${graph_title}"\
+                                  --data_path "${experiment_dir}"\
+                                  --graph_path "${graph_path}"\
                                   --architecture "${arch}"\
                                   --attacks ${mialist}\
                                   --fpr ${fprlist}\
                                   --seed ${seedlist}\
-                                  --log-scale "False"
+                                  --log_scale "False"
     done
 done
