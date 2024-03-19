@@ -15,6 +15,6 @@ class IterationLearnedConfig(ExampleHardnessConfig, ABC):
         super().__init__(config)
 
         # il only parameters: either 'iteration_learned' or 'epoch_learned'
-        self.learned_metric = config.get("learned_metric", "iteration_learned")
+        self.learned_metric = config.get("learned_metric", "epoch_learned")
 
 
