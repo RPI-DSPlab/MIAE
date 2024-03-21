@@ -14,6 +14,7 @@ import os
 import pickle
 
 import torch
+from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 import numpy as np
 from tqdm import tqdm
@@ -81,6 +82,24 @@ def train_example_hardness(example_hardness: str, dataset: Dataset, args, model)
 
     return example_hardness
 
+def plot_hist(data, title, xlabel, ylabel, save_path, bins=20):
+    """
+    This function is used to plot a histogram of the data.
+    :param data: the data to be plotted
+    :param title: the title of the plot
+    :param xlabel: the label of the x-axis
+    :param ylabel: the label of the y-axis
+    :param save_path: the path to save the plot
+    :param bins: the number of bins in the histogram
+    :return: None
+    """
+    plt.hist(data, bins=bins)
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.savefig(save_path)
+    plt.close()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Obtain the example hardness on a given dataset")
@@ -97,7 +116,7 @@ if __name__ == '__main__':
     # optional arguments (eg. training hyperparameters)
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument('--epochs', type=int, default=100, help='number of epochs for example hardness training')
-    parser.add_argument('--batch_size', type=int, default=512, help='batch size')
+    parser.add_argument('--batch_size', type=int, default=2000, help='batch size')
     parser.add_argument('--num_workers', type=int, default=2, help='number of workers')
     parser.add_argument('--device', type=str, default='cuda', help='device to train the model')
 
@@ -153,3 +172,7 @@ if __name__ == '__main__':
     scores = np.array(scores)
     with open(os.path.join(args.result_path, f"{args.example_hardness}_score.pkl"), "wb") as f:
         pickle.dump(scores, f)
+
+    # plot the histogram of the scores
+    plot_hist(scores, f"{args.example_hardness} score", "score", "frequency",
+              os.path.join(args.result_path, f"{args.example_hardness}_score_hist.png"), bins=args.epochs+1)

@@ -23,13 +23,13 @@ batch_size = 128
 targetset_ratio = 0.35  # percentage of training set to be used for training/test the target model
 train_test_ratio = 0.5  # percentage of training set to be used for training any model that uses a test set
 lr = 0.1
-target_train_epochs = 100
+target_train_epochs = 160
 
 current_dir = os.getcwd()
 target_model_dir = os.path.join(current_dir,"target_model")
 attack_dir = os.path.join(current_dir,"attack")
 savedir = os.path.join(current_dir,"results")
-seed = 0
+seed = 24
 
 aug = True
 
@@ -198,7 +198,7 @@ def main():
 
 
     # -- STEP 1: train target model
-    target_model = models.create_wideresnet32_4()
+    target_model = models.create_wrn28_10()
     untrained_target_model = deepcopy(target_model)
     print("Target model: ", target_model.__class__.__name__, " is being trained with ", target_trainset.__class__.__name__, "len: ", len(target_trainset), " and ", target_testset.__class__.__name__, "len: ", len(target_testset))
     if not os.path.exists(os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pkl")):
@@ -212,7 +212,7 @@ def main():
     merlin_aux_info = merlin_mia.MerlinAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': batch_size})
     lira_aux_info = lira_mia.LiraAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': target_train_epochs})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': target_train_epochs, 'log_path': attack_dir+'/lira'})
 
     losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model), untrained_target_model)
     merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model), untrained_target_model)
@@ -242,5 +242,5 @@ if __name__ == "__main__":
     main()
 
 
-        
+
 

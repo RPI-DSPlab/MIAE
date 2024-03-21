@@ -4,6 +4,7 @@ import warnings
 import random
 import numpy as np
 import torch
+from matplotlib import pyplot as plt
 
 
 def set_seed(seed=1234):
@@ -45,3 +46,4 @@ def avg_result(dir, file_suf='.json', roundToInt=False):
             avg_dict[i] = int(avg_dict[i] / len(pd_dict_list))
 
     return avg_dict
+

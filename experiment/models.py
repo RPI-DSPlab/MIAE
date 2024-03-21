@@ -52,6 +52,10 @@ def create_mobilenet(num_classes=10, input_size=32):
     return MobileNet(cfg=cfg, num_classes=num_classes, input_size=input_size)
 
 
+def create_wrn28_10(num_classes=10, input_size=32):
+    return WideResNet_Yuetian(depth=28, in_channels=3, num_classes=num_classes,
+                      widen_factor=1, init_weights=True, data_scale=4)
+
 class Flatten(nn.Module):
     def forward(self, input):
         return input.view(input.size(0), -1)
