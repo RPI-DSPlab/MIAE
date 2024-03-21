@@ -46,7 +46,8 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
         for s in seeds:
             pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
             pred_arr = utils.load_predictions(pred_path)
-            pred_obj = utils.Predictions(pred_arr, attack_set_membership, att)
+            attack_name = f"{att}_sd{s}"
+            pred_obj = utils.Predictions(pred_arr, attack_set_membership, attack_name)
             pred_list.append(pred_obj)
         pred_dict[att] = pred_list
     return pred_dict
