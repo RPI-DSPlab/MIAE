@@ -14,6 +14,7 @@ Work flow:
 import argparse
 import os
 import torch
+from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from typing import List, Dict
 import numpy as np
@@ -128,6 +129,34 @@ def plot_hardness_distribution(predictions: Dict[str, List[utils.Predictions]] o
     #
 
 
+def multi_seed_convergence(predictions: Dict[str, List[utils.Predictions]], graph_title: str, graph_path: str, fpr = None):
+    """
+    plot the convergence of the different attacks
+    :param predictions: List[utils.Predictions]: list of Predictions objects, each element in a list is a Predictions object for a specific seed
+    :param graph_title: str: title of the graph
+    :param graph_path: str: path to save the graph
+    :param fpr: float: false positive rate to be plotted as vertical line on auc graph
+    :return: None
+    """
+    # obtain the number of true positives for each attack at num of seeds
+    num_tp_dict = {}
+    for attack, pred_list in predictions.items():
+        num_tp_dict[attack] = []
+        for i in range(len(pred_list)):
+            num_tp_dict[attack].append(len(utils.common_tp(pred_list[:i+1], fpr)))
+
+    # plotting
+    plt.clf()
+    for attack, num_tp in num_tp_dict.items():
+        plt.plot(num_tp, label=attack)
+    plt.xlabel("Number of seeds")
+    plt.ylabel("Number of True Positives")
+    plt.title(graph_title)
+    plt.legend()
+    plt.savefig(graph_path)
+    plt.close()
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='obtain_membership_inference_graphs')
     # Required arguments
@@ -135,7 +164,7 @@ if __name__ == '__main__':
     parser.add_argument("--architecture", type=str, default="resnet56",
                         help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet]')
     parser.add_argument("--attacks", type=str, nargs="+", default=None, help='MIA type: [losstraj, yeom, shokri]')
-    parser.add_argument("--graph_type", type=str, default="venn", help="Type of graph")
+    parser.add_argument("--graph_type", type=str, default="venn", help="graph_type: [venn, auc, hardness_distribution, multi_seed_convergence]")
     parser.add_argument("--graph_title", type=str, help="Title of the graph")
     parser.add_argument("--graph_path", type=str, help="Path to save the graph")
     parser.add_argument("--data_path", type=str, help="Path to the original predictions and target dataset")
@@ -206,6 +235,12 @@ if __name__ == '__main__':
         hardness_arr = utils.load_example_hardness(path_to_load)
         hardness = utils.SampleHardness(hardness_arr, args.hardness)
         plot_hardness_distribution(pred_dict, hardness, args.graph_title, args.graph_path, args.fpr)
+
+    elif args.graph_type == "multi_seed_convergence":
+        for fpr in args.fpr:
+            graph_title = args.graph_title + f" FPR = {fpr}"
+            graph_path = args.graph_path + f"_fpr{fpr}.png"
+            multi_seed_convergence(pred_dict, graph_title, graph_path, fpr)
 
     else:
         raise ValueError(f"Invalid graph type: {args.graph_type}")

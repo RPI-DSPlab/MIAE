@@ -26,7 +26,7 @@ done
 for dataset in "${datasets[@]}"; do
     for arch in "${archs[@]}"; do
         # clean the plot directory
-        rm -rf ${plot_dir}/${dataset}/${arch}
+        rm -rf "${plot_dir:?}/${dataset:?}/${arch:?}"
         mkdir -p ${plot_dir}/${dataset}/${arch}
 
         # convert fprlist to space-separated string
@@ -35,7 +35,7 @@ for dataset in "${datasets[@]}"; do
         # plot the graphs
         graph_title="auc for ${dataset} ${arch} in log scale"
         graph_path="${plot_dir}/${dataset}/${arch}/auc_log_scale"
-        python3 obtain_graphs.py --graph-type "auc"\
+        python3 obtain_graphs.py --graph_type "auc"\
                                   --dataset "${dataset}"\
                                   --graph_title "${graph_title}"\
                                   --data_path "${experiment_dir}"\
