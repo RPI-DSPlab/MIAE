@@ -222,7 +222,6 @@ class wide_basic(nn.Module):
         out += self.layers[1](x)
         return out
 
-
 class WideResNet(nn.Module):
     def __init__(self, num_blocks, widen_factor, num_classes, dropout_rate, input_size):
         super(WideResNet, self).__init__()
@@ -313,6 +312,13 @@ class WideResNet(nn.Module):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
 
+    def get_features(self, x):
+        out = self.init_conv(x)
+
+        for layer in self.layers:
+            out = layer(out)
+
+        return out
 
 class ConvBlock(nn.Module):
     def __init__(self, conv_params):
@@ -455,10 +461,17 @@ class VGG(nn.Module):
             elif isinstance(m, nn.Linear):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
-
+                
     def get_num_layers(self):
             return 14
 
+    def get_features(self, x):
+        out = self.init_conv(x)
+
+        for layer in self.layers:
+            out = layer(out)
+
+        return out
 
 class Block(nn.Module):
     '''Depthwise conv + Pointwise conv'''
@@ -517,40 +530,46 @@ class MobileNet(nn.Module):
             in_channels = out_channels
         return layers
 
-    def forward(self, x, k=0, train=True):
-        """
-
-        :param x:
-        :param k: output fms from the kth conv2d or the last layer
-        :return:
-        """
-        if k is None:
-            fwd = self.init_conv(x)
-
-            for layer in self.layers:
-                fwd = layer(fwd)
-
-            fwd = self.end_layers(fwd)
-
-            return fwd
-
-        # the following is for getting feature maps
+    def forward(self, x):
         fwd = self.init_conv(x)
-        n_layer = 0
-        _fm = None
-
-        for idx, layer in enumerate(self.layers):
+        for layer in self.layers:
             fwd = layer(fwd)
-            if not train:
-                if isinstance(layer, Block):
-                    if n_layer == k:
-                        return None, fwd.view(fwd.size(0), -1)
-                    n_layer += 1
 
         fwd = self.end_layers(fwd)
-        if not train:
-            if k == n_layer:
-                _fm = torch.softmax(fwd, 1)
-                return None, _fm.view(_fm.size(0), -1)
-        else:
-            return fwd
+        return fwd
+
+    def get_features(self, x):
+        fwd = self.init_conv(x)
+
+        for layer in self.layers:
+            fwd = layer(fwd)
+
+        return fwd
+
+class WideResidualBlock(nn.Module):
+    def __init__(self, in_planes, out_planes, stride, dropout_rate, widen_factor):
+        super(WideResidualBlock, self).__init__()
+        assert widen_factor > 0, "Widen factor must be greater than 0"
+        mid_planes = out_planes * widen_factor
+
+        self.bn1 = nn.BatchNorm2d(in_planes)
+        self.conv1 = nn.Conv2d(in_planes, mid_planes, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.dropout = nn.Dropout(p=dropout_rate)
+        self.bn2 = nn.BatchNorm2d(mid_planes)
+        self.conv2 = nn.Conv2d(mid_planes, out_planes, kernel_size=3, stride=1, padding=1, bias=False)
+        self.relu = nn.ReLU(inplace=True)
+
+        self.shortcut = nn.Sequential()
+        if stride != 1 or in_planes != out_planes:
+            self.shortcut = nn.Sequential(
+                nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False),
+            )
+
+    def forward(self, x):
+        out = self.conv1(F.relu(self.bn1(x)))
+        out = self.dropout(out)
+        out = self.conv2(F.relu(self.bn2(out)))
+        out += self.shortcut(x)
+        out = self.relu(out)
+        return out
+

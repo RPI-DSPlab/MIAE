@@ -5,12 +5,11 @@ import os
 import pickle
 import sys
 
-sys.path.append(os.path.join(os.getcwd(), "..", ".."))
-from experiment import models
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
+import models
 from typing import List, Optional, Tuple, Callable, Union
 from sklearn.metrics import roc_auc_score, roc_curve, auc
 from sklearn.manifold import TSNE
-from sklearn.preprocessing import StandardScaler
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib_venn import venn2, venn2_unweighted, venn3, venn3_unweighted
@@ -18,7 +17,7 @@ import torch
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from torchvision import transforms
 from typing import Dict, List, Tuple
-
+from PIL import Image
 
 
 class Predictions:
@@ -69,26 +68,26 @@ class Predictions:
 
     def adjust_fpr(self, target_fpr):
         """
-        Adjust the predictions to achieve a target FPR.
+        Adjust the predictions to achieve a target FPR using ROC curve.
         :param target_fpr: target FPR
         :return: adjusted predictions as a numpy array
         """
-        pred_tensor = torch.tensor(self.pred_arr).float()
+        fpr, tpr, thresholds = roc_curve(self.ground_truth_arr, self.pred_arr)
+        # Find the threshold closest to the target FPR
+        idx = np.argmin(np.abs(fpr - target_fpr))
+        threshold = thresholds[idx]
 
-        current_fpr = self.compute_fpr()
-        if current_fpr < target_fpr:
-            adjusted_pred_arr = self.pred_arr.copy()
-            return adjusted_pred_arr
+        # Adjust predictions based on the selected threshold
+        adjusted_pred_arr = (self.pred_arr >= threshold).astype(int)
 
-        threshold = torch.quantile(pred_tensor, 1 - target_fpr)
-        adjusted_pred_arr = (pred_tensor >= threshold).float().numpy()
         return adjusted_pred_arr
 
-    def get_tp(self):
+    def get_tp(self) -> np.ndarray:
         """
         Get the indices of the true positive samples.
         """
         return np.where((self.predictions_to_labels() == 1) & (self.ground_truth_arr == 1))[0]
+
 
 class SampleHardness:
     def __init__(self, score_arr, name: str):
@@ -146,13 +145,14 @@ class SampleHardness:
         plt.savefig(save_path, dpi=300)
 
 
-def common_tp(preds: List[Predictions], fpr=None):
+def common_tp(preds: List[Predictions], fpr=None, set_op="intersection"):
     """
-    Find the common true positive samples among the predictions
+    Find the union/intersection true positive samples among the predictions
     Note that this is used for both different attacks or same attack with different seeds.
 
     :param preds: list of Predictions
     :param fpr: FPR values for adjusting the predictions
+
     """
     if fpr is None:
         TP = [np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0] for pred in preds]
@@ -160,9 +160,29 @@ def common_tp(preds: List[Predictions], fpr=None):
         adjusted_preds = [pred.adjust_fpr(fpr) for pred in preds]
         TP = [np.where((adjusted_preds[i] == 1) & (preds[i].ground_truth_arr == 1))[0] for i in range(len(preds))]
     common_TP = set(TP[0])
+    if len(TP) < 2:
+        return common_TP
     for i in range(1, len(TP)):
-        common_TP = common_TP.intersection(set(TP[i]))
+        if set_op == "union":
+            common_TP = common_TP.union(set(TP[i]))
+        elif set_op == "intersection":
+            common_TP = common_TP.intersection(set(TP[i]))
     return common_TP
+
+
+def union_tp(preds: List[Predictions], fpr=None):
+    """
+    Find the union true positive samples among the predictions, it's a wrapper for common_tp
+    """
+    return common_tp(preds, fpr, set_op="union")
+
+
+def intersection_tp(preds: List[Predictions], fpr=None):
+    """
+    Finds the intersection true positive samples among the predictions, it's a wrapper for common_tp
+    """
+    return common_tp(preds, fpr, set_op="intersection")
+
 
 def common_tp_preds(pred_list: List[Predictions]) -> Predictions:
     """
@@ -177,14 +197,16 @@ def common_tp_preds(pred_list: List[Predictions]) -> Predictions:
     # get the common true positive predictions using logical and
     common_tp = pred_list[0].predictions_to_labels()
     for i in range(1, len(pred_list)):
-            common_tp = np.logical_and(common_tp, pred_list[i].predictions_to_labels())
+        common_tp = np.logical_and(common_tp, pred_list[i].predictions_to_labels())
 
     # create a new Predictions object for the common true positive predictions
     ground_truth_arr = pred_list[0].ground_truth_arr
-    name = pred_list[0].name.split()[0]
+    name = pred_list[0].name.split('_')[0]
     return Predictions(common_tp, ground_truth_arr, name)
 
-def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Optional[float] = 0, target_fpr: Optional[float] = 0) -> List[Predictions]:
+
+def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Optional[float] = 0,
+                          target_fpr: Optional[float] = 0) -> List[Predictions]:
     """
     Process the data for the Venn diagram: get the pred_list
     :param pred_dict: dictionary of Predictions from different attacks, key: attack name, value: list of Predictions of different seeds
@@ -209,7 +231,8 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
             adjusted_pred_list = []
             for pred in pred_obj_list:
                 adjusted_pred_arr = pred.adjust_fpr(target_fpr)
-                adjusted_pred_obj = Predictions(adjusted_pred_arr, pred.ground_truth_arr, pred.name)
+                name = pred.name.split('_')[0]
+                adjusted_pred_obj = Predictions(adjusted_pred_arr, pred.ground_truth_arr, name)
                 adjusted_pred_list.append(adjusted_pred_obj)
             adjusted_pred_dict[attack] = adjusted_pred_list
 
@@ -221,7 +244,8 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
 
     return result
 
-def plot_venn_diagram(pred_list: List[Predictions], goal:str, title: str, save_path: str):
+
+def plot_venn_diagram(pred_list: List[Predictions], goal: str, title: str, save_path: str):
     """
     plot the Venn diagram for the predictions based on the goal.
     :param pred_list: list of Predictions from different attacks
@@ -241,16 +265,16 @@ def plot_venn_diagram(pred_list: List[Predictions], goal:str, title: str, save_p
         venn_function = venn2_unweighted if len(pred_list) == 2 else venn3_unweighted
     elif goal == "single_attack":
         for pred in pred_list:
-            attacked_points[pred.name] = set(np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
+            attacked_points[pred.name].update(i for i, prob in enumerate(pred.pred_arr) if prob > 0.5)
         venn_sets = tuple(attacked_points[pred.name] for pred in pred_list)
         venn_function = venn2_unweighted if len(pred_list) == 2 else venn3_unweighted
-
 
     circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
     venn_labels = [pred.name for pred in pred_list]
     venn_function(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
     plt.title(title)
     plt.savefig(f"{save_path}.png", dpi=300)
+
 
 def find_pairwise_preds(pred_list: List[Predictions]) -> List[Tuple[Predictions, Predictions]]:
     """
@@ -265,6 +289,7 @@ def find_pairwise_preds(pred_list: List[Predictions]) -> List[Tuple[Predictions,
             pairs.append((pred_list[i], pred_list[j]))
     return pairs
 
+
 def plot_venn_diagram_pairwise(pred_pair_list: List[Tuple[Predictions, Predictions]], graph_title: str, save_path: str):
     """
     Plot Venn diagrams for each pair of predictions in the given list.
@@ -277,19 +302,61 @@ def plot_venn_diagram_pairwise(pred_pair_list: List[Tuple[Predictions, Predictio
         pred_1, pred_2 = pair
         attacked_points_1 = set(np.where((pred_1.pred_arr == 1) & (pred_1.ground_truth_arr == 1))[0])
         attacked_points_2 = set(np.where((pred_2.pred_arr == 1) & (pred_2.ground_truth_arr == 1))[0])
-        circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
+        circle_colors = ['#EB001B', '#F79E1B']
         venn2_unweighted(subsets=(attacked_points_1, attacked_points_2), set_labels=(pred_1.name, pred_2.name), set_colors=circle_colors)
         plt.title(f"{graph_title}: {pred_1.name} vs {pred_2.name}")
         plt.savefig(f"{save_path}_{pred_1.name}_vs_{pred_2.name}.png", dpi=300)
         plt.close()
 
+def extract_features(model, dataset, target_layer=None):
+    """
+    Extract features from a given model for each image in the dataset.
 
-def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, title: str, save_path: str, perplexity: int = 30):
+    :param model: the pre-trained model
+    :param dataset: the dataset
+    :param target_layer: optional, the layer from which to extract features
+    :return: extracted features
+    """
+    # Set model to evaluation mode
+    model.eval()
+
+    # Define the transformation
+    transform = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    # Extract features from the chosen layer
+    features = []
+    print(f"the length of the dataset is {len(dataset)}")
+    with torch.no_grad():
+        for i in range(len(dataset)):
+            if i % 1000 == 0:
+                print(f"processing the {i}th image")
+            img, _ = dataset[i]
+
+            img_pil = transforms.ToPILImage()(img)
+
+            # Apply transformation
+            img_transformed = transform(img_pil)
+            img_transformed = img_transformed.unsqueeze(0)
+            if target_layer is not None:
+                feature = model.get_features(img_transformed, target_layer)
+            else:
+                feature = model.get_features(img_transformed)
+            feature = feature.view(feature.size(0), -1)
+            features.append(feature.squeeze().numpy())
+    return np.array(features)
+
+def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, model_name: str, title: str, save_path: str, perplexity: int = 30):
     """
     Plot the t-SNE graph for the predictions from different attacks.
 
     :param pred_list: list of Predictions from different attacks
     :param dataset: the dataset
+    :param model_name: the name of our model
     :param title: title of the graph
     :param save_path: path to save the graph
     :param perplexity: perplexity for t-SNE (default: 30)
@@ -298,48 +365,44 @@ def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, title: str,
     if len(pred_list) < 2:
         raise ValueError("At least 2 attacks are required for comparison.")
 
-    # get the high-dimensional data
-    high_dim_data = []
-    for i in range(len(dataset)):
-        img, _ = dataset[i]
-        high_dim_data.append(img.numpy().flatten())
-    high_dim_data = np.array(high_dim_data)
-    print(f"the shape of the high_dim_data: {high_dim_data.shape} and the 1st image: {high_dim_data[0]}")
+    # get model
+    print(f"start loading model {model_name}")
+    try:
+        model = models.get_model(model_name, 10, 32)
+    except ValueError:
+        raise ValueError("Invalid model name.")
+    print(f"finish loading model {model_name}")
 
-    # get the low-dimensional data by applying t-SNE
-    tsne = TSNE(n_components=2, perplexity=20)
+    # Extract features from the chosen model
+    print(f"start extracting features from the model {model_name}")
+    high_dim_data = extract_features(model, dataset)
+    print(f"finish extracting features from the model {model_name}")
+
+    # Perform t-SNE on the extracted features
+    print(f"apply t-SNE on the extracted features")
+    tsne = TSNE(n_components=2, perplexity=perplexity)
     low_dim_data = tsne.fit_transform(high_dim_data)
-    print(f"the shape of the low_dim_data: {low_dim_data.shape} and the 1st image: {low_dim_data[0]}")
+    print(f"get low dimensional data from t-SNE, its shape is {low_dim_data.shape}")
 
-    # Separate the data into four categories
-    # Create indices for different attack categories
-    indices_by_attack1 = np.where(pred_list[0].predictions_to_labels() == pred_list[0].ground_truth_arr)[0]
-    indices_by_attack2 = np.where(pred_list[1].predictions_to_labels() == pred_list[1].ground_truth_arr)[0]
-    indices_by_both = np.intersect1d(indices_by_attack1, indices_by_attack2)
-    indices_by_none = np.setdiff1d(np.arange(len(dataset)), np.union1d(indices_by_attack1, indices_by_attack2))
-    # print the number of points in each category
-    print(f"Number of points in {pred_list[0].name}: {len(indices_by_attack1)}")
-    print(f"Number of points in {pred_list[1].name}: {len(indices_by_attack2)}")
-    print(f"Number of points in both: {len(indices_by_both)}")
-    print(f"Number of points in none: {len(indices_by_none)}")
-
-    # plot the t-SNE graph based on the low-dimensional data
+    # Plot the t-SNE graph
+    attack_names = [pred.name for pred in pred_list]
     plt.figure(figsize=(10, 10), dpi=300)
-    plt.scatter(low_dim_data[indices_by_attack1, 0], low_dim_data[indices_by_attack1, 1], label=pred_list[0].name, c='r', s=1)
-    plt.scatter(low_dim_data[indices_by_attack2, 0], low_dim_data[indices_by_attack2, 1], label=pred_list[1].name, c='b', s=1)
-    plt.scatter(low_dim_data[indices_by_both, 0], low_dim_data[indices_by_both, 1], label="Both", c='g', s=1)
-    plt.scatter(low_dim_data[indices_by_none, 0], low_dim_data[indices_by_none, 1], label="None", c='k', s=1)
+    for i, pred in enumerate(pred_list):
+        indices = np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0]
+        color = plt.cm.tab10(i)
+        plt.scatter(low_dim_data[indices, 0], low_dim_data[indices, 1], label=attack_names[i], s=1, color=color)
 
     # Set limits for the plot based on the range of low-dimensional data
     min_x, min_y = np.min(low_dim_data, axis=0)
     max_x, max_y = np.max(low_dim_data, axis=0)
-    margin = 5  # Add some margin for better visualization
-
+    margin = 5
     plt.xlim(min_x - margin, max_x + margin)
     plt.ylim(min_y - margin, max_y + margin)
+
     plt.title(title)
     plt.legend()
     plt.savefig(save_path, dpi=300)
+
 
 def plot_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: str, save_path: str):
     """
@@ -371,6 +434,7 @@ def plot_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: s
 
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
 
+
 def save_accuracy(pred: List[Predictions], file_path: str, target_fpr: Optional[float] = None):
     """
     save the accuracy of the prediction to a .txt file
@@ -388,6 +452,7 @@ def save_accuracy(pred: List[Predictions], file_path: str, target_fpr: Optional[
         print(f"Error: Unable to write to file '{file_path}': {e}")
     finally:
         file.close()
+
 
 def load_predictions(file_path: str) -> np.ndarray:
     """
