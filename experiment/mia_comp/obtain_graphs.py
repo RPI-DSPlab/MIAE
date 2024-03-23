@@ -14,6 +14,7 @@ Work flow:
 import argparse
 import os
 import torch
+from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from typing import List, Dict
 import numpy as np
@@ -46,7 +47,8 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
         for s in seeds:
             pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
             pred_arr = utils.load_predictions(pred_path)
-            pred_obj = utils.Predictions(pred_arr, attack_set_membership, att)
+            attack_name = f"{att}_sd{s}"
+            pred_obj = utils.Predictions(pred_arr, attack_set_membership, attack_name)
             pred_list.append(pred_obj)
         pred_dict[att] = pred_list
     return pred_dict
@@ -128,6 +130,43 @@ def plot_hardness_distribution(predictions: Dict[str, List[utils.Predictions]] o
     #
 
 
+def multi_seed_convergence(predictions: Dict[str, List[utils.Predictions]], graph_title: str, graph_path: str, set_op, fpr=None):
+    """
+    plot the convergence of the different attacks
+    :param predictions: List[utils.Predictions]: list of Predictions objects, each element in a list is a Predictions object for a specific seed
+    :param graph_title: str: title of the graph
+    :param graph_path: str: path to save the graph
+    :param set_op: str: set operation to be used for the convergence: [union, intersection]
+    :param fpr: float: false positive rate to be plotted as vertical line on auc graph
+    :return: None
+    """
+    # obtain the number of true positives for each attack at num of seeds
+    num_tp_dict = {}
+    for attack, pred_list in predictions.items():
+        num_tp_dict[attack] = []
+        for i in range(len(pred_list)):
+            if set_op == "union":
+                num_tp_dict[attack].append(len(utils.union_tp(pred_list[:i+1], fpr)))
+            elif set_op == "intersection":
+                num_tp_dict[attack].append(len(utils.intersection_tp(pred_list[:i+1], fpr)))
+            else:
+                raise ValueError(f"Invalid set operation: {set_op}")
+
+    # plotting
+    plt.clf()
+    num_seed = 0
+    for attack, num_tp in num_tp_dict.items():
+        plt.plot(num_tp, label=attack)
+        num_seed = len(num_tp)
+    plt.xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    plt.xlabel("Number of seeds")
+    plt.ylabel("Number of True Positives")
+    plt.title(graph_title)
+    plt.legend()
+    plt.savefig(graph_path)
+    plt.close()
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='obtain_membership_inference_graphs')
     # Required arguments
@@ -135,7 +174,7 @@ if __name__ == '__main__':
     parser.add_argument("--architecture", type=str, default="resnet56",
                         help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet]')
     parser.add_argument("--attacks", type=str, nargs="+", default=None, help='MIA type: [losstraj, yeom, shokri]')
-    parser.add_argument("--graph_type", type=str, default="venn", help="Type of graph")
+    parser.add_argument("--graph_type", type=str, default="venn", help="graph_type: [venn, auc, hardness_distribution, multi_seed_convergence]")
     parser.add_argument("--graph_title", type=str, help="Title of the graph")
     parser.add_argument("--graph_path", type=str, help="Path to save the graph")
     parser.add_argument("--data_path", type=str, help="Path to the original predictions and target dataset")
@@ -169,27 +208,27 @@ if __name__ == '__main__':
             pred_list = pred_dict[args.single_attack_name][:3]
             plot_venn(pred_list, args.graph_goal, args.graph_title, args.graph_path)
         elif args.graph_goal == "common_tp":
-            if int(args.threshold) == 0:
+            if args.threshold == 0:
                 fpr_list = [float(f) for f in args.fpr]
                 for f in fpr_list:
                     pred_list = utils.data_process_for_venn(pred_dict, threshold=0, target_fpr=f)
                     graph_title = args.graph_title+f" FPR = {f}"
                     graph_path = args.graph_path+f"_{f}"
                     plot_venn(pred_list, args.graph_goal, graph_title, graph_path)
-            elif int(args.threshold) != 0:
+            elif args.threshold != 0:
                 pred_list = utils.data_process_for_venn(pred_dict, threshold=args.threshold, target_fpr=0)
                 graph_title = args.graph_title + f" threshold = {args.threshold}"
                 graph_path = args.graph_path + f"_{args.threshold}"
                 plot_venn(pred_list, args.graph_goal, graph_title, graph_path)
         elif args.graph_goal == "pairwise":
-            if int(args.threshold) == 0:
+            if args.threshold == 0:
                 fpr_list = [float(f) for f in args.fpr]
                 for f in fpr_list:
                     pred_list = utils.data_process_for_venn(pred_dict, threshold=0, target_fpr=f)
                     graph_title = args.graph_title+f" FPR = {f}"
                     graph_path = args.graph_path+f"_{f}"
                     plot_venn(pred_list, args.graph_goal, graph_title, graph_path)
-            elif int(args.threshold) != 0:
+            elif args.threshold != 0:
                 pred_list = utils.data_process_for_venn(pred_dict, threshold=args.threshold, target_fpr=0)
                 graph_title = args.graph_title + f" threshold = {args.threshold}"
                 graph_path = args.graph_path + f"_{args.threshold}"
@@ -206,6 +245,18 @@ if __name__ == '__main__':
         hardness_arr = utils.load_example_hardness(path_to_load)
         hardness = utils.SampleHardness(hardness_arr, args.hardness)
         plot_hardness_distribution(pred_dict, hardness, args.graph_title, args.graph_path, args.fpr)
+
+    elif args.graph_type == "multi_seed_convergence_intersection":
+        for fpr in args.fpr:
+            graph_title = args.graph_title + f" FPR = {fpr}"
+            graph_path = args.graph_path + f"_fpr{fpr}.png"
+            multi_seed_convergence(pred_dict, graph_title, graph_path, "intersection", fpr)
+
+    elif args.graph_type == "multi_seed_convergence_union":
+        for fpr in args.fpr:
+            graph_title = args.graph_title + f" FPR = {fpr}"
+            graph_path = args.graph_path + f"_fpr{fpr}.png"
+            multi_seed_convergence(pred_dict, graph_title, graph_path, "union", fpr)
 
     else:
         raise ValueError(f"Invalid graph type: {args.graph_type}")
