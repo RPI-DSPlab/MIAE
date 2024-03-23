@@ -241,9 +241,9 @@ class PdHardness(ExampleMetric, ABC):
         Train the prediction depth metric
         """
         seeds = self.config.seeds
-        model_copy = copy.deepcopy(self.model)  # we need to copy the model because we will train it multiple times
         for seed in seeds:
             sm_util.set_seed(seed)
+            model_copy = copy.deepcopy(self.model)  # we need to copy the model because we will train it multiple times
             model_copy = model_copy.to(self.device)
             # train the model
             model_copy, history = self._trainer(model_copy)
