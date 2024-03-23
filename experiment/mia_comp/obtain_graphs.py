@@ -47,7 +47,8 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
         for s in seeds:
             pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
             pred_arr = utils.load_predictions(pred_path)
-            pred_obj = utils.Predictions(pred_arr, attack_set_membership, att)
+            attack_name = f"{att}_sd{s}"
+            pred_obj = utils.Predictions(pred_arr, attack_set_membership, attack_name)
             pred_list.append(pred_obj)
         pred_dict[att] = pred_list
     return pred_dict
@@ -207,27 +208,27 @@ if __name__ == '__main__':
             pred_list = pred_dict[args.single_attack_name][:3]
             plot_venn(pred_list, args.graph_goal, args.graph_title, args.graph_path)
         elif args.graph_goal == "common_tp":
-            if int(args.threshold) == 0:
+            if args.threshold == 0:
                 fpr_list = [float(f) for f in args.fpr]
                 for f in fpr_list:
                     pred_list = utils.data_process_for_venn(pred_dict, threshold=0, target_fpr=f)
                     graph_title = args.graph_title+f" FPR = {f}"
                     graph_path = args.graph_path+f"_{f}"
                     plot_venn(pred_list, args.graph_goal, graph_title, graph_path)
-            elif int(args.threshold) != 0:
+            elif args.threshold != 0:
                 pred_list = utils.data_process_for_venn(pred_dict, threshold=args.threshold, target_fpr=0)
                 graph_title = args.graph_title + f" threshold = {args.threshold}"
                 graph_path = args.graph_path + f"_{args.threshold}"
                 plot_venn(pred_list, args.graph_goal, graph_title, graph_path)
         elif args.graph_goal == "pairwise":
-            if int(args.threshold) == 0:
+            if args.threshold == 0:
                 fpr_list = [float(f) for f in args.fpr]
                 for f in fpr_list:
                     pred_list = utils.data_process_for_venn(pred_dict, threshold=0, target_fpr=f)
                     graph_title = args.graph_title+f" FPR = {f}"
                     graph_path = args.graph_path+f"_{f}"
                     plot_venn(pred_list, args.graph_goal, graph_title, graph_path)
-            elif int(args.threshold) != 0:
+            elif args.threshold != 0:
                 pred_list = utils.data_process_for_venn(pred_dict, threshold=args.threshold, target_fpr=0)
                 graph_title = args.graph_title + f" threshold = {args.threshold}"
                 graph_path = args.graph_path + f"_{args.threshold}"
