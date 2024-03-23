@@ -129,12 +129,13 @@ def plot_hardness_distribution(predictions: Dict[str, List[utils.Predictions]] o
     #
 
 
-def multi_seed_convergence(predictions: Dict[str, List[utils.Predictions]], graph_title: str, graph_path: str, fpr = None):
+def multi_seed_convergence(predictions: Dict[str, List[utils.Predictions]], graph_title: str, graph_path: str, set_op, fpr=None):
     """
     plot the convergence of the different attacks
     :param predictions: List[utils.Predictions]: list of Predictions objects, each element in a list is a Predictions object for a specific seed
     :param graph_title: str: title of the graph
     :param graph_path: str: path to save the graph
+    :param set_op: str: set operation to be used for the convergence: [union, intersection]
     :param fpr: float: false positive rate to be plotted as vertical line on auc graph
     :return: None
     """
@@ -143,12 +144,20 @@ def multi_seed_convergence(predictions: Dict[str, List[utils.Predictions]], grap
     for attack, pred_list in predictions.items():
         num_tp_dict[attack] = []
         for i in range(len(pred_list)):
-            num_tp_dict[attack].append(len(utils.common_tp(pred_list[:i+1], fpr)))
+            if set_op == "union":
+                num_tp_dict[attack].append(len(utils.union_tp(pred_list[:i+1], fpr)))
+            elif set_op == "intersection":
+                num_tp_dict[attack].append(len(utils.intersection_tp(pred_list[:i+1], fpr)))
+            else:
+                raise ValueError(f"Invalid set operation: {set_op}")
 
     # plotting
     plt.clf()
+    num_seed = 0
     for attack, num_tp in num_tp_dict.items():
         plt.plot(num_tp, label=attack)
+        num_seed = len(num_tp)
+    plt.xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
     plt.xlabel("Number of seeds")
     plt.ylabel("Number of True Positives")
     plt.title(graph_title)
@@ -236,11 +245,17 @@ if __name__ == '__main__':
         hardness = utils.SampleHardness(hardness_arr, args.hardness)
         plot_hardness_distribution(pred_dict, hardness, args.graph_title, args.graph_path, args.fpr)
 
-    elif args.graph_type == "multi_seed_convergence":
+    elif args.graph_type == "multi_seed_convergence_intersection":
         for fpr in args.fpr:
             graph_title = args.graph_title + f" FPR = {fpr}"
             graph_path = args.graph_path + f"_fpr{fpr}.png"
-            multi_seed_convergence(pred_dict, graph_title, graph_path, fpr)
+            multi_seed_convergence(pred_dict, graph_title, graph_path, "intersection", fpr)
+
+    elif args.graph_type == "multi_seed_convergence_union":
+        for fpr in args.fpr:
+            graph_title = args.graph_title + f" FPR = {fpr}"
+            graph_path = args.graph_path + f"_fpr{fpr}.png"
+            multi_seed_convergence(pred_dict, graph_title, graph_path, "union", fpr)
 
     else:
         raise ValueError(f"Invalid graph type: {args.graph_type}")

@@ -68,19 +68,19 @@ class Predictions:
 
     def adjust_fpr(self, target_fpr):
         """
-        Adjust the predictions to achieve a target FPR.
+        Adjust the predictions to achieve a target FPR using ROC curve.
         :param target_fpr: target FPR
         :return: adjusted predictions as a numpy array
         """
-        pred_tensor = torch.tensor(self.pred_arr).float()
+        fpr, tpr, thresholds = roc_curve(self.ground_truth_arr, self.pred_arr)
 
-        current_fpr = self.compute_fpr()
-        if current_fpr < target_fpr:
-            adjusted_pred_arr = self.pred_arr.copy()
-            return adjusted_pred_arr
+        # Find the threshold closest to the target FPR
+        idx = np.argmin(np.abs(fpr - target_fpr))
+        threshold = thresholds[idx]
 
-        threshold = torch.quantile(pred_tensor, 1 - target_fpr)
-        adjusted_pred_arr = (pred_tensor >= threshold).float().numpy()
+        # Adjust predictions based on the selected threshold
+        adjusted_pred_arr = (self.pred_arr >= threshold).astype(int)
+
         return adjusted_pred_arr
 
     def get_tp(self) -> np.ndarray:
@@ -146,13 +146,14 @@ class SampleHardness:
         plt.savefig(save_path, dpi=300)
 
 
-def common_tp(preds: List[Predictions], fpr=None):
+def common_tp(preds: List[Predictions], fpr=None, set_op="intersection"):
     """
-    Find the common true positive samples among the predictions
+    Find the union/intersection true positive samples among the predictions
     Note that this is used for both different attacks or same attack with different seeds.
 
     :param preds: list of Predictions
     :param fpr: FPR values for adjusting the predictions
+
     """
     if fpr is None:
         TP = [np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0] for pred in preds]
@@ -160,9 +161,28 @@ def common_tp(preds: List[Predictions], fpr=None):
         adjusted_preds = [pred.adjust_fpr(fpr) for pred in preds]
         TP = [np.where((adjusted_preds[i] == 1) & (preds[i].ground_truth_arr == 1))[0] for i in range(len(preds))]
     common_TP = set(TP[0])
+    if len(TP) < 2:
+        return common_TP
     for i in range(1, len(TP)):
-        common_TP = common_TP.intersection(set(TP[i]))
+        if set_op == "union":
+            common_TP = common_TP.union(set(TP[i]))
+        elif set_op == "intersection":
+            common_TP = common_TP.intersection(set(TP[i]))
     return common_TP
+
+
+def union_tp(preds: List[Predictions], fpr=None):
+    """
+    Find the union true positive samples among the predictions, it's a wrapper for common_tp
+    """
+    return common_tp(preds, fpr, set_op="union")
+
+
+def intersection_tp(preds: List[Predictions], fpr=None):
+    """
+    Finds the intersection true positive samples among the predictions, it's a wrapper for common_tp
+    """
+    return common_tp(preds, fpr, set_op="intersection")
 
 
 def common_tp_preds(pred_list: List[Predictions]) -> Predictions:

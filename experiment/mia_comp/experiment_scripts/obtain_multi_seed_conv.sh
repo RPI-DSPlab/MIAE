@@ -33,9 +33,23 @@ for dataset in "${datasets[@]}"; do
         fprlist=$(printf "%s " "${fprs[@]}")
 
         # plot the graphs
+        # common TP (intersection of all seeds)
         graph_title="multi-seed common TP for ${dataset} ${arch}"
-        graph_path="${plot_dir}/${dataset}/${arch}/multi_seed_common_tp.png"
-        python3 obtain_graphs.py --graph_type "multi_seed_convergence"\
+        graph_path="${plot_dir}/${dataset}/${arch}/multi_seed_intersection_TP"
+        python3 obtain_graphs.py --graph_type "multi_seed_convergence_intersection"\
+                                  --dataset "${dataset}"\
+                                  --graph_title "${graph_title}"\
+                                  --data_path "${experiment_dir}"\
+                                  --graph_path "${graph_path}"\
+                                  --architecture "${arch}"\
+                                  --attacks ${mialist}\
+                                  --fpr ${fprlist}\
+                                  --seed ${seedlist}
+
+        # attack coverage (union of all seeds)
+        graph_title="multi-seed attack coverage for ${dataset} ${arch}"
+        graph_path="${plot_dir}/${dataset}/${arch}/multi_seed_union_TP"
+        python3 obtain_graphs.py --graph_type "multi_seed_convergence_union"\
                                   --dataset "${dataset}"\
                                   --graph_title "${graph_title}"\
                                   --data_path "${experiment_dir}"\
