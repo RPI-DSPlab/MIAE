@@ -95,7 +95,7 @@ for category in "${categories[@]}"; do
                     python obtain_graphs.py --dataset "$dataset" \
                                                     --architecture "$arch" \
                                                     --attacks ${mialist} \
-                                                    --dpata_path "$experiment_dir" \
+                                                    --data_path "$experiment_dir" \
                                                     --threshold "$threshold" \
                                                     --fpr ${fprlist}\
                                                     --graph_type "venn" \

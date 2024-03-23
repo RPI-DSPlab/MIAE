@@ -193,7 +193,6 @@ class wide_basic(nn.Module):
         out += self.layers[1](x)
         return out
 
-
 class WideResNet(nn.Module):
     def __init__(self, num_blocks, widen_factor, num_classes, dropout_rate, input_size):
         super(WideResNet, self).__init__()
@@ -254,6 +253,13 @@ class WideResNet(nn.Module):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
 
+    def get_features(self, x):
+        out = self.init_conv(x)
+
+        for layer in self.layers:
+            out = layer(out)
+
+        return out
 
 class ConvBlock(nn.Module):
     def __init__(self, conv_params):
@@ -371,6 +377,13 @@ class VGG(nn.Module):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
 
+    def get_features(self, x):
+        out = self.init_conv(x)
+
+        for layer in self.layers:
+            out = layer(out)
+
+        return out
 
 class Block(nn.Module):
     '''Depthwise conv + Pointwise conv'''
@@ -437,6 +450,13 @@ class MobileNet(nn.Module):
         fwd = self.end_layers(fwd)
         return fwd
 
+    def get_features(self, x):
+        fwd = self.init_conv(x)
+
+        for layer in self.layers:
+            fwd = layer(fwd)
+
+        return fwd
 
 class WideResidualBlock(nn.Module):
     def __init__(self, in_planes, out_planes, stride, dropout_rate, widen_factor):

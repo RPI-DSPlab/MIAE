@@ -69,19 +69,19 @@ class Predictions:
 
     def adjust_fpr(self, target_fpr):
         """
-        Adjust the predictions to achieve a target FPR.
+        Adjust the predictions to achieve a target FPR using ROC curve.
         :param target_fpr: target FPR
         :return: adjusted predictions as a numpy array
         """
-        pred_tensor = torch.tensor(self.pred_arr).float()
+        fpr, tpr, thresholds = roc_curve(self.ground_truth_arr, self.pred_arr)
 
-        current_fpr = self.compute_fpr()
-        if current_fpr < target_fpr:
-            adjusted_pred_arr = self.pred_arr.copy()
-            return adjusted_pred_arr
+        # Find the threshold closest to the target FPR
+        idx = np.argmin(np.abs(fpr - target_fpr))
+        threshold = thresholds[idx]
 
-        threshold = torch.quantile(pred_tensor, 1 - target_fpr)
-        adjusted_pred_arr = (pred_tensor >= threshold).float().numpy()
+        # Adjust predictions based on the selected threshold
+        adjusted_pred_arr = (self.pred_arr >= threshold).astype(int)
+
         return adjusted_pred_arr
 
     def get_tp(self):
@@ -278,7 +278,7 @@ def plot_venn_diagram_pairwise(pred_pair_list: List[Tuple[Predictions, Predictio
         pred_1, pred_2 = pair
         attacked_points_1 = set(np.where((pred_1.pred_arr == 1) & (pred_1.ground_truth_arr == 1))[0])
         attacked_points_2 = set(np.where((pred_2.pred_arr == 1) & (pred_2.ground_truth_arr == 1))[0])
-        circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
+        circle_colors = ['#EB001B', '#F79E1B']
         venn2_unweighted(subsets=(attacked_points_1, attacked_points_2), set_labels=(pred_1.name, pred_2.name), set_colors=circle_colors)
         plt.title(f"{graph_title}: {pred_1.name} vs {pred_2.name}")
         plt.savefig(f"{save_path}_{pred_1.name}_vs_{pred_2.name}.png", dpi=300)
