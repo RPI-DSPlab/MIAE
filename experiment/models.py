@@ -143,15 +143,44 @@ class ResNet(nn.Module):
             self.in_channels = channels * self.block.expansion
         return layers
 
-    def forward(self, x):
+    def forward(self, x, k=None, train=True):
+        """
+
+        :param x:
+        :param k: output fms from the kth conv2d or the last layer
+        :return:
+        """
+        if k is None:
+            out = self.init_conv(x)
+
+            for layer in self.layers:
+                out = layer(out)
+
+            out = self.end_layers(out)
+
+            return out
+
+        # the following is for getting feature maps
         out = self.init_conv(x)
 
-        for layer in self.layers:
+        n_layer = 0
+        _fm = None
+
+        for idx, layer in enumerate(self.layers):
             out = layer(out)
+            if not train:
+                if isinstance(layer, BasicBlock):
+                    if n_layer == k:
+                        return None, out.view(out.size(0), -1)
+                    n_layer += 1
 
         out = self.end_layers(out)
-
-        return out
+        if not train:
+            if k == n_layer:
+                _fm = torch.softmax(out, 1)
+                return None, _fm.view(_fm.size(0), -1)
+        else:
+            return out
 
     def initialize_weights(self):
         for m in self.modules():
@@ -231,15 +260,45 @@ class WideResNet(nn.Module):
             self.in_channels = channels
         return layers
 
-    def forward(self, x):
+    def forward(self, x, k=0, train=True):
+        """
+
+        :param x:
+        :param k: output fms from the kth conv2d or the last layer
+        :return:
+        """
+        if k is None:
+            out = self.init_conv(x)
+
+            for layer in self.layers:
+                out = layer(out)
+
+            out = self.end_layers(out)
+
+            return out
+
+        # the following is for getting feature maps
         out = self.init_conv(x)
 
-        for layer in self.layers:
+        n_layer = 0
+        _fm = None
+
+        for idx, layer in enumerate(self.layers):
             out = layer(out)
+            if not train:
+                if isinstance(layer, wide_basic):
+                    if n_layer == k:
+                        return None, out.view(out.size(0), -1)
+                    n_layer += 1
 
         out = self.end_layers(out)
+        if not train:
+            if k == n_layer:
+                _fm = torch.softmax(out, 1)
+                return None, _fm.view(_fm.size(0), -1)
+        else:
+            return out
 
-        return out
 
     def initialize_weights(self):
         for m in self.modules():
@@ -354,14 +413,40 @@ class VGG(nn.Module):
         if self.init_weights:
             self.initialize_weights()
 
-    def forward(self, x):
+    def forward(self, x, k=None, train=True):
+        """
+
+        :param x:
+        :param k: output fms from the kth conv2d or the last layer
+        :return:
+        """
+        n_layer = 0
+        _fm = None
+
         fwd = self.init_conv(x)
 
-        for layer in self.layers:
-            fwd = layer(fwd)
+        if k is None:  # regular forward
+            for layer in self.layers:
+                fwd = layer(fwd)
 
-        fwd = self.end_layers(fwd)
-        return fwd
+            fwd = self.end_layers(fwd)
+            return fwd
+
+        else:  # get feature map
+            for layer in self.layers:
+                fwd = layer(fwd)
+                if not train:
+                    if n_layer == k:  # returns here if we are getting the feature map from this layer
+                        return fwd.view(fwd.shape[0], -1)  # B x (C x F x F)
+                    n_layer += 1
+
+            fwd = self.end_layers(fwd)
+            if not train:
+                if k == n_layer:
+                    _fm = torch.softmax(fwd, 1)
+                    return _fm.view(_fm.shape[0], -1)  # B x (C x F x F)
+            else:
+                return fwd
 
     def initialize_weights(self):
         for m in self.modules():
@@ -376,6 +461,9 @@ class VGG(nn.Module):
             elif isinstance(m, nn.Linear):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
+                
+    def get_num_layers(self):
+            return 14
 
     def get_features(self, x):
         out = self.init_conv(x)
@@ -485,69 +573,3 @@ class WideResidualBlock(nn.Module):
         out = self.relu(out)
         return out
 
-
-class WideResNet_Yuetian(nn.Module):
-    def __init__(self, depth, num_classes, data_scale, in_channels=3, widen_factor=1,
-                 dropout_rate=0.0, init_weights=True):
-        super(WideResNet_Yuetian, self).__init__()
-        self.in_planes = 16
-
-        self.depth = depth
-        self.widen_factor = widen_factor
-        self.data_scale = data_scale
-
-        assert ((depth - 4) % 6 == 0), 'Wide-resnet depth should be 6n+4'
-        n = (depth - 4) // 6
-
-        nStages = [16, 16 * self.widen_factor, 32 * self.widen_factor, 64 * self.widen_factor]
-
-        self.conv1 = nn.Conv2d(in_channels, nStages[0], kernel_size=3, stride=1, padding=1, bias=True)
-        self.layer1 = self._wide_layer(WideResidualBlock, nStages[1], n, stride=1,
-                                       dropout_rate=dropout_rate, widen_factor=self.widen_factor)
-        self.layer2 = self._wide_layer(WideResidualBlock, nStages[2], n, stride=2,
-                                       dropout_rate=dropout_rate, widen_factor=self.widen_factor)
-        self.layer3 = self._wide_layer(WideResidualBlock, nStages[3], n, stride=2,
-                                       dropout_rate=dropout_rate, widen_factor=self.widen_factor)
-        self.bn1 = nn.BatchNorm2d(nStages[3])
-
-        self.linear = nn.Linear(nStages[3], num_classes)
-
-        if init_weights:
-            self._initialize_weights()
-
-    def _initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-            elif isinstance(m, nn.Linear):
-                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-
-    def _wide_layer(self, block, planes, num_blocks, stride, dropout_rate, widen_factor):
-        strides = [stride] + [1] * (num_blocks - 1)
-        layers = []
-        for stride in strides:
-            layers.append(block(self.in_planes, planes, stride, dropout_rate, widen_factor))
-            self.in_planes = planes
-        return nn.Sequential(*layers)
-
-    def forward(self, x):
-        out = self.conv1(x)
-
-        out = self.layer1(out)
-        out = self.layer2(out)
-        out = self.layer3(out)
-
-        out = F.relu(self.bn1(out))
-
-        out = F.avg_pool2d(out, self.data_scale * 2)
-        out = out.view(out.size(0), -1)
-        out = self.linear(out)
-
-        return out
-
-    def __str__(self):
-        return f"wrn{self.depth}-{self.widen_factor}"

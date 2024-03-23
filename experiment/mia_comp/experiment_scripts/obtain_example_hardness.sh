@@ -1,25 +1,16 @@
-data_aug=1 # 1 for data augmentation, 0 for no data augmentation
+preds_dir="/data/public/comp_mia_data/example_hardness_aug"
+mkdir -p "$preds_dir"
 
-if [ "$data_aug" -eq 1 ]; then
-    data_dir="/data/public/miae_experiment_aug_overfit/target"
-else
-    data_dir="/data/public/miae_experiment_overfit/target"
-fi
-mkdir -p "$data_dir"
 
-if [ "$data_aug" -eq 1 ]; then
-    eh_dir="/data/public/example_hardness_aug_overfit"
-else
-    eh_dir="/data/public/example_hardness_overfit"
-fi
-mkdir -p "$eh_dir"
+target_data_dir="/data/public/comp_mia_data/miae_experiment_aug/target"
 
 
 #datasets=("cifar10" "cifar100" "cinic10")
 datasets=("cifar10" "cifar100")
-archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+#archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+archs=("vgg16")
 #example_hardness=("il" "pd" "cs")
-example_hardness=("il")
+example_hardness=("pd" "il")
 
 cd /home/wangz56/MIAE_training_dir/MIAE/experiment/mia_comp
 
@@ -56,7 +47,7 @@ for dataset in "${datasets[@]}"; do
 
             python obtain_example_hardness.py --dataset "$dataset" --model "$arch" --example_hardness "$eh" \
             --result_path "$result_dir" --preparation_path "$prepare_dir" \
-            --dataset_path "$data_dir"  --epoch "$num_epoch"
+            --dataset_path "$target_data_dir"  --epoch "$num_epoch"
 
 
             rm -r "./$eh"

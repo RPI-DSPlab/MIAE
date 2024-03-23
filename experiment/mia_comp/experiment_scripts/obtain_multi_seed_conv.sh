@@ -1,13 +1,13 @@
-experiment_dir='/data/public/miae_experiment_aug'
+experiment_dir='/data/public/comp_mia_data/multiseed_convergence'
 
-plot_dir='/data/public/miae_experiment_aug/graphs/auc'
+plot_dir='/data/public/comp_mia_data/multiseed_convergence/graphs/multiseed_convergence'
 
 datasets=("cifar10" "cifar100")
-archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+archs=("resnet56" "wrn32_4")
 #mias=("losstraj" "shokri" "yeom" "lira")
 mias=("losstraj" "shokri" "yeom")
 fprs=(0.001 0.5 0.8)
-seeds=(0 1 2 3)
+seeds=(0 1 2 3 4 5 6 7)
 
 # prepare the list of mias and fprs as arguments
 mialist=""
@@ -33,9 +33,10 @@ for dataset in "${datasets[@]}"; do
         fprlist=$(printf "%s " "${fprs[@]}")
 
         # plot the graphs
-        graph_title="auc for ${dataset} ${arch} in log scale"
-        graph_path="${plot_dir}/${dataset}/${arch}/auc_log_scale"
-        python3 obtain_graphs.py --graph_type "auc"\
+        # common TP (intersection of all seeds)
+        graph_title="multi-seed common TP for ${dataset} ${arch}"
+        graph_path="${plot_dir}/${dataset}/${arch}/multi_seed_intersection_TP"
+        python3 obtain_graphs.py --graph_type "multi_seed_convergence_intersection"\
                                   --dataset "${dataset}"\
                                   --graph_title "${graph_title}"\
                                   --data_path "${experiment_dir}"\
@@ -43,12 +44,12 @@ for dataset in "${datasets[@]}"; do
                                   --architecture "${arch}"\
                                   --attacks ${mialist}\
                                   --fpr ${fprlist}\
-                                  --seed ${seedlist}\
-                                  --log_scale "True"
+                                  --seed ${seedlist}
 
-        graph_title="auc for ${dataset} ${arch}"
-        graph_path="${plot_dir}/${dataset}/${arch}/auc_linear_scale"
-        python3 obtain_graphs.py --graph_type "auc"\
+        # attack coverage (union of all seeds)
+        graph_title="multi-seed attack coverage for ${dataset} ${arch}"
+        graph_path="${plot_dir}/${dataset}/${arch}/multi_seed_union_TP"
+        python3 obtain_graphs.py --graph_type "multi_seed_convergence_union"\
                                   --dataset "${dataset}"\
                                   --graph_title "${graph_title}"\
                                   --data_path "${experiment_dir}"\
@@ -56,7 +57,6 @@ for dataset in "${datasets[@]}"; do
                                   --architecture "${arch}"\
                                   --attacks ${mialist}\
                                   --fpr ${fprlist}\
-                                  --seed ${seedlist}\
-                                  --log_scale "False"
+                                  --seed ${seedlist}
     done
 done

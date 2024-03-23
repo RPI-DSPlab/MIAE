@@ -20,7 +20,6 @@ from typing import Dict, List, Tuple
 from PIL import Image
 
 
-
 class Predictions:
     def __init__(self, pred_arr: np.ndarray, ground_truth_arr: np.ndarray, name: str):
         """
@@ -74,7 +73,6 @@ class Predictions:
         :return: adjusted predictions as a numpy array
         """
         fpr, tpr, thresholds = roc_curve(self.ground_truth_arr, self.pred_arr)
-
         # Find the threshold closest to the target FPR
         idx = np.argmin(np.abs(fpr - target_fpr))
         threshold = thresholds[idx]
@@ -84,11 +82,12 @@ class Predictions:
 
         return adjusted_pred_arr
 
-    def get_tp(self):
+    def get_tp(self) -> np.ndarray:
         """
         Get the indices of the true positive samples.
         """
         return np.where((self.predictions_to_labels() == 1) & (self.ground_truth_arr == 1))[0]
+
 
 class SampleHardness:
     def __init__(self, score_arr, name: str):
@@ -146,13 +145,14 @@ class SampleHardness:
         plt.savefig(save_path, dpi=300)
 
 
-def common_tp(preds: List[Predictions], fpr=None):
+def common_tp(preds: List[Predictions], fpr=None, set_op="intersection"):
     """
-    Find the common true positive samples among the predictions
+    Find the union/intersection true positive samples among the predictions
     Note that this is used for both different attacks or same attack with different seeds.
 
     :param preds: list of Predictions
     :param fpr: FPR values for adjusting the predictions
+
     """
     if fpr is None:
         TP = [np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0] for pred in preds]
@@ -160,9 +160,29 @@ def common_tp(preds: List[Predictions], fpr=None):
         adjusted_preds = [pred.adjust_fpr(fpr) for pred in preds]
         TP = [np.where((adjusted_preds[i] == 1) & (preds[i].ground_truth_arr == 1))[0] for i in range(len(preds))]
     common_TP = set(TP[0])
+    if len(TP) < 2:
+        return common_TP
     for i in range(1, len(TP)):
-        common_TP = common_TP.intersection(set(TP[i]))
+        if set_op == "union":
+            common_TP = common_TP.union(set(TP[i]))
+        elif set_op == "intersection":
+            common_TP = common_TP.intersection(set(TP[i]))
     return common_TP
+
+
+def union_tp(preds: List[Predictions], fpr=None):
+    """
+    Find the union true positive samples among the predictions, it's a wrapper for common_tp
+    """
+    return common_tp(preds, fpr, set_op="union")
+
+
+def intersection_tp(preds: List[Predictions], fpr=None):
+    """
+    Finds the intersection true positive samples among the predictions, it's a wrapper for common_tp
+    """
+    return common_tp(preds, fpr, set_op="intersection")
+
 
 def common_tp_preds(pred_list: List[Predictions]) -> Predictions:
     """
@@ -177,14 +197,16 @@ def common_tp_preds(pred_list: List[Predictions]) -> Predictions:
     # get the common true positive predictions using logical and
     common_tp = pred_list[0].predictions_to_labels()
     for i in range(1, len(pred_list)):
-            common_tp = np.logical_and(common_tp, pred_list[i].predictions_to_labels())
+        common_tp = np.logical_and(common_tp, pred_list[i].predictions_to_labels())
 
     # create a new Predictions object for the common true positive predictions
     ground_truth_arr = pred_list[0].ground_truth_arr
     name = pred_list[0].name.split('_')[0]
     return Predictions(common_tp, ground_truth_arr, name)
 
-def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Optional[float] = 0, target_fpr: Optional[float] = 0) -> List[Predictions]:
+
+def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Optional[float] = 0,
+                          target_fpr: Optional[float] = 0) -> List[Predictions]:
     """
     Process the data for the Venn diagram: get the pred_list
     :param pred_dict: dictionary of Predictions from different attacks, key: attack name, value: list of Predictions of different seeds
@@ -222,7 +244,8 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
 
     return result
 
-def plot_venn_diagram(pred_list: List[Predictions], goal:str, title: str, save_path: str):
+
+def plot_venn_diagram(pred_list: List[Predictions], goal: str, title: str, save_path: str):
     """
     plot the Venn diagram for the predictions based on the goal.
     :param pred_list: list of Predictions from different attacks
@@ -246,12 +269,12 @@ def plot_venn_diagram(pred_list: List[Predictions], goal:str, title: str, save_p
         venn_sets = tuple(attacked_points[pred.name] for pred in pred_list)
         venn_function = venn2_unweighted if len(pred_list) == 2 else venn3_unweighted
 
-
     circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
     venn_labels = [pred.name for pred in pred_list]
     venn_function(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
     plt.title(title)
     plt.savefig(f"{save_path}.png", dpi=300)
+
 
 def find_pairwise_preds(pred_list: List[Predictions]) -> List[Tuple[Predictions, Predictions]]:
     """
@@ -265,6 +288,7 @@ def find_pairwise_preds(pred_list: List[Predictions]) -> List[Tuple[Predictions,
         for j in range(i + 1, n):
             pairs.append((pred_list[i], pred_list[j]))
     return pairs
+
 
 def plot_venn_diagram_pairwise(pred_pair_list: List[Tuple[Predictions, Predictions]], graph_title: str, save_path: str):
     """
@@ -379,6 +403,7 @@ def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, model_name:
     plt.legend()
     plt.savefig(save_path, dpi=300)
 
+
 def plot_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: str, save_path: str):
     """
     plot the image by index from the data set
@@ -409,6 +434,7 @@ def plot_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: s
 
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
 
+
 def save_accuracy(pred: List[Predictions], file_path: str, target_fpr: Optional[float] = None):
     """
     save the accuracy of the prediction to a .txt file
@@ -426,6 +452,7 @@ def save_accuracy(pred: List[Predictions], file_path: str, target_fpr: Optional[
         print(f"Error: Unable to write to file '{file_path}': {e}")
     finally:
         file.close()
+
 
 def load_predictions(file_path: str) -> np.ndarray:
     """
