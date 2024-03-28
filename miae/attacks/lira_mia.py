@@ -287,7 +287,7 @@ class LIRAUtil:
 
     @classmethod
     def lira_mia(cls, keep, scores, check_scores, in_size=100000, out_size=100000,
-                 fix_variance=False):
+                 fix_variance=True):
         """
         Implements the core logic of the LIRA membership inference attack.
 
@@ -338,34 +338,18 @@ class LIRAUtil:
 
     @classmethod
     def _generate_logits(cls, model, data_loader, device):
-        """
-        Generates logits for a dataset given a model.
-
-        Args:
-        model (torch.nn.Module): The PyTorch model to generate logits.
-        data_loader (torch.utils.data.DataLoader): The DataLoader for the dataset.
-        device (str): The device (cpu or cuda) where the computations will take place.
-        """
         model.eval()
-        logits = []
+        all_logits = []
 
         with torch.no_grad():
-            for batch in data_loader:
-                images, _ = batch
+            for images, _ in data_loader:
                 images = images.to(device)
+                outputs = model(images)
+                all_logits.append(outputs.unsqueeze(1).expand(-1, 2, -1))
+        all_logits = torch.cat(all_logits, dim=0)
+        all_logits = all_logits.unsqueeze(1)
 
-                batch_logits = []
-                for aug in [images, images.flip(2)]:
-                    pad = torch.nn.ReflectionPad2d(2)
-                    aug_pad = pad(aug)
-                    this_x = aug_pad[:, :, :32, :32]
-
-                    outputs = model(this_x)
-                    batch_logits.append(outputs)
-
-                logits.append(torch.stack(batch_logits).permute(1, 0, 2))
-
-        return torch.cat(logits).unsqueeze(1)  # should be [num_samples, 2, num_classes]
+        return all_logits
 
     @classmethod
     def process_shadow_models(cls, info: LiraAuxiliaryInfo, auxiliary_dataset: Dataset, shadow_model_arch) \
