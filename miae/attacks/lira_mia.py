@@ -97,6 +97,9 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
 
+        if self.log_path is not None and not os.path.exists(self.log_path):
+            os.makedirs(self.log_path)
+
         if self.log_path is not None:
             self.lira_logger = logging.getLogger('lira_logger')
             self.lira_logger.setLevel(logging.INFO)
@@ -519,6 +522,9 @@ class LiraAttack(MiAttack):
                 self.shadow_scores = torch.cat(self.shadow_scores, dim=0)
                 self.shadow_keeps = torch.cat(self.shadow_keeps, dim=0)
                 np.save('shadow_scores.npy', self.shadow_scores)
+
+                # save it as txt for debugging
+                np.savetxt('shadow_scores.txt', self.shadow_scores.numpy())
                 np.save('shadow_keeps.npy', self.shadow_keeps)
         else:
             self.shadow_scores, self.shadow_keeps = LIRAUtil.process_shadow_models(self.auxiliary_info,

@@ -15,14 +15,14 @@ import numpy as np
 from tqdm import tqdm
 from copy import deepcopy
 import logging
+import pickle
 
 # add miae to path
 import sys
-
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 from miae.utils.set_seed import set_seed
-from miae.attacks import losstraj_mia, shokri_mia, lira_mia
+from miae.attacks import losstraj_mia, shokri_mia, lira_mia, yeom_mia
 from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
 from experiment import models
@@ -88,6 +88,8 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
     fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
     target_logger.addHandler(fh)
 
+    # log the target dataset size
+    target_logger.info(f"Target dataset size: {len(trainset)}")
 
     target_model = model.to(device)
     trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
@@ -148,8 +150,8 @@ def get_target_model_access(args, target_model, untrained_target_model) -> mia_b
     """
     if args.attack == "losstraj":
         return losstraj_mia.LosstrajModelAccess(deepcopy(target_model), untrained_target_model)
-    if args.attack == "lira":
-        return lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
+    if args.attack == "yeom":
+        return yeom_mia.YeomModelAccess(deepcopy(target_model), untrained_target_model)
     if args.attack == "shokri":
         return shokri_mia.ShokriModelAccess(deepcopy(target_model), untrained_target_model)
     else:
@@ -169,12 +171,16 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'distillation_epochs': args.attack_epochs,
              'log_path': args.result_path})
-    if args.attack == "lira":
-        return lira_mia.LiraAuxiliaryInfo(
+    if args.attack == "yeom":
+        return yeom_mia.YeomAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
     if args.attack == "shokri":
         return shokri_mia.ShokriAuxiliaryInfo(
+            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
+             'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+    if args.attack == "lira":
+        return lira_mia(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
     else:
@@ -192,8 +198,8 @@ def get_attack(args, aux_info: mia_base.AuxiliaryInfo, target_model_access: mia_
 
     if args.attack == "losstraj":
         return losstraj_mia.LosstrajAttack(target_model_access, aux_info)
-    if args.attack == "lira":
-        return lira_mia.LiraAttack(target_model_access, aux_info)
+    if args.attack == "yeom":
+        return yeom_mia.YeomAttack(target_model_access, aux_info)
     if args.attack == "shokri":
         return shokri_mia.ShokriAttack(target_model_access, aux_info)
     else:
@@ -217,16 +223,18 @@ if __name__ == '__main__':
     """if this argument is not non, the script will only save the dataset and exit. This is used to make sure the
     index - data mapping is consistent across different runs. This is useful when we want to compare the performance."""
     parser.add_argument('--save_dataset', type=bool, default=False, help='whether to save the dataset')
+    parser.add_argument('--train_target_model', type=bool, default=False, help='whether to train the target model')
 
     # mandatory arguments
-    parser.add_argument('--attack', type=str, default=None, help='MIA type: [losstraj, lira, shokri]')
+    parser.add_argument('--attack', type=str, default=None, help='MIA type: [losstraj, yeom, shokri]')
     parser.add_argument('--target_model', type=str, default=None,
                         help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet]')
     parser.add_argument('--dataset', type=str, default=None, help='dataset: [cifar10, cifar100, cinic10]')
     parser.add_argument('--result_path', type=str, default=None, help='path to save the prediction')
+    parser.add_argument('--data_path', type=str, default=None, help='path to the dataset')
     parser.add_argument('--target_model_path', type=str, default=str(os.getcwd()), help='path to the target model')
     parser.add_argument('--preparation_path', type=str, default=str(os.getcwd()), help='path to the preparation file')
-    parser.add_argument('--target_set_ratio', type=float, default=0.35,
+    parser.add_argument('--target_set_ratio', type=float, default=0.5,
                         help='the ratio of the data used for target model training over the whole dataset')
     parser.add_argument('--train_test_ratio', type=float, default=0.5, help='train test ratio for target and MIA')
     parser.add_argument('--delete-files', type=bool, default=True,
@@ -248,22 +256,16 @@ if __name__ == '__main__':
     set_seed(args.seed)
 
     # create all the necessary directories
-    for path in [args.result_path, args.target_model_path, args.preparation_path]:
-        if not os.path.exists(path):
+    for path in [args.result_path, args.target_model_path, args.preparation_path, args.data_path]:
+        if path is not None and not os.path.exists(path):
             os.makedirs(path)
 
-    # initialize the dataset
-    target_trainset, target_testset, aux_set, num_classes, input_size = get_dataset(args.dataset, args.data_aug,
-                                                                                    args.target_set_ratio,
-                                                                                    args.train_test_ratio)
-
-    # concat the target trainset and testset and then attack
-    dataset_to_attack = ConcatDataset([target_trainset, target_testset])
-    target_membership = np.concatenate([np.ones(len(target_trainset)), np.zeros(len(target_testset))])
-    import pickle
-
     if args.save_dataset:  # save the dataset and exit
-        dataset_save_path = os.path.join(args.result_path, f"dataset_save/{args.dataset}",)
+        # initialize the dataset
+        target_trainset, target_testset, aux_set, num_classes, input_size = get_dataset(args.dataset, args.data_aug,
+                                                                                        args.target_set_ratio,
+                                                                                        args.train_test_ratio)
+        dataset_save_path = os.path.join(args.data_path, f"{args.dataset}")
         if not os.path.exists(dataset_save_path):
             os.makedirs(dataset_save_path)
 
@@ -274,6 +276,10 @@ if __name__ == '__main__':
             pickle.dump(target_testset, f)
         with open(os.path.join(dataset_save_path, "aux_set.pkl"), "wb") as f:
             pickle.dump(aux_set, f)
+
+        # concat the target trainset and testset and then attack
+        dataset_to_attack = ConcatDataset([target_trainset, target_testset])
+        target_membership = np.concatenate([np.ones(len(target_trainset)), np.zeros(len(target_testset))])
 
         # Save the index - data mapping
         index_to_data = {}
@@ -288,14 +294,35 @@ if __name__ == '__main__':
 
         exit(0)
 
+    dataset_save_path = os.path.join(args.data_path, f"{args.dataset}")
+    # load the dataset
+    with open(os.path.join(dataset_save_path, "target_trainset.pkl"), "rb") as f:
+        target_trainset = pickle.load(f)
+    with open(os.path.join(dataset_save_path, "target_testset.pkl"), "rb") as f:
+        target_testset = pickle.load(f)
+    with open(os.path.join(dataset_save_path, "aux_set.pkl"), "rb") as f:
+        aux_set = pickle.load(f)
+
+    _, _, _, num_classes, input_size = get_dataset(args.dataset, args.data_aug,
+                                                   args.target_set_ratio,
+                                                   args.train_test_ratio)
+    dataset_to_attack = ConcatDataset([target_trainset, target_testset])
+    target_membership = np.concatenate([np.ones(len(target_trainset)), np.zeros(len(target_testset))])
+
     # training the target model
     target_model_copy = models.get_model(args.target_model, num_classes, input_size).to(args.device)
     target_model = models.get_model(args.target_model, num_classes, input_size).to(args.device)
-    if not os.path.exists(os.path.join(args.target_model_path, "target_model_" + args.target_model + args.dataset + ".pkl")):
+    if args.train_target_model:  # we are only training the target model
         train_target_model(target_model, args.target_model_path, args.device, target_trainset, target_testset, args)
+        exit(0)
     else:
+        if not os.path.exists(
+                os.path.join(args.target_model_path, "target_model_" + args.target_model + args.dataset + ".pkl")):
+            raise ValueError(
+                f'Target model does not exist at {os.path.join(args.target_model_path, "target_model_" + args.target_model + args.dataset + ".pkl")}')
         target_model.load_state_dict(
-            torch.load(os.path.join(args.target_model_path, "target_model_" + args.target_model + args.dataset + ".pkl")))
+            torch.load(
+                os.path.join(args.target_model_path, "target_model_" + args.target_model + args.dataset + ".pkl")))
         target_model.eval()
 
     # prepare the attack

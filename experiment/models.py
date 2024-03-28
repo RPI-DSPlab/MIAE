@@ -52,6 +52,10 @@ def create_mobilenet(num_classes=10, input_size=32):
     return MobileNet(cfg=cfg, num_classes=num_classes, input_size=input_size)
 
 
+def create_wrn28_10(num_classes=10, input_size=32):
+    return WideResNet_Yuetian(depth=28, in_channels=3, num_classes=num_classes,
+                      widen_factor=1, init_weights=True, data_scale=4)
+
 class Flatten(nn.Module):
     def forward(self, input):
         return input.view(input.size(0), -1)
@@ -139,15 +143,44 @@ class ResNet(nn.Module):
             self.in_channels = channels * self.block.expansion
         return layers
 
-    def forward(self, x):
+    def forward(self, x, k=None, train=True):
+        """
+
+        :param x:
+        :param k: output fms from the kth conv2d or the last layer
+        :return:
+        """
+        if k is None:
+            out = self.init_conv(x)
+
+            for layer in self.layers:
+                out = layer(out)
+
+            out = self.end_layers(out)
+
+            return out
+
+        # the following is for getting feature maps
         out = self.init_conv(x)
 
-        for layer in self.layers:
+        n_layer = 0
+        _fm = None
+
+        for idx, layer in enumerate(self.layers):
             out = layer(out)
+            if not train:
+                if isinstance(layer, BasicBlock):
+                    if n_layer == k:
+                        return None, out.view(out.size(0), -1)
+                    n_layer += 1
 
         out = self.end_layers(out)
-
-        return out
+        if not train:
+            if k == n_layer:
+                _fm = torch.softmax(out, 1)
+                return None, _fm.view(_fm.size(0), -1)
+        else:
+            return out
 
     def initialize_weights(self):
         for m in self.modules():
@@ -189,7 +222,6 @@ class wide_basic(nn.Module):
         out += self.layers[1](x)
         return out
 
-
 class WideResNet(nn.Module):
     def __init__(self, num_blocks, widen_factor, num_classes, dropout_rate, input_size):
         super(WideResNet, self).__init__()
@@ -228,15 +260,45 @@ class WideResNet(nn.Module):
             self.in_channels = channels
         return layers
 
-    def forward(self, x):
+    def forward(self, x, k=0, train=True):
+        """
+
+        :param x:
+        :param k: output fms from the kth conv2d or the last layer
+        :return:
+        """
+        if k is None:
+            out = self.init_conv(x)
+
+            for layer in self.layers:
+                out = layer(out)
+
+            out = self.end_layers(out)
+
+            return out
+
+        # the following is for getting feature maps
         out = self.init_conv(x)
 
-        for layer in self.layers:
+        n_layer = 0
+        _fm = None
+
+        for idx, layer in enumerate(self.layers):
             out = layer(out)
+            if not train:
+                if isinstance(layer, wide_basic):
+                    if n_layer == k:
+                        return None, out.view(out.size(0), -1)
+                    n_layer += 1
 
         out = self.end_layers(out)
+        if not train:
+            if k == n_layer:
+                _fm = torch.softmax(out, 1)
+                return None, _fm.view(_fm.size(0), -1)
+        else:
+            return out
 
-        return out
 
     def initialize_weights(self):
         for m in self.modules():
@@ -250,6 +312,13 @@ class WideResNet(nn.Module):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
 
+    def get_features(self, x):
+        out = self.init_conv(x)
+
+        for layer in self.layers:
+            out = layer(out)
+
+        return out
 
 class ConvBlock(nn.Module):
     def __init__(self, conv_params):
@@ -344,14 +413,40 @@ class VGG(nn.Module):
         if self.init_weights:
             self.initialize_weights()
 
-    def forward(self, x):
+    def forward(self, x, k=None, train=True):
+        """
+
+        :param x:
+        :param k: output fms from the kth conv2d or the last layer
+        :return:
+        """
+        n_layer = 0
+        _fm = None
+
         fwd = self.init_conv(x)
 
-        for layer in self.layers:
-            fwd = layer(fwd)
+        if k is None:  # regular forward
+            for layer in self.layers:
+                fwd = layer(fwd)
 
-        fwd = self.end_layers(fwd)
-        return fwd
+            fwd = self.end_layers(fwd)
+            return fwd
+
+        else:  # get feature map
+            for layer in self.layers:
+                fwd = layer(fwd)
+                if not train:
+                    if n_layer == k:  # returns here if we are getting the feature map from this layer
+                        return fwd.view(fwd.shape[0], -1)  # B x (C x F x F)
+                    n_layer += 1
+
+            fwd = self.end_layers(fwd)
+            if not train:
+                if k == n_layer:
+                    _fm = torch.softmax(fwd, 1)
+                    return _fm.view(_fm.shape[0], -1)  # B x (C x F x F)
+            else:
+                return fwd
 
     def initialize_weights(self):
         for m in self.modules():
@@ -366,7 +461,17 @@ class VGG(nn.Module):
             elif isinstance(m, nn.Linear):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
+                
+    def get_num_layers(self):
+            return 14
 
+    def get_features(self, x):
+        out = self.init_conv(x)
+
+        for layer in self.layers:
+            out = layer(out)
+
+        return out
 
 class Block(nn.Module):
     '''Depthwise conv + Pointwise conv'''
@@ -432,3 +537,39 @@ class MobileNet(nn.Module):
 
         fwd = self.end_layers(fwd)
         return fwd
+
+    def get_features(self, x):
+        fwd = self.init_conv(x)
+
+        for layer in self.layers:
+            fwd = layer(fwd)
+
+        return fwd
+
+class WideResidualBlock(nn.Module):
+    def __init__(self, in_planes, out_planes, stride, dropout_rate, widen_factor):
+        super(WideResidualBlock, self).__init__()
+        assert widen_factor > 0, "Widen factor must be greater than 0"
+        mid_planes = out_planes * widen_factor
+
+        self.bn1 = nn.BatchNorm2d(in_planes)
+        self.conv1 = nn.Conv2d(in_planes, mid_planes, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.dropout = nn.Dropout(p=dropout_rate)
+        self.bn2 = nn.BatchNorm2d(mid_planes)
+        self.conv2 = nn.Conv2d(mid_planes, out_planes, kernel_size=3, stride=1, padding=1, bias=False)
+        self.relu = nn.ReLU(inplace=True)
+
+        self.shortcut = nn.Sequential()
+        if stride != 1 or in_planes != out_planes:
+            self.shortcut = nn.Sequential(
+                nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False),
+            )
+
+    def forward(self, x):
+        out = self.conv1(F.relu(self.bn1(x)))
+        out = self.dropout(out)
+        out = self.conv2(F.relu(self.bn2(out)))
+        out += self.shortcut(x)
+        out = self.relu(out)
+        return out
+
