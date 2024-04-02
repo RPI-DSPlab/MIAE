@@ -1,5 +1,6 @@
 import collections
 import copy
+import logging
 import time
 from abc import ABC
 import torch.nn.functional as F
@@ -49,17 +50,20 @@ class PdHardness(ExampleMetric, ABC):
         self.model = model
         self.trainloader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True, num_workers=2)
 
+        # set up logging
+        self.log = False
+        if config.log_path is not None:
+            self.log = True
+            self.pd_logger = logging.getLogger('prediction_depth_logger')
+            self.pd_logger.setLevel(logging.INFO)
+            fh = logging.FileHandler(self.config.log_path + '/pd.log')
+            fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+            self.pd_logger.addHandler(fh)
+
         if config.crit == 'cross_entropy':
             self.criterion = torch.nn.CrossEntropyLoss()
         else:
             raise NotImplementedError("Criterion {} not implemented".format(config.crit))
-
-        if config.optimizer == 'sgd':
-            self.optimizer = torch.optim.SGD(self.model.parameters(), lr=config.lr, momentum=0.9,
-                                             weight_decay=5e-4)
-        else:
-            raise NotImplementedError("Optimizer {} not implemented".format(config.optimizer))
-
 
     def _knn_predict(self, feature, feature_bank, feature_labels, classes, knn_k, knn_t, rm_top1=True, dist='l2'):
         """
@@ -115,28 +119,26 @@ class PdHardness(ExampleMetric, ABC):
 
         return knn_scores
 
-    def _get_feature_bank_from_kth_layer(self, model, dataloader, k, config):
+    def _get_feature_bank_from_kth_layer(self, model, dataloader, k):
         """
         Get feature bank from kth layer of the model
         :param model: the model
         :param dataloader: the dataloader
         :param k: the kth layer
-        :param config: the configuration object
         :return: the feature bank (k-th layer feature for each datapoint) and
                 the all label bank (ground truth label for each datapoint)
         """
         # NOTE: dataloader now has the return format of '(img, target), index'
         with torch.no_grad():
-            for img, all_label, idx in dataloader:
+            for idx, (img, all_label) in dataloader:
                 img = img.cuda(non_blocking=True)  # an image from the dataset
                 all_label = all_label.cuda(non_blocking=True)
 
                 # the return of model():'None, _fm.view(_fm.shape[0], -1)  # B x (C x F x F)'
-                _, fms = model(img, k, train=False)
+                fms = model(img, k, train=False)
+                return fms, all_label
 
-        return fms, all_label  # somehow, the shape of fms is (number of image) * (it's feature map size)
-
-    def _get_knn_prds_k_layer(self, model: smmodels, evaloader, floader, k, config: PredictionDepthConfig, rm_top=True):
+    def _get_knn_prds_k_layer(self, model, evaloader, floader, k, config: PredictionDepthConfig, rm_top=True):
         """
         Get the knn predictions for the kth layer
         :param model: the model
@@ -148,16 +150,16 @@ class PdHardness(ExampleMetric, ABC):
         knn_conf_gt_all = []  # This statistics can be noisy
         indices_all = []
 
-        f_bank, all_labels = self._get_feature_bank_from_kth_layer(model, floader,
-                                                                   k,
-                                                                   config)  # get the feature bank and all labels for the support set
+        # get the feature bank and all labels for the support set
+        f_bank, all_labels = self._get_feature_bank_from_kth_layer(model, floader, k)
+
         f_bank = f_bank.t().contiguous()
         with torch.no_grad():
-            for j, (imgs, labels, idx) in enumerate(evaloader):
+            for j, (idx, (imgs, labels)) in enumerate(evaloader):
                 imgs = imgs.cuda(non_blocking=True)
                 labels_b = labels.cuda(non_blocking=True)
                 nm_cls = self.dataset.get_num_classes()
-                _, inp_f_curr = model(imgs, k, train=False)
+                inp_f_curr = model(imgs, k, train=False)
 
                 knn_scores = self._knn_predict(inp_f_curr, f_bank, all_labels, classes=nm_cls, knn_k=config.knn_k,
                                                knn_t=1,
@@ -187,22 +189,25 @@ class PdHardness(ExampleMetric, ABC):
 
     def _trainer(self, model):
         trainloader = self.trainloader
-        testloader = self.testloader
         criterion = self.criterion
-        optimizer = self.optimizer
+        optimizer = torch.optim.SGD(model.parameters(), lr=self.config.lr,
+                                    momentum=self.config.momentum,
+                                    weight_decay=self.config.weight_decay)
         device = self.device
         config = self.config
-        curr_iteration = 0
-        cos_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.num_epochs)
+        cos_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, config.num_epochs)
         history = {"train_loss": [], "train_acc": [], "test_loss": [], "test_acc": []}
         print('------ Training started on {} with total number of {} epochs ------'.format(device, config.num_epochs))
-        for epoch in range(config.num_epochs):
+        if self.log:
+            self.pd_logger.info(
+                '------ Training started on {} with total number of {} epochs ------'.format(device, config.num_epochs))
+        for epoch in tqdm(range(config.num_epochs)):
             # time each epoch
-            start_time_train = time.time()
             train_acc = 0
             train_loss = 0
-            for imgs, labels, idx in trainloader:
-                imgs, labels = imgs.cuda(non_blocking=True), labels.cuda(non_blocking=True)
+            for idx, (imgs, labels) in trainloader:
+                model.train()
+                imgs, labels = imgs.to(device), labels.to(device)
                 optimizer.zero_grad()
                 outputs = model(imgs)
                 loss = criterion(outputs, labels)
@@ -211,7 +216,7 @@ class PdHardness(ExampleMetric, ABC):
                 _, predicted = torch.max(outputs.data, 1)
                 train_acc += (predicted == labels).sum().item()
                 train_loss += loss.item()
-                curr_iteration += 1
+
             cos_scheduler.step()
             train_acc /= len(trainloader.dataset)
             train_loss /= len(trainloader.dataset)
@@ -219,36 +224,22 @@ class PdHardness(ExampleMetric, ABC):
             history["train_acc"].append(train_acc)
 
             end_time_train = time.time()
-            with torch.no_grad():
-
-                test_acc = 0
-                test_loss = 0
-                for imgs, labels, idx in testloader:
-                    imgs, labels = imgs.cuda(non_blocking=True), labels.cuda(non_blocking=True)
-                    outputs = model(imgs)
-                    loss = criterion(outputs, labels)
-                    _, predicted = torch.max(outputs.data, 1)
-                    test_acc += (predicted == labels).sum().item()
-                    test_loss += loss.item()
-                test_acc /= len(testloader.dataset)
-                test_loss /= len(testloader.dataset)
-                history["test_loss"].append(test_loss)
-                history["test_acc"].append(test_acc)
-
-            if curr_iteration > config.num_iterations:
-                break
             end_time_after_inference = time.time()
             if epoch % 20 == 0:
                 print(
-                    'Epoch: {}, Training Loss: {:.6f}, Test Loss: {:.6f}, Training Accuracy: {:.2f}, Test Accuracy: {:.2f}, training time: {:.2f}, inference time: '
-                    '{:.6f}'.format(epoch, train_loss, test_loss, train_acc, test_acc,
-                                    end_time_train - start_time_train,
-                                    end_time_after_inference - end_time_train))
+                    'Epoch: {}, Training Loss: {:.4f}, Training Accuracy: {:.2f}'.format(epoch, train_loss, train_acc))
+
+                if self.log:
+                    self.pd_logger.info(
+                        'Epoch: {}, Training Loss: {:.4f}, Training Accuracy: {:.2f}'.format(epoch, train_loss,
+                                                                                             train_acc))
 
         return model, history
 
     def train_metric(self):
-        """NOTE that this function call is optional, you could also load a trained model from the checkpoint"""
+        """
+        Train the prediction depth metric
+        """
         seeds = self.config.seeds
         model_copy = copy.deepcopy(self.model)  # we need to copy the model because we will train it multiple times
         for seed in seeds:
@@ -258,73 +249,50 @@ class PdHardness(ExampleMetric, ABC):
             model_copy, history = self._trainer(model_copy)
             # save the model
             torch.save(model_copy.state_dict(), os.path.join(self.modelckps, "ms{}_{}sgd{}"
-                                                             .format(repr(model_copy), repr(self.dataset), seed)))
+                                                             .format(model_copy.__class__, self.dataset.__class__, seed)))
 
             index_knn_y_train = collections.defaultdict(list)
             index_pd_train = collections.defaultdict(int)
             knn_gt_conf_all_train = collections.defaultdict(list)
-            index_knn_y_test = collections.defaultdict(list)
-            index_pd_test = collections.defaultdict(int)
-            knn_gt_conf_all_test = collections.defaultdict(list)
 
             # ------------------ training set pd ------------------
             if not os.path.exists(os.path.join(self.result_path)):
                 os.makedirs(os.path.join(self.result_path))
             print("----- start obtaining training set pd -----")
+            if self.log:
+                self.pd_logger.info("----- start obtaining training set pd -----")
             for k in tqdm(range(model_copy.get_num_layers())):
                 knn_labels, knn_conf_gt_all, indices_all = self._get_knn_prds_k_layer(model_copy, self.trainloader,
-                                                                                      self.trainloader2,
+                                                                                      copy.deepcopy(self.trainloader),
                                                                                       k, self.config, True)
                 for idx, knn_l, knn_conf_gt in zip(indices_all, knn_labels, knn_conf_gt_all):
                     index_knn_y_train[int(idx)].append(knn_l.item())
                     knn_gt_conf_all_train[int(idx)].append(knn_conf_gt.item())
             for idx, knn_ls in index_knn_y_train.items():
                 index_pd_train[idx] = (self._get_prediction_depth(knn_ls, model_copy.get_num_layers()))
-            with open(os.path.join(self.result_path, 'pds{}train_seed{}_{}_trainpd.json'.format(repr(model_copy), seed,
-                                                                                                repr(self.dataset))),
+            with open(os.path.join(self.result_path, 'pds{}train_seed{}_{}_trainpd.json'.format(model_copy.__class__, seed,
+                                                                                                self.dataset.__class__)),
                       'w') as f:
                 json.dump(index_pd_train, f)
 
-            # ------------------ testing set pd ------------------
-            print("----- start obtaining testing set pd -----")
-            for k in tqdm(range(model_copy.get_num_layers())):
-                knn_labels, knn_conf_gt_all, indices_all = self._get_knn_prds_k_layer(model_copy, self.testloader,
-                                                                                      self.testloader2,
-                                                                                      k, self.config, True)
-                for idx, knn_l, knn_conf_gt in zip(indices_all, knn_labels, knn_conf_gt_all):
-                    index_knn_y_test[int(idx)].append(knn_l.item())
-                    knn_gt_conf_all_test[int(idx)].append(knn_conf_gt.item())
-            for idx, knn_ls in index_knn_y_test.items():
-                index_pd_test[idx] = (self._get_prediction_depth(knn_ls, model_copy.get_num_layers()))
-            with open(os.path.join(self.result_path, 'pds{}train_seed{}_{}_testpd.json'.format(repr(model_copy), seed,
-                                                                                               repr(self.dataset))),
-                      'w') as f:
-                json.dump(index_pd_test, f)
-
         # average the results
         self.train_avg_score = sm_util.avg_result(self.result_path, file_suf="_trainpd.json", roundToInt=False)
-        self.test_avg_score = sm_util.avg_result(self.result_path, file_suf="_testpd.json", roundToInt=False)
         with open(os.path.join(self.result_avg_path,
-                               'pds{}train_{}_trainpd.json'.format(repr(model_copy), repr(self.dataset))),
+                               'pds{}train_{}_trainpd.json'.format(model_copy.__class__, self.dataset.__class__)),
                   'w') as f:
             json.dump(self.train_avg_score, f)
-        with open(os.path.join(self.result_avg_path,
-                               'pds{}train_{}_testpd.json'.format(repr(model_copy), repr(self.dataset))),
-                  'w') as f:
-            json.dump(self.test_avg_score, f)
         self.ready = True
 
     def load_metric(self, path: str):
         """Load the trained metric from a checkpoint"""
         try:
             self.train_avg_score = sm_util.avg_result(path, file_suf="_trainpd.json", roundToInt=False)
-            self.test_avg_score = sm_util.avg_result(path, file_suf="_testpd.json", roundToInt=False)
         except:
             raise ValueError(
                 "train_avg_score or test_avg_score not found in the checkpoint, please train the metric first")
         self.ready = True
 
-    def get_score(self, idx: int, train: bool):
+    def get_score(self, idx: int):
         """
         Get the prediction depth score for a data sample
         :param idx: the index of the data sample
@@ -333,14 +301,9 @@ class PdHardness(ExampleMetric, ABC):
         """
         if not self.ready:
             raise ValueError("Metric not ready, please train or load the metric first")
-        if train:
-            if idx not in self.train_avg_score:
-                raise ValueError("Index {} not found in the training set".format(idx))
-            return self.train_avg_score[idx]
-        else:
-            if idx not in self.test_avg_score:
-                raise ValueError("Index {} not found in the testing set".format(idx))
-            return self.test_avg_score[idx]
+        if idx not in self.train_avg_score:
+            raise ValueError("Index {} not found in the training set".format(idx))
+        return self.train_avg_score[idx]
 
     def __repr__(self):
         ret = (f"Prediction depth metric:\n"
@@ -350,8 +313,7 @@ class PdHardness(ExampleMetric, ABC):
                f"ready: {self.ready}\n"
                )
         if self.ready:
-            ret += (f"train_avg_score: {self.train_avg_score}\n"
-                    f"test_avg_score: {self.test_avg_score}\n")
+            ret += (f"train_avg_score: {self.train_avg_score}\n")
         return ret
 
     def __str__(self):

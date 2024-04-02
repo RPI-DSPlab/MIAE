@@ -93,7 +93,7 @@ class Predictions:
 
         return adjusted_pred_arr
 
-    def get_tp(self):
+    def get_tp(self) -> np.ndarray:
         """
         Get the indices of the true positive samples.
         """
@@ -154,13 +154,15 @@ class SampleHardness:
         # Save the plot
         plt.savefig(save_path, dpi=300)
 
-def common_tp(preds: List[Predictions], fpr=None):
+
+def common_tp(preds: List[Predictions], fpr=None, set_op="intersection"):
     """
-    Find the common true positive samples among the predictions
+    Find the union/intersection true positive samples among the predictions
     Note that this is used for both different attacks or same attack with different seeds.
 
     :param preds: list of Predictions
     :param fpr: FPR values for adjusting the predictions
+
     """
     if fpr is None:
         TP = [np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0] for pred in preds]
@@ -168,9 +170,29 @@ def common_tp(preds: List[Predictions], fpr=None):
         adjusted_preds = [pred.adjust_fpr(fpr) for pred in preds]
         TP = [np.where((adjusted_preds[i] == 1) & (preds[i].ground_truth_arr == 1))[0] for i in range(len(preds))]
     common_TP = set(TP[0])
+    if len(TP) < 2:
+        return common_TP
     for i in range(1, len(TP)):
-        common_TP = common_TP.intersection(set(TP[i]))
+        if set_op == "union":
+            common_TP = common_TP.union(set(TP[i]))
+        elif set_op == "intersection":
+            common_TP = common_TP.intersection(set(TP[i]))
     return common_TP
+
+
+def union_tp(preds: List[Predictions], fpr=None):
+    """
+    Find the union true positive samples among the predictions, it's a wrapper for common_tp
+    """
+    return common_tp(preds, fpr, set_op="union")
+
+
+def intersection_tp(preds: List[Predictions], fpr=None):
+    """
+    Finds the intersection true positive samples among the predictions, it's a wrapper for common_tp
+    """
+    return common_tp(preds, fpr, set_op="intersection")
+
 
 def common_tp_preds(pred_list: List[Predictions]) -> Predictions:
     """
@@ -320,6 +342,7 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], g
     :param goal: goal of the comparison <== choices: "common_tp", "single_attack"
     :param title: title of the graph
     :param save_path: path to save the graph
+    :param goal: goal of the comparison <== choices: "common_tp", "single_attack"
     """
     attacked_points_or = {pred.name: set() for pred in pred_or}
     attacked_points_and = {pred.name: set() for pred in pred_and}
@@ -360,6 +383,37 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], g
     plt.suptitle(title, fontweight='bold')
     plt.tight_layout()  # Adjust layout to prevent overlapping
     plt.savefig(f"{save_path}.png", dpi=300)
+
+def find_pairwise_preds(pred_list: List[Predictions]) -> List[Tuple[Predictions, Predictions]]:
+    """
+    Find all possible pairs of predictions in the given list.
+    :param pred_list: list of Predictions
+    :return: list of tuples, each containing a pair of Predictions
+    """
+    pairs = []
+    n = len(pred_list)
+    for i in range(n):
+        for j in range(i + 1, n):
+            pairs.append((pred_list[i], pred_list[j]))
+    return pairs
+
+def plot_venn_diagram_pairwise(pred_pair_list: List[Tuple[Predictions, Predictions]], graph_title: str, save_path: str):
+    """
+    Plot Venn diagrams for each pair of predictions in the given list.
+    :param pred_pair_list: list of tuples, each containing a pair of Predictions objects
+    :param graph_title: title of the graph
+    :param save_path: path to save the graphs
+    """
+    plt.figure(figsize=(8, 8), dpi=300)
+    for idx, pair in enumerate(pred_pair_list):
+        pred_1, pred_2 = pair
+        attacked_points_1 = set(np.where((pred_1.pred_arr == 1) & (pred_1.ground_truth_arr == 1))[0])
+        attacked_points_2 = set(np.where((pred_2.pred_arr == 1) & (pred_2.ground_truth_arr == 1))[0])
+        circle_colors = ['#EB001B', '#F79E1B']
+        venn2_unweighted(subsets=(attacked_points_1, attacked_points_2), set_labels=(pred_1.name, pred_2.name), set_colors=circle_colors)
+        plt.title(f"{graph_title}: {pred_1.name} vs {pred_2.name}")
+        plt.savefig(f"{save_path}_{pred_1.name}_vs_{pred_2.name}.png", dpi=300)
+        plt.close()
 
 def extract_features(model, dataset, target_layer=None):
     """
@@ -702,5 +756,3 @@ def unanimous_voting(pred_list: List[Predictions]) -> np.ndarray:
     unanimous_voted_labels = np.mean(labels_list, axis=0)
     unanimous_voted_labels = (unanimous_voted_labels == 1).astype(int)
     return unanimous_voted_labels
-
-
