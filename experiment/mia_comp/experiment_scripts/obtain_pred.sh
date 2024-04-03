@@ -7,15 +7,16 @@ fi
 
 echo "obtain_pred.sh seed = $seed"
 
-data_dir="/data/public/comp_mia_data/multiseed_convergence/target"
+data_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data/target"
 
-preds_dir="/data/public/comp_mia_data/multiseed_convergence/preds_sd${seed}"
+preds_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data/preds_sd${seed}"
 mkdir -p "$preds_dir"
 
 
 #datasets=("cifar10" "cifar100" "cinic10")
 datasets=("cifar10" "cifar100")
-archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+#archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+archs=("resnet56" "wrn32_4") # only wrn and resnet for multi-seed
 mias=("losstraj" "shokri" "yeom")
 
 prepare_path="/data/public/prepare_sd${seed}"

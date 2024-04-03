@@ -6,7 +6,7 @@ datasets=("cifar10" "cifar100")
 archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
 #mias=("losstraj" "shokri" "yeom" "lira")
 mias=("losstraj" "shokri" "yeom")
-fprs=(0.001 0.5 0.8)
+fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 seeds=(0 1 2 3)
 
 # prepare the list of mias and fprs as arguments
