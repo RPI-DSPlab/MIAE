@@ -167,6 +167,34 @@ def multi_seed_convergence(predictions: Dict[str, List[utils.Predictions]], grap
     plt.close()
 
 
+def single_attack_seed_ensemble(predictions: Dict[str, List[utils.Predictions]], graph_title: str, graph_path: str, num_seeds: int, skip: int=2):
+    """
+    ensemble attacks from multiple seeds and plot the roc/auc curve for each attack and ensemble method with different number of seeds
+    :param predictions: Dict[str, List[utils.Predictions]]: dictionary with attack names as keys and corresponding Predictions objects list as values
+    :param graph_title: str: title of the graph
+    :param graph_path: str: path to save the graph
+    :param num_seeds: int: number of seeds to ensemble
+    :param skip: int: number of seeds to skip for each ensemble plotting
+    """
+    gt_arr = predictions[list(predictions.keys())[0]][0].ground_truth_arr
+    for ensemble_method in ["HC", "HP", "avg"]:  # High Coverage and High Precision
+        for attack, pred_list in predictions.items():
+            ensemble_pred = []
+            num_seeds_list = []
+            name_list = []
+            for i in range(0, num_seeds, skip):
+                ensemble_pred.append(utils.multi_seed_ensemble(pred_list[:i+1], ensemble_method, threshold=0.5).pred_arr)
+                num_seeds_list.append(i+1)
+                name_list.append(attack+f"_{ensemble_method}_numsd{i+1}")
+
+            title = f"{graph_title} {attack} {ensemble_method}"
+            print(f"plotting auc for {title}...")
+            utils.plot_auc(ensemble_pred, name_list, gt_arr, title, None, True, graph_path+f"_{attack}_{ensemble_method}.png")
+
+
+
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='obtain_membership_inference_graphs')
     # Required arguments
@@ -174,7 +202,7 @@ if __name__ == '__main__':
     parser.add_argument("--architecture", type=str, default="resnet56",
                         help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet]')
     parser.add_argument("--attacks", type=str, nargs="+", default=None, help='MIA type: [losstraj, yeom, shokri]')
-    parser.add_argument("--graph_type", type=str, default="venn", help="graph_type: [venn, auc, hardness_distribution, multi_seed_convergence]")
+    parser.add_argument("--graph_type", type=str, default="venn", help="graph_type: [venn, auc, hardness_distribution, multi_seed_convergence, single_attack_seed_ensemble]")
     parser.add_argument("--graph_title", type=str, help="Title of the graph")
     parser.add_argument("--graph_path", type=str, help="Path to save the graph")
     parser.add_argument("--data_path", type=str, help="Path to the original predictions and target dataset")
@@ -196,6 +224,9 @@ if __name__ == '__main__':
     # for hardness distribution graph
     parser.add_argument("--hardness", type=str, default="None", help="Type of hardness: [il]")
     parser.add_argument("--hardness_path", type=str, help="Path to the hardness file")
+
+    # for single seed ensemble graph
+    parser.add_argument("--skip", type=int, default=2, help="Number of seeds to skip for each ensemble plotting")
 
     args = parser.parse_args()
 
@@ -235,6 +266,7 @@ if __name__ == '__main__':
                 plot_venn(pred_list, args.graph_goal, args.graph_title, args.graph_path)
         else:
             raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
+
     elif args.graph_type == "auc":
         for i, seed in enumerate(args.seed):
             pred_dict_seed = {k: v[i] for k, v in pred_dict.items()}
@@ -257,6 +289,9 @@ if __name__ == '__main__':
             graph_title = args.graph_title + f" FPR = {fpr}"
             graph_path = args.graph_path + f"_fpr{fpr}.png"
             multi_seed_convergence(pred_dict, graph_title, graph_path, "union", fpr)
+
+    elif args.graph_type == "single_seed_ensemble":
+        single_attack_seed_ensemble(pred_dict, args.graph_title, args.graph_path, len(args.seed), skip=args.skip)
 
     else:
         raise ValueError(f"Invalid graph type: {args.graph_type}")

@@ -19,6 +19,14 @@ from torchvision import transforms
 from typing import Dict, List, Tuple
 from PIL import Image
 
+def pred_normalization(pred: np.ndarray) -> np.ndarray:
+    """
+    Normalize the predictions to [0, 1].
+
+    :param pred: predictions as a numpy array
+    :return: normalized predictions
+    """
+    return (pred - np.min(pred)) / (np.max(pred) - np.min(pred))
 
 class Predictions:
     def __init__(self, pred_arr: np.ndarray, ground_truth_arr: np.ndarray, name: str):
@@ -41,17 +49,19 @@ class Predictions:
         :param threshold: threshold for converting predictions to binary labels
         :return: binary labels as a numpy array
         """
-        labels = (self.pred_arr > threshold).astype(int)
+        pred_norm = pred_normalization(self.pred_arr)
+        labels = (pred_norm > threshold).astype(int)
         return labels
 
-    def accuracy(self) -> float:
+    def accuracy(self, threshold=0.5) -> float:
         """
         Calculate the accuracy of the predictions.
 
         :param self: Predictions object
+        :param threshold: threshold for converting predictions to binary labels
         :return: accuracy of the predictions
         """
-        return np.mean(self.predictions_to_labels() == self.ground_truth_arr)
+        return np.mean(self.predictions_to_labels(threshold) == self.ground_truth_arr)
 
     def compute_fpr(self):
         """
@@ -65,6 +75,19 @@ class Predictions:
         total_negative = true_negative + false_positive
         FPR = false_positive / total_negative if total_negative > 0 else 0
         return FPR
+
+    def compute_tpr(self):
+        """
+        Compute the true positive rate (TPR) of the predictions.
+        """
+        # Convert predictions and ground truth to PyTorch tensors if they are not already
+        pred_tensor = torch.tensor(self.pred_arr)
+        ground_truth_tensor = torch.tensor(self.ground_truth_arr)
+        true_positive = torch.logical_and(pred_tensor == 1, ground_truth_tensor == 1).sum().item()
+        false_negative = torch.logical_and(pred_tensor == 0, ground_truth_tensor == 1).sum().item()
+        total_positive = true_positive + false_negative
+        TPR = true_positive / total_positive if total_positive > 0 else 0
+        return TPR
 
     def adjust_fpr(self, target_fpr):
         """
@@ -87,6 +110,13 @@ class Predictions:
         Get the indices of the true positive samples.
         """
         return np.where((self.predictions_to_labels() == 1) & (self.ground_truth_arr == 1))[0]
+
+    def __len__(self):
+        """
+        return the length of the prediction array
+        """
+
+        return len(self.pred_arr)
 
 
 class SampleHardness:
@@ -145,17 +175,20 @@ class SampleHardness:
         plt.savefig(save_path, dpi=300)
 
 
-def common_tp(preds: List[Predictions], fpr=None, set_op="intersection"):
+def common_tp(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):
     """
     Find the union/intersection true positive samples among the predictions
     Note that this is used for both different attacks or same attack with different seeds.
 
     :param preds: list of Predictions
     :param fpr: FPR values for adjusting the predictions
+    :param threshold: threshold for converting predictions to binary labels (only used when not using fpr)
 
+    :return: common true positive samples
     """
     if fpr is None:
-        TP = [np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0] for pred in preds]
+        TP = [np.where((pred.predictions_to_labels(threshold) == 1) & (pred.ground_truth_arr == 1))[0] for pred in
+              preds]
     else:
         adjusted_preds = [pred.adjust_fpr(fpr) for pred in preds]
         TP = [np.where((adjusted_preds[i] == 1) & (preds[i].ground_truth_arr == 1))[0] for i in range(len(preds))]
@@ -184,9 +217,43 @@ def intersection_tp(preds: List[Predictions], fpr=None):
     return common_tp(preds, fpr, set_op="intersection")
 
 
-def common_tp_preds(pred_list: List[Predictions]) -> Predictions:
+def multi_seed_ensemble(pred_list: List[Predictions], method, threshold=0.5) -> Predictions:
+    """
+    Ensemble the predictions from different seeds of the same attack.
+
+    :param pred_list: list of Predictions
+    :param method: method for ensemble the predictions: [HC, HP, avg]
+    :param threshold: threshold for ensemble the predictions
+    :return: ensemble prediction
+    """
+    if len(pred_list) < 2:
+        return pred_list[0]
+
+    ensemble_pred = np.zeros_like(pred_list[0].pred_arr)
+    if method == "HC":  # High Coverage
+        agg_tp = list(common_tp(pred_list, set_op="union", threshold=threshold))
+        if len(agg_tp) > 0:
+            ensemble_pred[agg_tp] = 1
+        else:
+            print("No common true positive samples found for the ensemble (HC).")
+    elif method == "HP":  # High Precision
+        agg_tp = list(common_tp(pred_list, set_op="intersection", threshold=threshold))
+        if len(agg_tp) > 0:
+            ensemble_pred[agg_tp] = 1
+        else:
+            print("No common true positive samples found for the ensemble (HP).")
+    elif method == "avg":  # averaging
+        ensemble_pred = np.mean([pred.pred_arr for pred in pred_list], axis=0)
+    else:
+        raise ValueError("Invalid method for ensemble the predictions.")
+
+    return Predictions(ensemble_pred, pred_list[0].ground_truth_arr, f"ensemble_{method}")
+
+
+def pred_tp_intersection(pred_list: List[Predictions]) -> Predictions:
     """
     Get the common true positive predictions across different seeds of a single attack
+    this is used for the Venn diagram
 
     :param pred_list: List of Predictions objects for the same attack but different seeds
     :return: Predictions object containing only common true positives
@@ -222,7 +289,7 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
         counter = 0
         for attack, pred_obj_list in pred_dict.items():
             counter += 1
-            common_tp_pred = common_tp_preds(pred_obj_list)
+            common_tp_pred = pred_tp_intersection(pred_obj_list)
             result.append(common_tp_pred)
     elif target_fpr != 0:
         adjusted_pred_dict = {}
@@ -237,7 +304,7 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
             adjusted_pred_dict[attack] = adjusted_pred_list
 
         for attack, adjusted_list in adjusted_pred_dict.items():
-            common_tp_pred = common_tp_preds(adjusted_list)
+            common_tp_pred = pred_tp_intersection(adjusted_list)
             result.append(common_tp_pred)
     else:
         raise ValueError("Either threshold or target_fpr should be provided.")
@@ -303,10 +370,12 @@ def plot_venn_diagram_pairwise(pred_pair_list: List[Tuple[Predictions, Predictio
         attacked_points_1 = set(np.where((pred_1.pred_arr == 1) & (pred_1.ground_truth_arr == 1))[0])
         attacked_points_2 = set(np.where((pred_2.pred_arr == 1) & (pred_2.ground_truth_arr == 1))[0])
         circle_colors = ['#EB001B', '#F79E1B']
-        venn2_unweighted(subsets=(attacked_points_1, attacked_points_2), set_labels=(pred_1.name, pred_2.name), set_colors=circle_colors)
+        venn2_unweighted(subsets=(attacked_points_1, attacked_points_2), set_labels=(pred_1.name, pred_2.name),
+                         set_colors=circle_colors)
         plt.title(f"{graph_title}: {pred_1.name} vs {pred_2.name}")
         plt.savefig(f"{save_path}_{pred_1.name}_vs_{pred_2.name}.png", dpi=300)
         plt.close()
+
 
 def extract_features(model, dataset, target_layer=None):
     """
@@ -350,7 +419,9 @@ def extract_features(model, dataset, target_layer=None):
             features.append(feature.squeeze().numpy())
     return np.array(features)
 
-def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, model_name: str, title: str, save_path: str, perplexity: int = 30):
+
+def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, model_name: str, title: str, save_path: str,
+               perplexity: int = 30):
     """
     Plot the t-SNE graph for the predictions from different attacks.
 
