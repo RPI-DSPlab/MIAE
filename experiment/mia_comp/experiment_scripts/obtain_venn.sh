@@ -7,7 +7,7 @@ mias=("losstraj" "shokri" "yeom")
 categories=("threshold" "single_attack" "fpr")
 subcategories=("common_tp" "pairwise")
 seeds=(0 1 2 3)
-fprs=(0.001 0.1 0.5 0.8)
+fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 
 # Prepare the parameter lists for the experiment
 mialist=""
@@ -26,7 +26,7 @@ for fpr in "${fprs[@]}"; do
 done
 
 
-experiment_dir="/data/public/comp_mia_data/miae_experiment_aug"
+experiment_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 

@@ -384,36 +384,6 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], g
     plt.tight_layout()  # Adjust layout to prevent overlapping
     plt.savefig(f"{save_path}.png", dpi=300)
 
-def find_pairwise_preds(pred_list: List[Predictions]) -> List[Tuple[Predictions, Predictions]]:
-    """
-    Find all possible pairs of predictions in the given list.
-    :param pred_list: list of Predictions
-    :return: list of tuples, each containing a pair of Predictions
-    """
-    pairs = []
-    n = len(pred_list)
-    for i in range(n):
-        for j in range(i + 1, n):
-            pairs.append((pred_list[i], pred_list[j]))
-    return pairs
-
-def plot_venn_diagram_pairwise(pred_pair_list: List[Tuple[Predictions, Predictions]], graph_title: str, save_path: str):
-    """
-    Plot Venn diagrams for each pair of predictions in the given list.
-    :param pred_pair_list: list of tuples, each containing a pair of Predictions objects
-    :param graph_title: title of the graph
-    :param save_path: path to save the graphs
-    """
-    plt.figure(figsize=(8, 8), dpi=300)
-    for idx, pair in enumerate(pred_pair_list):
-        pred_1, pred_2 = pair
-        attacked_points_1 = set(np.where((pred_1.pred_arr == 1) & (pred_1.ground_truth_arr == 1))[0])
-        attacked_points_2 = set(np.where((pred_2.pred_arr == 1) & (pred_2.ground_truth_arr == 1))[0])
-        circle_colors = ['#EB001B', '#F79E1B']
-        venn2_unweighted(subsets=(attacked_points_1, attacked_points_2), set_labels=(pred_1.name, pred_2.name), set_colors=circle_colors)
-        plt.title(f"{graph_title}: {pred_1.name} vs {pred_2.name}")
-        plt.savefig(f"{save_path}_{pred_1.name}_vs_{pred_2.name}.png", dpi=300)
-        plt.close()
 
 def extract_features(model, dataset, target_layer=None):
     """
