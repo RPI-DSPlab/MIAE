@@ -12,7 +12,7 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.nn.functional as F
 
-from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
+from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils
 from miae.utils.set_seed import set_seed
 
 
@@ -81,11 +81,11 @@ class ShokriAuxiliaryInfo(AuxiliaryInfo):
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
         if self.log_path is not None:
-            self.shokri_logger = logging.getLogger('shokri_logger')
-            self.shokri_logger.setLevel(logging.INFO)
+            self.logger = logging.getLogger('shokri_logger')
+            self.logger.setLevel(logging.INFO)
             fh = logging.FileHandler(self.log_path + '/shokri.log')
             fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
-            self.shokri_logger.addHandler(fh)
+            self.logger.addHandler(fh)
 
 
 class ShokriModelAccess(ModelAccess):
@@ -102,138 +102,8 @@ class ShokriModelAccess(ModelAccess):
         super().__init__(model, untrained_model, access_type)
 
 
-class ShokriUtil:
-    @classmethod
-    def train_shadow_model(cls, shadow_model, shadow_train_loader, shadow_test_loader, aux_info: ShokriAuxiliaryInfo):
-        """
-        Train the shadow model.
-        :param shadow_model: the shadow model.
-        :param shadow_train_loader: the shadow training data loader.
-        :param shadow_test_loader: the shadow test data loader.
-        :param aux_info: the auxiliary information for the shadow model.
-        :return: the trained shadow model.
-        """
-        shadow_optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, shadow_model.parameters()), lr=aux_info.lr,
-                                           momentum=aux_info.momentum,
-                                           weight_decay=aux_info.weight_decay)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(shadow_optimizer, aux_info.num_shadow_epochs)
-        shadow_criterion = torch.nn.CrossEntropyLoss()
+class ShokriUtil(MIAUtils):
 
-        for epoch in tqdm(range(aux_info.num_shadow_epochs)):
-            shadow_model.train()
-            train_loss = 0
-            for data, target in shadow_train_loader:
-                data, target = data.to(aux_info.device), target.to(aux_info.device)
-                shadow_optimizer.zero_grad()
-                output = shadow_model(data)
-                loss = shadow_criterion(output, target)
-                train_loss += loss.item()
-                loss.backward()
-                shadow_optimizer.step()
-            scheduler.step()
-
-            if epoch % 20 == 0 or epoch == aux_info.num_shadow_epochs - 1:
-                shadow_model.eval()
-                with torch.no_grad():
-                    test_correct_predictions = 0
-                    total_samples = 0
-                    for i, data in enumerate(shadow_test_loader):
-                        inputs, labels = data
-                        inputs, labels = inputs.to(aux_info.device), labels.to(aux_info.device)
-                        outputs = shadow_model(inputs)
-                        _, predicted = torch.max(outputs, 1)
-                        test_correct_predictions += (predicted == labels).sum().item()
-                        total_samples += labels.size(0)
-                    test_accuracy = test_correct_predictions / total_samples
-
-                    train_correct_predictions = 0
-                    total_samples = 0
-                    for i, data in enumerate(shadow_train_loader):
-                        inputs, labels = data
-                        inputs, labels = inputs.to(aux_info.device), labels.to(aux_info.device)
-                        outputs = shadow_model(inputs)
-                        _, predicted = torch.max(outputs, 1)
-                        train_correct_predictions += (predicted == labels).sum().item()
-                        total_samples += labels.size(0)
-                    train_accuracy = train_correct_predictions / total_samples
-
-                print(
-                    f"Epoch {epoch}, train_acc: {train_accuracy * 100:.2f}%, test_acc: {test_accuracy * 100:.2f}%, Loss: "
-                    f"{train_loss:.4f}, lr: {scheduler.get_last_lr()[0]:.4f}")
-
-                if aux_info.log_path is not None:
-                    aux_info.shokri_logger.info(
-                        f"Epoch {epoch}, train_acc: {train_accuracy * 100:.2f}%, test_acc: {test_accuracy * 100:.2f}%, Loss:"
-                        f"{train_loss:.4f}, lr: {scheduler.get_last_lr()[0]:.4f}")
-        return shadow_model
-
-    @classmethod
-    def train_attack_model(cls, attack_model, attack_train_loader, attack_test_loader, aux_info: ShokriAuxiliaryInfo):
-        """
-        Train the attack model.
-        :param attack_model: the attack model.
-        :param attack_train_loader: the attack training data loader.
-        :param attack_test_loader: the attack test data loader, None meaning no test data.
-        :param aux_info: the auxiliary information for the attack model.
-        :return: the trained attack model.
-        """
-        attack_optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, attack_model.parameters()),
-                                           lr=aux_info.attack_lr,
-                                           momentum=aux_info.momentum,
-                                           weight_decay=aux_info.weight_decay)
-        attack_criterion = torch.nn.CrossEntropyLoss()
-
-        for epoch in tqdm(range(aux_info.attack_epochs)):
-            attack_model.train()
-            train_loss = 0
-            for pred, label, membership in attack_train_loader:
-                pred, membership = pred.to(aux_info.device), membership.to(aux_info.device)
-                attack_optimizer.zero_grad()
-                output = attack_model(pred)
-                membership = membership.long()
-                loss = attack_criterion(output, membership)  # membership is the target to be predicted
-                loss.backward()
-                attack_optimizer.step()
-                train_loss += loss.item()
-
-            if epoch % 20 == 0 or epoch == aux_info.attack_epochs - 1:
-                attack_model.eval()
-                correct = 0
-                total = 0
-                if attack_test_loader != None:
-                    with torch.no_grad():
-                        for pred, _, membership in attack_test_loader:
-                            pred, membership = pred.to(aux_info.device), membership.to(aux_info.device)
-                            output = attack_model(pred)
-                            _, predicted = torch.max(output.data, 1)
-                            total += membership.size(0)
-                            correct += (predicted == membership).sum().item()
-                    test_acc = correct / total
-
-                with torch.no_grad():
-                    correct = 0
-                    total = 0
-                    for pred, _, membership in attack_train_loader:
-                        pred, membership = pred.to(aux_info.device), membership.to(aux_info.device)
-                        output = attack_model(pred)
-                        _, predicted = torch.max(output.data, 1)
-                        total += membership.size(0)
-                        correct += (predicted == membership).sum().item()
-                    train_acc = correct / total
-
-                if attack_test_loader != None:
-                    print(
-                        f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, test_acc: {test_acc * 100:.2f}%, Loss: {train_loss:.4f}")
-                    if aux_info.log_path is not None:
-                        aux_info.shokri_logger.info(
-                            f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, test_acc: {test_acc * 100:.2f}%, Loss: {train_loss:.4f}")
-                else:
-                    print(f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, Loss: {train_loss * 100:.4f}%")
-                    if aux_info.log_path is not None:
-                        aux_info.shokri_logger.info(
-                            f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, Loss: {train_loss * 100:.4f}%")
-
-        return attack_model
 
     @classmethod
     def split_dataset(cls, dataset: Dataset, num_datasets: int) -> list[Dataset]:
@@ -368,12 +238,12 @@ class ShokriAttack(MiAttack):
                 if os.path.exists(model_path):
                     print(f"Loading shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
                     if self.auxiliary_info.log_path is not None:
-                        self.auxiliary_info.shokri_logger.info(f"Loading shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
+                        self.auxiliary_info.logger.info(f"Loading shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
                     shadow_model_i.load_state_dict(torch.load(model_path))
                 else:
                     print(f"Training shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
                     if self.auxiliary_info.log_path is not None:
-                        self.auxiliary_info.shokri_logger.info(f"Training shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
+                        self.auxiliary_info.logger.info(f"Training shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
                     shadow_model_i = ShokriUtil.train_shadow_model(shadow_model_i, shadow_train_loader,
                                                                    shadow_test_loader,
                                                                    self.auxiliary_info)
@@ -442,7 +312,7 @@ class ShokriAttack(MiAttack):
         if len(labels) == len(os.listdir(self.auxiliary_info.attack_model_path)):
             print("Loading attack models...")
             if self.auxiliary_info.log_path is not None:
-                self.auxiliary_info.shokri_logger.info("Loading attack models...")
+                self.auxiliary_info.logger.info("Loading attack models...")
             for i, label in enumerate(labels):
                 model = self.auxiliary_info.attack_model(self.auxiliary_info.num_classes)
                 model.load_state_dict(torch.load(f"{self.auxiliary_info.attack_model_path}/attack_model_{label}.pt"))
@@ -452,7 +322,7 @@ class ShokriAttack(MiAttack):
             for i, label in enumerate(labels):
                 print(f"Training attack model for {i}/{len(labels)} label \"{label}\" ...")
                 if self.auxiliary_info.log_path is not None:
-                    self.auxiliary_info.shokri_logger.info(f"Training attack model for {i}/{len(labels)} label \"{label}\" ...")
+                    self.auxiliary_info.logger.info(f"Training attack model for {i}/{len(labels)} label \"{label}\" ...")
                 # filter the dataset with the label
                 attack_train_dataset_filtered = ShokriUtil.filter_dataset(attack_train_dataset, label)
                 attack_test_dataset_filtered = ShokriUtil.filter_dataset(attack_test_dataset,
