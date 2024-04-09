@@ -20,6 +20,14 @@ from typing import Dict, List, Tuple
 from PIL import Image
 
 
+def pred_normalization(pred: np.ndarray) -> np.ndarray:
+    """
+    Normalize the predictions to [0, 1].
+
+    :param pred: predictions as a numpy array
+    :return: normalized predictions
+    """
+    return (pred - np.min(pred)) / (np.max(pred) - np.min(pred) + 1e-6)
 
 class Predictions:
     def __init__(self, pred_arr: np.ndarray, ground_truth_arr: np.ndarray, name: str):
@@ -42,8 +50,10 @@ class Predictions:
         :param threshold: threshold for converting predictions to binary labels
         :return: binary labels as a numpy array
         """
-        labels = (self.pred_arr > threshold).astype(int)
+        pred_norm = pred_normalization(self.pred_arr)
+        labels = (pred_norm > threshold).astype(int)
         return labels
+
 
     def accuracy(self) -> float:
         """
@@ -52,6 +62,7 @@ class Predictions:
         :param self: Predictions object
         :return: accuracy of the predictions
         """
+        # denominator = len(self.ground_truth_arr)
         return np.mean(self.predictions_to_labels() == self.ground_truth_arr)
 
     def balanced_attack_accuracy(self) -> float:
@@ -228,10 +239,9 @@ def plot_venn_single(pred_list: List[Predictions], graph_title: str, save_path: 
     plt.figure(figsize=(14, 7), dpi=300)
     attacked_points = {pred.name: set() for pred in pred_list}
     for pred in pred_list:
-        attacked_points[pred.name].update(i for i, prob in enumerate(pred.pred_arr) if prob > 0.5)
+        attacked_points[pred.name] = set(np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
     venn_sets = tuple(attacked_points[pred.name] for pred in pred_list)
     venn_labels = [pred.name for pred in pred_list]
-
     circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
     # Plotting unweighted Venn diagram
     plt.subplot(1, 2, 1, aspect='equal')
