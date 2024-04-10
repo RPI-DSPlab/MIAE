@@ -105,7 +105,7 @@ class MiAttack(ABC):
     """
 
     # define initialization with specifying the model access and the auxiliary information
-    def __init__(self, target_model_access: ModelAccess, auxiliary_info: AuxiliaryInfo, target_data=None):
+    def __init__(self, target_model_access: ModelAccess, auxiliary_info: AuxiliaryInfo):
         """
         Initialize the attack with model access and auxiliary information.
         :param target_model_access:
@@ -115,7 +115,6 @@ class MiAttack(ABC):
         """
         self.target_model_access = target_model_access
         self.auxiliary_info = auxiliary_info
-        self.target_data = target_data
 
         self.prepared = False
 

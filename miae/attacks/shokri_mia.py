@@ -172,7 +172,7 @@ class ShokriAttack(MiAttack):
         :param auxiliary_info: the auxiliary information for the Shokri attack.
         :param target_data: the target data for the Shokri attack.
         """
-        super().__init__(target_model_access, auxiliary_info, target_data)
+        super().__init__(target_model_access, auxiliary_info)
         self.attack_model_dict = None
         self.attack_dataset = None
         self.shadow_models = []
