@@ -130,7 +130,8 @@ def plot_hardness_distribution(predictions: Dict[str, List[utils.Predictions]] o
     #
 
 
-def multi_seed_convergence(predictions: Dict[str, List[utils.Predictions]], graph_title: str, graph_path: str, set_op, fpr=None):
+def multi_seed_convergence(predictions: Dict[str, List[utils.Predictions]], graph_title: str, graph_path: str, set_op, fpr=None,
+                           tpr_plot = False, fpr_plot = True):
     """
     plot the convergence of the different attacks
     :param predictions: List[utils.Predictions]: list of Predictions objects, each element in a list is a Predictions object for a specific seed
@@ -138,6 +139,8 @@ def multi_seed_convergence(predictions: Dict[str, List[utils.Predictions]], grap
     :param graph_path: str: path to save the graph
     :param set_op: str: set operation to be used for the convergence: [union, intersection]
     :param fpr: float: false positive rate to be plotted as vertical line on auc graph
+    :param tpr_plot: bool: whether to plot the true positive rate
+    :param fpr_plot: bool: whether to plot the false positive rate
     :return: None
     """
     # obtain the number of true positives for each attack at num of seeds
