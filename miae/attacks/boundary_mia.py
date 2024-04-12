@@ -12,6 +12,7 @@ import torch
 from scipy.ndimage import interpolation
 from torch.utils.data import DataLoader, TensorDataset, Dataset, Subset
 from art.attacks.evasion import HopSkipJump
+from art.estimators.classification import PyTorchClassifier
 from sklearn.metrics import roc_curve
 from tqdm import tqdm
 import torch.nn as nn
@@ -19,7 +20,8 @@ import torch.nn.functional as F
 
 from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils
 from miae.utils.set_seed import set_seed
-from miae.utils.dataset_utils import dataset_split
+from miae.utils.dataset_utils import dataset_split, get_xy_from_dataset
+
 
 class AttackModel(nn.Module):
     def __init__(self, aug_type='n'):
@@ -73,9 +75,8 @@ class BoundaryAuxiliaryInfo(AuxiliaryInfo):
         self.shadow_train_ratio = config.get("shadow_train_ratio", 0.5)  # 0.5 for a balanced prior for membership
         # -- attack parameters --
         self.dist_max_sample = config.get("dist_max_sample", 100)
-        self.input_dim = config.get("input_dim", [None, 32, 32, 3])
+        self.input_dim = config.get("input_dim", [3, 32, 32])
         self.n_classes = config.get("n_classes", 10)
-
 
         # -- attack model parameters --
         self.attack_model = attack_model
@@ -84,10 +85,9 @@ class BoundaryAuxiliaryInfo(AuxiliaryInfo):
         self.attack_lr = config.get("attack_lr", 0.01)
         self.attack_train_ratio = config.get("attack_train_ratio", 0.9)
         self.attack_epochs = config.get("attack_epochs", self.epochs)
-
         # -- other parameters --
         self.save_path = config.get("save_path", "boundary")
-        self.device = config.get("device", 'cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = config.get("device", 'cuda:1' if torch.cuda.is_available() else 'cpu')
         self.shadow_model_path = config.get("shadow_model_path", f"{self.save_path}/shadow_models")
         self.attack_dataset_path = config.get("attack_dataset_path", f"{self.save_path}/attack_dataset")
         self.attack_model_path = config.get("attack_model_path", f"{self.save_path}/attack_models")
@@ -96,11 +96,11 @@ class BoundaryAuxiliaryInfo(AuxiliaryInfo):
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
         if self.log_path is not None:
-            self.boundary_logger = logging.getLogger('boundary_logger')
-            self.boundary_logger.setLevel(logging.INFO)
+            self.logger = logging.getLogger('boundary_logger')
+            self.logger.setLevel(logging.INFO)
             fh = logging.FileHandler(self.log_path + '/boundary.log')
             fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
-            self.boundary_logger.addHandler(fh)
+            self.logger.addHandler(fh)
 
 
 class BoundaryModelAccess(ModelAccess):
@@ -180,18 +180,23 @@ class BoundaryUtil(MIAUtils):
         n_classes = aux_info.n_classes
 
         model.eval()
+        # art package requires a PyTorchClassifier model
+        art_wrapper_model = PyTorchClassifier(
+            model=model,
+            loss=nn.CrossEntropyLoss(),
+            input_shape=input_dim,
+            nb_classes=n_classes,
+            device_type=device
+        )
 
         acc = []
         dist_adv = []
 
+        adv_attack = None
         if attack == "CW":
             raise NotImplementedError("CW attack not implemented yet")
         elif attack == "HSJ":
-            def generate_adversarial_example(model, x, y):
-                attack = HopSkipJump(model=model, targeted=False, norm=np.inf, max_iter=1000, max_eval=10000,
-                                     init_eval=100, init_size=100, verbose=False)
-                x_adv = attack.generate(x, y)
-                return x_adv
+            adv_attack = HopSkipJump(classifier=art_wrapper_model, targeted=False, verbose=False)
 
         else:
             raise ValueError("Unknown attack {}".format(attack))
@@ -199,9 +204,9 @@ class BoundaryUtil(MIAUtils):
         data_loader = DataLoader(ds, batch_size=1, shuffle=False)
 
         num_samples = 0
-        for batch_idx, (xbatch, ybatch) in enumerate(data_loader):
+        for batch_idx, (xbatch, ybatch) in enumerate(tqdm(data_loader)):
+            ybatch_onehot = torch.eye(n_classes)[ybatch]
             xbatch, ybatch = xbatch.to(device), ybatch.to(device)
-            ybatch_onehot = torch.eye(n_classes)[ybatch].to(device)
 
             with torch.no_grad():
                 output = model(xbatch)
@@ -211,16 +216,15 @@ class BoundaryUtil(MIAUtils):
 
                 if correct:
                     # Generate adversarial examples
-                    x_adv = generate_adversarial_example(model, xbatch, ybatch_onehot)
+                    x_adv = adv_attack.generate(xbatch.cpu().numpy(), ybatch_onehot)
                 else:
                     x_adv = xbatch
 
                 # Compute distances
-                d = torch.norm(x_adv - xbatch, p=2, dim=(1, 2, 3)).cpu().numpy()
+                d = torch.norm(torch.from_numpy(x_adv).cpu() - xbatch.cpu(), p=2, dim=(1, 2, 3)).cpu().numpy()
                 dist_adv.extend(d)
 
             num_samples += xbatch.size(0)
-            print("Processed {} examples".format(num_samples))
             if num_samples >= len(ds):
                 break
 
@@ -228,7 +232,7 @@ class BoundaryUtil(MIAUtils):
 
     @classmethod
     def distance_augmentation_process(cls, model, data, aux_info: BoundaryAuxiliaryInfo,
-                                     attack_type='d', augment_kwarg=1) -> np.array:
+                                      attack_type='d', augment_kwarg=1) -> np.array:
         """process data for distance augmentation attack's training and inference.
 
         Args:
@@ -253,8 +257,11 @@ class BoundaryUtil(MIAUtils):
         processed_ds = np.zeros((len(data), len(augments)))
 
         for i in range(len(augments)):
-            data_aug = cls.apply_augment(data, augments[i], attack_type)
+            BoundaryUtil.log(aux_info, f"Processing augmentation {i + 1}/{len(augments)}", print_flag=True)
+            data_x, data_y = get_xy_from_dataset(data)
+            data_aug = cls.apply_augment([data_x, data_y], augments[i], attack_type)
             ds = TensorDataset(torch.tensor(data_aug[0]), torch.tensor(data_aug[1]))
+            BoundaryUtil.log(aux_info, "Obtaining distances to boundary", print_flag=True)
             processed_ds[:, i] = cls.dists(model, ds, aux_info, attack="HSJ")
         return processed_ds
 
@@ -276,6 +283,12 @@ class BoundaryAttack(MiAttack):
         self.target_model_access = target_model_access
         self.attack_model = None
         self.prepared = False
+
+        # directories:
+        for dir in [self.aux_info.log_path, self.aux_info.save_path, self.aux_info.attack_model_path,
+                    self.aux_info.shadow_model_path]:
+            if not os.path.exists(dir):
+                os.makedirs(dir)
 
     def prepare(self, auxiliary_dataset):
         """
@@ -306,16 +319,28 @@ class BoundaryAttack(MiAttack):
             torch.save(shadow_model, self.aux_info.shadow_model_path + '/shadow_model.pth')
 
         # 2. Generate distance from the shadow model and auxiliary dataset
-        dist_in = BoundaryUtil.distance_augmentation_process(shadow_model, train_set, self.aux_info, attack_type='d', augment_kwarg=1)
-        dist_out = BoundaryUtil.distance_augmentation_process(shadow_model, test_set, self.aux_info, attack_type='d', augment_kwarg=1)
+        dist_in = BoundaryUtil.distance_augmentation_process(shadow_model, train_set, self.aux_info, attack_type='d',
+                                                             augment_kwarg=1)
+        dist_out = BoundaryUtil.distance_augmentation_process(shadow_model, test_set, self.aux_info, attack_type='d',
+                                                              augment_kwarg=1)
+        print(f"dists_in: {dist_in.shape}, dists_out: {dist_out.shape}")
 
         # 3. Train an attack model
         attack_model = self.aux_info.attack_model()
-        train_set = TensorDataset(torch.tensor(dist_in), torch.tensor([1] * len(dist_in)))
-        test_set = TensorDataset(torch.tensor(dist_out), torch.tensor([0] * len(dist_out)))
-        attack_dataset = torch.utils.data.ConcatDataset([train_set, test_set])
-        attack_train_loader = DataLoader(attack_dataset, batch_size=self.aux_info.attack_batch_size, shuffle=True)
-        self.attack_model = BoundaryUtil.train_attack_model(attack_model, attack_train_loader, self.aux_info)
+        if os.path.exists(self.aux_info.attack_model_path + '/attack_model.pth'):
+            self.attack_model = torch.load(self.aux_info.attack_model_path + '/attack_model.pth')
+        else:
+            if os.path.exists(self.aux_info.attack_dataset_path + '/attack_dataset.pth'):
+                attack_dataset = torch.load(self.aux_info.attack_dataset_path + '/attack_dataset.pth')
+            else:
+                train_set = TensorDataset(torch.tensor(dist_in), torch.tensor([1] * len(dist_in)))
+                test_set = TensorDataset(torch.tensor(dist_out), torch.tensor([0] * len(dist_out)))
+                attack_dataset = torch.utils.data.ConcatDataset([train_set, test_set])
+                torch.save(attack_dataset, self.aux_info.attack_dataset_path + '/attack_dataset.pth')
+
+            attack_train_loader = DataLoader(attack_dataset, batch_size=self.aux_info.attack_batch_size, shuffle=True)
+            self.attack_model = BoundaryUtil.train_attack_model(attack_model, attack_train_loader, None, self.aux_info)
+            torch.save(self.attack_model, self.aux_info.attack_model_path + '/attack_model.pth')
 
         self.prepared = True
 
@@ -330,11 +355,8 @@ class BoundaryAttack(MiAttack):
             raise ValueError("The attack has not been prepared yet!")
 
         # 1. process the data for distance augmentation attack
-        dist_target = BoundaryUtil.distance_augmentation_process(self.target_model_access.model, data, self.aux_info, attack_type='d', augment_kwarg=1)
+        dist_target = BoundaryUtil.distance_augmentation_process(self.target_model_access.model, data, self.aux_info,
+                                                                 attack_type='d', augment_kwarg=1)
         self.target_model_access.to_device(self.aux_info.device)
         target_pred = self.attack_model(torch.tensor(dist_target).to(self.aux_info.device)).detach().cpu().numpy()
         return target_pred[1]
-
-
-
-
