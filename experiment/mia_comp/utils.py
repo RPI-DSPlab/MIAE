@@ -224,20 +224,23 @@ def multi_seed_ensemble(pred_list: List[Predictions], method, threshold=0.5) -> 
     :param pred_list: list of Predictions
     :param method: method for ensemble the predictions: [HC, HP, avg]
     :param threshold: threshold for ensemble the predictions
+    :param fpr: FPR values for adjusting the predictions
     :return: ensemble prediction
     """
+    if threshold is not None and fpr is not None:
+        raise ValueError("Both threshold and FPR values are provided, only one should be provided.")
     if len(pred_list) < 2:
         return pred_list[0]
 
     ensemble_pred = np.zeros_like(pred_list[0].pred_arr)
     if method == "HC":  # High Coverage
-        agg_tp = list(common_tp(pred_list, set_op="union", threshold=threshold))
+        agg_tp = list(common_pred(pred_list, set_op="union", threshold=threshold))
         if len(agg_tp) > 0:
             ensemble_pred[agg_tp] = 1
         else:
             print("No common true positive samples found for the ensemble (HC).")
     elif method == "HP":  # High Precision
-        agg_tp = list(common_tp(pred_list, set_op="intersection", threshold=threshold))
+        agg_tp = list(common_pred(pred_list, set_op="intersection", threshold=threshold))
         if len(agg_tp) > 0:
             ensemble_pred[agg_tp] = 1
         else:

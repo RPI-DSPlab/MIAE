@@ -130,41 +130,110 @@ def plot_hardness_distribution(predictions: Dict[str, List[utils.Predictions]] o
     #
 
 
-def multi_seed_convergence(predictions: Dict[str, List[utils.Predictions]], graph_title: str, graph_path: str, set_op, fpr=None):
+def multi_seed_convergence(predictions: Dict[str, List[utils.Predictions]], graph_title: str, graph_path: str, set_op, attack_fpr=None):
     """
     plot the convergence of the different attacks
+
     :param predictions: List[utils.Predictions]: list of Predictions objects, each element in a list is a Predictions object for a specific seed
     :param graph_title: str: title of the graph
     :param graph_path: str: path to save the graph
     :param set_op: str: set operation to be used for the convergence: [union, intersection]
-    :param fpr: float: false positive rate to be plotted as vertical line on auc graph
+    :param attack_fpr: float: false positive rate to be plotted as vertical line on auc graph
+
     :return: None
     """
     # obtain the number of true positives for each attack at num of seeds
     num_tp_dict = {}
+    tpr_dict = {}
+    fpr_dict = {}
+    precision_dict = {}
     for attack, pred_list in predictions.items():
         num_tp_dict[attack] = []
+        tpr_dict[attack] = []
+        fpr_dict[attack] = []
+        precision_dict[attack] = []
         for i in range(len(pred_list)):
+            # agg_tp is the aggregated true positives, agg_pred is the aggregated 1 (member) predictions
             if set_op == "union":
-                num_tp_dict[attack].append(len(utils.union_tp(pred_list[:i+1], fpr)))
+                agg_tp = utils.union_tp(pred_list[:i+1], attack_fpr)
+                agg_pred = utils.union_pred(pred_list[:i+1], attack_fpr)
             elif set_op == "intersection":
-                num_tp_dict[attack].append(len(utils.intersection_tp(pred_list[:i+1], fpr)))
+                agg_tp = utils.intersection_tp(pred_list[:i+1], attack_fpr)
+                agg_pred = utils.intersection_pred(pred_list[:i+1], attack_fpr)
             else:
                 raise ValueError(f"Invalid set operation: {set_op}")
+            num_tp_dict[attack].append(len(agg_tp))
 
-    # plotting
-    plt.clf()
+            # -- calculate the true positive rate -- tpr = tp / (tp + fn)
+            tp = 0
+            gt = pred_list[0].ground_truth_arr
+            fn = 0
+            for j in range(len(gt)):
+                if gt[j] == 1 and j not in agg_pred:
+                    fn += 1
+                if gt[j] == 1 and j in agg_pred:
+                    tp += 1
+            tpr = tp / (tp + fn)
+            tpr_dict[attack].append(tpr)
+
+            # --- calculate the false positive rate ---  fpr = fp / (fp + tn)
+            fp = 0
+            tn = 0
+            gt = pred_list[0].ground_truth_arr
+            for j in range(len(gt)):
+                if gt[j] == 0 and j in agg_pred:  # if j is predicted as member and it is not a member from gt
+                    fp += 1
+                if gt[j] == 0 and j not in agg_pred:  # if j is not predicted as member and it is not a member from gt
+                    tn += 1
+            fpr = fp / (fp + tn)
+            fpr_dict[attack].append(fpr)
+
+            # --- calculate the precision --- precision = tp / (tp + fp)
+            precision = tp / (tp + fp) if (tp+fp) != 0 else 0
+            precision_dict[attack].append(precision)
+
+    num_plots = 4
     num_seed = 0
+    fig, axes = plt.subplots(1, num_plots, figsize=(26, 5))
+    fig.subplots_adjust(wspace=0.4)  # Adjust the spacing between subplots
+    # Plotting the convergence of number of true positives
     for attack, num_tp in num_tp_dict.items():
-        plt.plot(num_tp, label=attack)
+        axes[0].plot(num_tp, label=attack)
         num_seed = len(num_tp)
-    plt.xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
-    plt.xlabel("Number of seeds")
-    plt.ylabel("Number of True Positives")
-    plt.title(graph_title)
-    plt.legend()
-    plt.savefig(graph_path)
-    plt.close()
+    axes[0].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    axes[0].set_xlabel("Number of seeds")
+    axes[0].set_ylabel("Number of True Positives")
+    axes[0].set_title("Number of True Positives Convergence")
+    axes[0].legend()
+
+    # Plotting the convergence of true positive rate
+    for attack, tpr in tpr_dict.items():
+        axes[1].plot(tpr, label=attack)
+    axes[1].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    axes[1].set_xlabel("Number of seeds")
+    axes[1].set_ylabel("True Positive Rate")
+    axes[1].set_title("True Positive Rate Convergence")
+    axes[1].legend()
+
+    # Plotting the convergence of false positive rate
+    for attack, tpr in fpr_dict.items():
+        axes[2].plot(tpr, label=attack)
+    axes[2].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    axes[2].set_xlabel("Number of seeds")
+    axes[2].set_ylabel("False Positive Rate")
+    axes[2].set_title("False Positive Rate Convergence")
+    axes[2].legend()
+
+    # Plotting the convergence of precision
+    for attack, precision in precision_dict.items():
+        axes[3].plot(precision, label=attack)
+    axes[3].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    axes[3].set_xlabel("Number of seeds")
+    axes[3].set_ylabel("Precision")
+    axes[3].set_title("Precision Convergence")
+    axes[3].legend()
+
+    plt.savefig(graph_path + f"_fpr{attack_fpr}.png", dpi=300)
 
 
 def single_attack_seed_ensemble(predictions: Dict[str, List[utils.Predictions]], graph_title: str, graph_path: str, num_seeds: int, skip: int=2):
@@ -281,13 +350,13 @@ if __name__ == '__main__':
     elif args.graph_type == "multi_seed_convergence_intersection":
         for fpr in args.fpr:
             graph_title = args.graph_title + f" FPR = {fpr}"
-            graph_path = args.graph_path + f"_fpr{fpr}.png"
+            graph_path = args.graph_path
             multi_seed_convergence(pred_dict, graph_title, graph_path, "intersection", fpr)
 
     elif args.graph_type == "multi_seed_convergence_union":
         for fpr in args.fpr:
             graph_title = args.graph_title + f" FPR = {fpr}"
-            graph_path = args.graph_path + f"_fpr{fpr}.png"
+            graph_path = args.graph_path
             multi_seed_convergence(pred_dict, graph_title, graph_path, "union", fpr)
 
     elif args.graph_type == "single_seed_ensemble":
