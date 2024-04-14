@@ -105,7 +105,7 @@ class MiAttack(ABC):
     """
 
     # define initialization with specifying the model access and the auxiliary information
-    def __init__(self, target_model_access: ModelAccess, auxiliary_info: AuxiliaryInfo, target_data=None):
+    def __init__(self, target_model_access: ModelAccess, auxiliary_info: AuxiliaryInfo):
         """
         Initialize the attack with model access and auxiliary information.
         :param target_model_access:
@@ -115,7 +115,6 @@ class MiAttack(ABC):
         """
         self.target_model_access = target_model_access
         self.auxiliary_info = auxiliary_info
-        self.target_data = target_data
 
         self.prepared = False
 
@@ -176,6 +175,20 @@ class MIAUtils:
     Note that utils here are not for all attacks, but for some specific attacks.
     """
     @classmethod
+    def log(cls, aux_info: AuxiliaryInfo, msg: str, print_flag: bool = True):
+        """
+        log the message to logger if the log_path is not None.
+        :param aux_info: the auxiliary information.
+        :param msg: the message to be logged.
+        :param print_flag: whether to print the message.
+        """
+        if aux_info.log_path is not None:
+            aux_info.logger.info(msg)
+        if print_flag:
+            print(msg)
+
+
+    @classmethod
     def train_shadow_model(cls, shadow_model, shadow_train_loader, shadow_test_loader, aux_info: AuxiliaryInfo) -> torch.nn.Module:
         """
         Train the shadow model. (for shokri, Yeom, Boundary)
@@ -185,6 +198,7 @@ class MIAUtils:
         :param aux_info: the auxiliary information for the shadow model.
         :return: the trained shadow model.
         """
+        shadow_model.to(aux_info.device)
         shadow_optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, shadow_model.parameters()), lr=aux_info.lr,
                                            momentum=aux_info.momentum,
                                            weight_decay=aux_info.weight_decay)
@@ -249,6 +263,7 @@ class MIAUtils:
         :param aux_info: the auxiliary information for the attack model.
         :return: the trained attack model.
         """
+        attack_model.to(aux_info.device)
         attack_optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, attack_model.parameters()),
                                            lr=aux_info.attack_lr,
                                            momentum=aux_info.momentum,
