@@ -19,6 +19,7 @@ from torchvision import transforms
 from typing import Dict, List, Tuple
 from PIL import Image
 
+
 def pred_normalization(pred: np.ndarray) -> np.ndarray:
     """
     Normalize the predictions to [0, 1].
@@ -27,6 +28,7 @@ def pred_normalization(pred: np.ndarray) -> np.ndarray:
     :return: normalized predictions
     """
     return (pred - np.min(pred)) / (np.max(pred) - np.min(pred))
+
 
 class Predictions:
     def __init__(self, pred_arr: np.ndarray, ground_truth_arr: np.ndarray, name: str):
@@ -217,7 +219,48 @@ def intersection_tp(preds: List[Predictions], fpr=None):
     return common_tp(preds, fpr, set_op="intersection")
 
 
-def multi_seed_ensemble(pred_list: List[Predictions], method, threshold=0.5) -> Predictions:
+def common_pred(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):
+    """
+    Find the union/intersection of prediction = 1 among the predictions
+    Note that this is used for both different attacks or same attack with different seeds.
+
+    :param preds: list of Predictions
+    :param fpr: FPR values for adjusting the predictions
+    :param threshold: threshold for converting predictions to binary labels (only used when not using fpr)
+    :param set_op: set operation for the common predictions: [union, intersection]
+    """
+    if fpr is None:
+        pred = [np.where(pred.predictions_to_labels(threshold) == 1)[0] for pred in preds]
+    else:
+        adjusted_preds = [pred.adjust_fpr(fpr) for pred in preds]
+        pred = [np.where(adjusted_preds[i] == 1)[0] for i in range(len(preds))]
+
+    common_pred = set(pred[0])
+    if len(pred) < 2:
+        return common_pred
+
+    for i in range(1, len(pred)):
+        if set_op == "union":
+            common_pred = common_pred.union(set(pred[i]))
+        elif set_op == "intersection":
+            common_pred = common_pred.intersection(set(pred[i]))
+    return common_pred
+
+def union_pred(preds: List[Predictions], fpr=None):
+    """
+    Find the union of prediction = 1 among the predictions, it's a wrapper for common_pred
+    """
+    return common_pred(preds, fpr, set_op="union")
+
+def intersection_pred(preds: List[Predictions], fpr=None):
+    """
+    Find the intersection of prediction = 1 among the predictions, it's a wrapper for common_pred
+    """
+    return common_pred(preds, fpr, set_op="intersection")
+
+
+def multi_seed_ensemble(pred_list: List[Predictions], method, threshold: float = None,
+                        fpr: float = None) -> Predictions:
     """
     Ensemble the predictions from different seeds of the same attack.
 

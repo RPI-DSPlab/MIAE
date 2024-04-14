@@ -13,7 +13,7 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.nn.functional as F
 
-from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
+from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils
 from miae.utils.set_seed import set_seed
 from miae.utils.dataset_utils import dataset_split
 
@@ -50,11 +50,11 @@ class YeomAuxiliaryInfo(AuxiliaryInfo):
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
         if self.log_path is not None:
-            self.yeom_logger = logging.getLogger('yeom_logger')
-            self.yeom_logger.setLevel(logging.INFO)
+            self.logger = logging.getLogger('yeom_logger')
+            self.logger.setLevel(logging.INFO)
             fh = logging.FileHandler(self.log_path + '/yeom.log')
             fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
-            self.yeom_logger.addHandler(fh)
+            self.logger.addHandler(fh)
 
 
 class YeomModelAccess(ModelAccess):
@@ -71,60 +71,7 @@ class YeomModelAccess(ModelAccess):
         super().__init__(model, untrained_model, access_type)
 
 
-class YeomUtil:
-    @classmethod
-    def train_shadow_model(cls, model, trainset: Dataset, testset: Dataset, aux_info: YeomAuxiliaryInfo):
-        """
-        train 1 shadow model
-        :param model:
-        :param trainset:
-        :param testset:
-        :param aux_info:
-        :return:
-        """
-        trainloader = DataLoader(trainset, batch_size=aux_info.batch_size, shuffle=True, num_workers=2)
-        testloader = DataLoader(testset, batch_size=aux_info.batch_size, shuffle=False, num_workers=2)
-
-        criterion = torch.nn.CrossEntropyLoss()
-        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=aux_info.lr, momentum=0.9,
-                                    weight_decay=0.0001)
-        # Create a learning rate scheduler
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, aux_info.epochs)
-        logging.info("Training shadow model...")
-        for epoch in tqdm(range(aux_info.epochs)):
-            model.train()
-            model.to(aux_info.device)
-            for i, data in enumerate(trainloader):
-                inputs, labels = data
-                inputs, labels = inputs.to(aux_info.device), labels.to(aux_info.device)
-                optimizer.zero_grad()
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
-                loss.backward()
-                optimizer.step()
-            scheduler.step()
-
-            if epoch % 20 == 0 or epoch == aux_info.epochs - 1:
-                model.eval()
-                test_correct_predictions = 0
-                for i, data in enumerate(testloader):
-                    inputs, labels = data
-                    inputs, labels = inputs.to(aux_info.device), labels.to(aux_info.device)
-                    outputs = model(inputs)
-                    _, predicted = torch.max(outputs, 1)
-                    test_correct_predictions += (predicted == labels).sum().item()
-
-                train_correct_prediction = 0
-                for i, data in enumerate(trainloader):
-                    inputs, labels = data
-                    inputs, labels = inputs.to(aux_info.device), labels.to(aux_info.device)
-                    outputs = model(inputs)
-                    _, predicted = torch.max(outputs, 1)
-                    train_correct_prediction += (predicted == labels).sum().item()
-                aux_info.yeom_logger.info(
-                    f"Epoch {epoch} train_acc: {train_correct_prediction / len(trainset):.2f} test_acc: {test_correct_predictions / len(testset):.2f} loss: {loss.item():.4f}， lr: {scheduler.get_last_lr()[0]:.4f}")
-
-        return model
+class YeomUtil(MIAUtils):
 
     @classmethod
     def get_loss_n_accuracy(cls, model, data_loader, num_classes, aux_info: YeomAuxiliaryInfo):
@@ -188,7 +135,7 @@ class YeomAttack(MiAttack):
         :param aux_info: the auxiliary information for the Shokri attack.
         :param target_data: the target data for the Shokri attack.
         """
-        super().__init__(target_model_access, aux_info, target_data)
+        super().__init__(target_model_access, aux_info)
         self.aux_info = aux_info
         self.target_model_access = target_model_access
         self.threshold = None  # this is the loss threshold for the attack
@@ -220,7 +167,10 @@ class YeomAttack(MiAttack):
         if os.path.exists(self.aux_info.save_path + '/shadow_model.pth'):
             shadow_model = torch.load(self.aux_info.save_path + '/shadow_model.pth')
         else:
-            shadow_model = YeomUtil.train_shadow_model(shadow_model, train_set, test_set, self.aux_info)
+            trainloader = DataLoader(train_set, batch_size=self.aux_info.batch_size, shuffle=True, num_workers=2)
+            testloader = DataLoader(test_set, batch_size=self.aux_info.batch_size, shuffle=False, num_workers=2)
+
+            shadow_model = YeomUtil.train_shadow_model(shadow_model, trainloader, testloader, self.aux_info)
             torch.save(shadow_model, self.aux_info.save_path + '/shadow_model.pth')
 
         # get the loss threshold
