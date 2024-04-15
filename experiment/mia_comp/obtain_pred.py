@@ -88,6 +88,9 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
     fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
     target_logger.addHandler(fh)
 
+    # log the target dataset size
+    target_logger.info(f"Target dataset size: {len(trainset)}")
+
     target_model = model.to(device)
     trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
     testloader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2)
@@ -231,7 +234,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', type=str, default=None, help='path to the dataset')
     parser.add_argument('--target_model_path', type=str, default=str(os.getcwd()), help='path to the target model')
     parser.add_argument('--preparation_path', type=str, default=str(os.getcwd()), help='path to the preparation file')
-    parser.add_argument('--target_set_ratio', type=float, default=0.35,
+    parser.add_argument('--target_set_ratio', type=float, default=0.5,
                         help='the ratio of the data used for target model training over the whole dataset')
     parser.add_argument('--train_test_ratio', type=float, default=0.5, help='train test ratio for target and MIA')
     parser.add_argument('--delete-files', type=bool, default=True,

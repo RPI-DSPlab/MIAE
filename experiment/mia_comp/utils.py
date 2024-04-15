@@ -29,6 +29,7 @@ def pred_normalization(pred: np.ndarray) -> np.ndarray:
     """
     return (pred - np.min(pred)) / (np.max(pred) - np.min(pred) + 1e-6)
 
+
 class Predictions:
     def __init__(self, pred_arr: np.ndarray, ground_truth_arr: np.ndarray, name: str):
         """
@@ -55,14 +56,15 @@ class Predictions:
         return labels
 
 
-    def accuracy(self) -> float:
+    def accuracy(self, threshold=0.5) -> float:
         """
         Calculate the accuracy of the predictions.
 
         :param self: Predictions object
+        :param threshold: threshold for converting predictions to binary labels
         :return: accuracy of the predictions
         """
-        return np.mean(self.predictions_to_labels() == self.ground_truth_arr)
+        return np.mean(self.predictions_to_labels(threshold) == self.ground_truth_arr)
 
     def balanced_attack_accuracy(self) -> float:
         """
@@ -86,6 +88,19 @@ class Predictions:
         FPR = false_positive / total_negative if total_negative > 0 else 0
         return FPR
 
+    def compute_tpr(self):
+        """
+        Compute the true positive rate (TPR) of the predictions.
+        """
+        # Convert predictions and ground truth to PyTorch tensors if they are not already
+        pred_tensor = torch.tensor(self.pred_arr)
+        ground_truth_tensor = torch.tensor(self.ground_truth_arr)
+        true_positive = torch.logical_and(pred_tensor == 1, ground_truth_tensor == 1).sum().item()
+        false_negative = torch.logical_and(pred_tensor == 0, ground_truth_tensor == 1).sum().item()
+        total_positive = true_positive + false_negative
+        TPR = true_positive / total_positive if total_positive > 0 else 0
+        return TPR
+
     def adjust_fpr(self, target_fpr):
         """
         Adjust the predictions to achieve a target FPR using ROC curve.
@@ -108,6 +123,14 @@ class Predictions:
         Get the indices of the true positive samples.
         """
         return np.where((self.predictions_to_labels() == 1) & (self.ground_truth_arr == 1))[0]
+
+
+    def __len__(self):
+        """
+        return the length of the prediction array
+        """
+
+        return len(self.pred_arr)
 
 class SampleHardness:
     def __init__(self, score_arr, name: str):
@@ -165,17 +188,20 @@ class SampleHardness:
         plt.savefig(save_path, dpi=300)
 
 
-def common_tp(preds: List[Predictions], fpr=None, set_op="intersection"):
+def common_tp(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):
     """
     Find the union/intersection true positive samples among the predictions
     Note that this is used for both different attacks or same attack with different seeds.
 
     :param preds: list of Predictions
     :param fpr: FPR values for adjusting the predictions
+    :param threshold: threshold for converting predictions to binary labels (only used when not using fpr)
 
+    :return: common true positive samples
     """
     if fpr is None:
-        TP = [np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0] for pred in preds]
+        TP = [np.where((pred.predictions_to_labels(threshold) == 1) & (pred.ground_truth_arr == 1))[0] for pred in
+              preds]
     else:
         adjusted_preds = [pred.adjust_fpr(fpr) for pred in preds]
         TP = [np.where((adjusted_preds[i] == 1) & (preds[i].ground_truth_arr == 1))[0] for i in range(len(preds))]
@@ -204,9 +230,87 @@ def intersection_tp(preds: List[Predictions], fpr=None):
     return common_tp(preds, fpr, set_op="intersection")
 
 
-def common_tp_preds(pred_list: List[Predictions]) -> Predictions:
+def common_pred(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):
+    """
+    Find the union/intersection of prediction = 1 among the predictions
+    Note that this is used for both different attacks or same attack with different seeds.
+
+    :param preds: list of Predictions
+    :param fpr: FPR values for adjusting the predictions
+    :param threshold: threshold for converting predictions to binary labels (only used when not using fpr)
+    :param set_op: set operation for the common predictions: [union, intersection]
+    """
+    if fpr is None:
+        pred = [np.where(pred.predictions_to_labels(threshold) == 1)[0] for pred in preds]
+    else:
+        adjusted_preds = [pred.adjust_fpr(fpr) for pred in preds]
+        pred = [np.where(adjusted_preds[i] == 1)[0] for i in range(len(preds))]
+
+    common_pred = set(pred[0])
+    if len(pred) < 2:
+        return common_pred
+
+    for i in range(1, len(pred)):
+        if set_op == "union":
+            common_pred = common_pred.union(set(pred[i]))
+        elif set_op == "intersection":
+            common_pred = common_pred.intersection(set(pred[i]))
+    return common_pred
+
+def union_pred(preds: List[Predictions], fpr=None):
+    """
+    Find the union of prediction = 1 among the predictions, it's a wrapper for common_pred
+    """
+    return common_pred(preds, fpr, set_op="union")
+
+def intersection_pred(preds: List[Predictions], fpr=None):
+    """
+    Find the intersection of prediction = 1 among the predictions, it's a wrapper for common_pred
+    """
+    return common_pred(preds, fpr, set_op="intersection")
+
+
+def multi_seed_ensemble(pred_list: List[Predictions], method, threshold: float = None,
+                        fpr: float = None) -> Predictions:
+    """
+    Ensemble the predictions from different seeds of the same attack.
+
+    :param pred_list: list of Predictions
+    :param method: method for ensemble the predictions: [HC, HP, avg]
+    :param threshold: threshold for ensemble the predictions
+    :param fpr: FPR values for adjusting the predictions
+    :return: ensemble prediction
+    """
+    if threshold is not None and fpr is not None:
+        raise ValueError("Both threshold and FPR values are provided, only one should be provided.")
+    if len(pred_list) < 2:
+        return pred_list[0]
+
+    ensemble_pred = np.zeros_like(pred_list[0].pred_arr)
+    if method == "HC":  # High Coverage
+        agg_tp = list(common_pred(pred_list, set_op="union", threshold=threshold))
+        if len(agg_tp) > 0:
+            ensemble_pred[agg_tp] = 1
+        else:
+            print("No common true positive samples found for the ensemble (HC).")
+    elif method == "HP":  # High Precision
+        agg_tp = list(common_pred(pred_list, set_op="intersection", threshold=threshold))
+        if len(agg_tp) > 0:
+            ensemble_pred[agg_tp] = 1
+        else:
+            print("No common true positive samples found for the ensemble (HP).")
+    elif method == "avg":  # averaging
+        ensemble_pred = np.mean([pred.pred_arr for pred in pred_list], axis=0)
+    else:
+        raise ValueError("Invalid method for ensemble the predictions.")
+
+    return Predictions(ensemble_pred, pred_list[0].ground_truth_arr, f"ensemble_{method}")
+
+
+def pred_tp_intersection(pred_list: List[Predictions]) -> Predictions:
     """
     Get the common true positive predictions across different seeds of a single attack
+    this is used for the Venn diagram
 
     :param pred_list: List of Predictions objects for the same attack but different seeds
     :return: Predictions object containing only common true positives
@@ -325,9 +429,11 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
         counter = 0
         for attack, pred_obj_list in pred_dict.items():
             counter += 1
+
             common_tp_or, common_tp_and = common_tp_preds(pred_obj_list)
             result_or.append(common_tp_or)
             result_and.append(common_tp_and)
+
     elif target_fpr != 0:
         adjusted_pred_dict = {}
         result_or = []
@@ -345,6 +451,7 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
             common_tp_or, common_tp_and = common_tp_preds(adjusted_list)
             result_or.append(common_tp_or)
             result_and.append(common_tp_and)
+
     else:
         raise ValueError("Either threshold or target_fpr should be provided.")
 
@@ -401,6 +508,26 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], g
     plt.savefig(f"{save_path}.png", dpi=300)
 
 
+def plot_venn_diagram_pairwise(pred_pair_list: List[Tuple[Predictions, Predictions]], graph_title: str, save_path: str):
+    """
+    Plot Venn diagrams for each pair of predictions in the given list.
+    :param pred_pair_list: list of tuples, each containing a pair of Predictions objects
+    :param graph_title: title of the graph
+    :param save_path: path to save the graphs
+    """
+    plt.figure(figsize=(8, 8), dpi=300)
+    for idx, pair in enumerate(pred_pair_list):
+        pred_1, pred_2 = pair
+        attacked_points_1 = set(np.where((pred_1.pred_arr == 1) & (pred_1.ground_truth_arr == 1))[0])
+        attacked_points_2 = set(np.where((pred_2.pred_arr == 1) & (pred_2.ground_truth_arr == 1))[0])
+        circle_colors = ['#EB001B', '#F79E1B']
+        venn2_unweighted(subsets=(attacked_points_1, attacked_points_2), set_labels=(pred_1.name, pred_2.name),
+                         set_colors=circle_colors)
+        plt.title(f"{graph_title}: {pred_1.name} vs {pred_2.name}")
+        plt.savefig(f"{save_path}_{pred_1.name}_vs_{pred_2.name}.png", dpi=300)
+        plt.close()
+
+
 def extract_features(model, dataset, target_layer=None):
     """
     Extract features from a given model for each image in the dataset.
@@ -441,7 +568,9 @@ def extract_features(model, dataset, target_layer=None):
             features.append(feature.squeeze().numpy())
     return np.array(features)
 
-def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, model_name: str, title: str, save_path: str, perplexity: int = 30):
+
+def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, model_name: str, title: str, save_path: str,
+               perplexity: int = 30):
     """
     Plot the t-SNE graph for the predictions from different attacks.
 

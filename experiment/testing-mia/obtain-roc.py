@@ -14,7 +14,7 @@ import sys
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 from miae.utils.set_seed import set_seed
-from miae.attacks import losstraj_mia, merlin_mia, lira_mia
+from miae.attacks import losstraj_mia, merlin_mia, lira_mia, boundary_mia
 from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
 from experiment import models
@@ -23,13 +23,14 @@ batch_size = 128
 targetset_ratio = 0.35  # percentage of training set to be used for training/test the target model
 train_test_ratio = 0.5  # percentage of training set to be used for training any model that uses a test set
 lr = 0.1
-target_train_epochs = 160
+target_train_epochs = 80
+attack_epochs = 100
 
 current_dir = os.getcwd()
 target_model_dir = os.path.join(current_dir,"target_model")
 attack_dir = os.path.join(current_dir,"attack")
 savedir = os.path.join(current_dir,"results")
-seed = 24
+seed = 0
 
 aug = True
 
@@ -162,6 +163,7 @@ def main():
     # set up
     set_seed(seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"using device: {device}")
     for dir in [target_model_dir, attack_dir, savedir]:
         if not os.path.exists(dir):
             os.makedirs(dir)
@@ -198,7 +200,7 @@ def main():
 
 
     # -- STEP 1: train target model
-    target_model = models.create_wrn28_10()
+    target_model = models.create_resnet56()
     untrained_target_model = deepcopy(target_model)
     print("Target model: ", target_model.__class__.__name__, " is being trained with ", target_trainset.__class__.__name__, "len: ", len(target_trainset), " and ", target_testset.__class__.__name__, "len: ", len(target_testset))
     if not os.path.exists(os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pkl")):
@@ -208,20 +210,24 @@ def main():
 
     # -- STEP 2: prepare the attacks
     losstraj_aux_info = losstraj_mia.LosstrajAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/losstraj', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'distillation_epochs': target_train_epochs})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/losstraj', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'distillation_epochs': attack_epochs})
     merlin_aux_info = merlin_mia.MerlinAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': batch_size})
     lira_aux_info = lira_mia.LiraAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': target_train_epochs, 'log_path': attack_dir+'/lira'})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/lira'})
+    boundary_aux_info = boundary_mia.BoundaryAuxiliaryInfo(
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/boundary', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/boundary'})
 
     losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model), untrained_target_model)
     merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model), untrained_target_model)
     lira_target_model_access = lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
+    boundary_target_model_access = boundary_mia.BoundaryModelAccess(deepcopy(target_model), untrained_target_model)
 
     attacks = [
         # losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
         # merlin_mia.MerlinAttack(merlin_target_model_access, merlin_aux_info),
-        lira_mia.LiraAttack(lira_target_model_access, lira_aux_info)
+        # lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
+        boundary_mia.BoundaryAttack(boundary_target_model_access, boundary_aux_info)
     ]
 
     # -- prepare the attacks

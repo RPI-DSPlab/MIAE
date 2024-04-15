@@ -7,9 +7,9 @@ fi
 
 echo "obtain_pred.sh seed = $seed"
 
-data_dir="/data/public/comp_mia_data/multiseed_convergence/target"
+data_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data/target"
 
-preds_dir="/data/public/comp_mia_data/multiseed_convergence/preds_sd${seed}"
+preds_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data/preds_sd${seed}"
 mkdir -p "$preds_dir"
 
 
