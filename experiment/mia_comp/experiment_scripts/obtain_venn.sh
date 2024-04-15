@@ -7,7 +7,7 @@ mias=("losstraj" "shokri" "yeom")
 categories=("threshold" "single_attack" "fpr")
 subcategories=("common_tp" "pairwise")
 seeds=(0 1 2 3)
-fprs=(0.001 0.5 0.8)
+fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 
 # Prepare the parameter lists for the experiment
 mialist=""
@@ -79,7 +79,7 @@ for category in "${categories[@]}"; do
                         rm -rf "$plot_dir"
                         mkdir -p "$plot_dir"
                         graph_goal="pairwise"
-                        graph_title="Venn for $dataset, $arch, pairwise"
+                        graph_title="$dataset, $arch, pairwise"
                     fi
 
                     if [ "$category" == "threshold" ]; then
@@ -115,7 +115,7 @@ for category in "${categories[@]}"; do
                     mkdir -p "$plot_dir"
 
                     # run the experiment
-                    graph_title="Venn for $dataset, $arch, $mia"
+                    graph_title="$dataset, $arch, $mia"
                     graph_path="${plot_dir}/venn_${mia}"
                     fpr_tmp_list="0.0 0.0 0.0"
                     python obtain_graphs.py --dataset "$dataset" \

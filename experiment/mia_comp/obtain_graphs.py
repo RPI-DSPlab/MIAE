@@ -1,15 +1,11 @@
 """
-This script is used to obtain the graphs of MIA experiments on a specific target model, dataset and seeds.
-We will have three types of venn diagrams:
+This file is used to obtain the graphs of MIA experiments on a specific target model, dataset and seeds.
+The graphs include: Venn diagrams; AUC graphs; Hardness distribution graphs
+
+Three types of venn diagrams:
 1. Venn diagram of the single attack with different seeds  ==> to check how stable the attack is with different seeds
 2. Venn diagram of the different attacks with common TP   ==> to compare different attacks with the common TP (true positive)
-3. Venn diagram in a pairwise manner                      ==> to compare the attacks in a pairwise manner
-
-Work flow:
-1. Load the predictions of the target model on the dataset for different seeds.
-2. Create Predictions Objects.
-3. Set the graph parameters: name, save path, etc.
-4. Plot and save the graphs.
+3. Venn diagram in a pairwise manner                      ==> to compare two attacks
 """
 import argparse
 import os
@@ -54,7 +50,7 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
     return pred_dict
 
 
-def plot_venn(pred_list: List[utils.Predictions], graph_goal: str, graph_title: str, graph_path: str):
+def plot_venn(pred_list: List[utils.Predictions], pred_list2: List[utils.Predictions], graph_goal: str, graph_title: str, graph_path: str):
     """
     plot the venn diagrams and save them
     :param pred_dict: dictionary with attack names as keys and corresponding Predictions objects list as values
@@ -64,12 +60,12 @@ def plot_venn(pred_list: List[utils.Predictions], graph_goal: str, graph_title: 
     :return: None
     """
     if graph_goal == "common_tp":
-        utils.plot_venn_diagram(pred_list, graph_goal, graph_title, graph_path)
+        utils.plot_venn_diagram(pred_list, pred_list2, graph_goal, graph_title, graph_path)
     elif graph_goal == "single_attack":
-        utils.plot_venn_diagram(pred_list, graph_goal, graph_title, graph_path)
+        utils.plot_venn_single(pred_list, graph_title, graph_path)
     elif graph_goal == "pairwise":
         paired_pred_list = utils.find_pairwise_preds(pred_list)
-        utils.plot_venn_diagram_pairwise(paired_pred_list, graph_title, graph_path)
+        utils.plot_venn_pairwise(paired_pred_list, graph_title, graph_path)
 
 def plot_auc(predictions: Dict[str, utils.Predictions], graph_title: str, graph_path: str,
              fprs: List[float] = None, log_scale: bool = True):
@@ -306,33 +302,33 @@ if __name__ == '__main__':
     if args.graph_type == "venn":
         if args.graph_goal == "single_attack":
             pred_list = pred_dict[args.single_attack_name][:3]
-            plot_venn(pred_list, args.graph_goal, args.graph_title, args.graph_path)
+            plot_venn(pred_list, [], args.graph_goal, args.graph_title, args.graph_path)
         elif args.graph_goal == "common_tp":
             if args.threshold == 0:
                 fpr_list = [float(f) for f in args.fpr]
                 for f in fpr_list:
-                    pred_list = utils.data_process_for_venn(pred_dict, threshold=0, target_fpr=f)
+                    pred_or_list, pred_and_list = utils.data_process_for_venn(pred_dict, threshold=0, target_fpr=f)
                     graph_title = args.graph_title+f" FPR = {f}"
                     graph_path = args.graph_path+f"_{f}"
-                    plot_venn(pred_list, args.graph_goal, graph_title, graph_path)
+                    plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
             elif args.threshold != 0:
-                pred_list = utils.data_process_for_venn(pred_dict, threshold=args.threshold, target_fpr=0)
+                pred_or_list, pred_and_list = utils.data_process_for_venn(pred_dict, threshold=args.threshold, target_fpr=0)
                 graph_title = args.graph_title + f" threshold = {args.threshold}"
                 graph_path = args.graph_path + f"_{args.threshold}"
-                plot_venn(pred_list, args.graph_goal, graph_title, graph_path)
+                plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
         elif args.graph_goal == "pairwise":
             if args.threshold == 0:
                 fpr_list = [float(f) for f in args.fpr]
                 for f in fpr_list:
-                    pred_list = utils.data_process_for_venn(pred_dict, threshold=0, target_fpr=f)
+                    pred_or_list, pred_and_list = utils.data_process_for_venn(pred_dict, threshold=0, target_fpr=f)
                     graph_title = args.graph_title+f" FPR = {f}"
                     graph_path = args.graph_path+f"_{f}"
-                    plot_venn(pred_list, args.graph_goal, graph_title, graph_path)
+                    plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
             elif args.threshold != 0:
-                pred_list = utils.data_process_for_venn(pred_dict, threshold=args.threshold, target_fpr=0)
+                pred_or_list, pred_and_list = utils.data_process_for_venn(pred_dict, threshold=args.threshold, target_fpr=0)
                 graph_title = args.graph_title + f" threshold = {args.threshold}"
                 graph_path = args.graph_path + f"_{args.threshold}"
-                plot_venn(pred_list, args.graph_goal, args.graph_title, args.graph_path)
+                plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
         else:
             raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
 
