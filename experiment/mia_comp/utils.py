@@ -62,7 +62,6 @@ class Predictions:
         :param self: Predictions object
         :return: accuracy of the predictions
         """
-        # denominator = len(self.ground_truth_arr)
         return np.mean(self.predictions_to_labels() == self.ground_truth_arr)
 
     def balanced_attack_accuracy(self) -> float:
@@ -239,10 +238,17 @@ def plot_venn_single(pred_list: List[Predictions], graph_title: str, save_path: 
     plt.figure(figsize=(14, 7), dpi=300)
     attacked_points = {pred.name: set() for pred in pred_list}
     for pred in pred_list:
-        attacked_points[pred.name] = set(np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0])
+        attacked_points[pred.name] = set(np.where((pred.predictions_to_labels() == pred.ground_truth_arr))[0].tolist())
+
+    plt.text(0.1, 0.1 + len(pred_list) * 0.03, "Accuracy of each seed:", fontsize=10, transform=plt.gcf().transFigure)
+    for i, pred in enumerate(pred_list):
+        plt.text(0.15, 0.1 + i * 0.03, f"{pred.name}: {pred.accuracy():.4f}", fontsize=10, transform=plt.gcf().transFigure)
+    plt.axis('off')
+
     venn_sets = tuple(attacked_points[pred.name] for pred in pred_list)
     venn_labels = [pred.name for pred in pred_list]
     circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
+    
     # Plotting unweighted Venn diagram
     plt.subplot(1, 2, 1, aspect='equal')
     venn3_unweighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
