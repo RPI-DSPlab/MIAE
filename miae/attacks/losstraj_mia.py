@@ -673,6 +673,5 @@ class LosstrajAttack(MiAttack):
         target_pred = self.attack_model(data_to_infer.to(self.auxiliary_info.device))
 
         target_pred = target_pred.detach().cpu().numpy()
-        print(target_pred.shape)
         target_pred = -np.transpose(target_pred)[0]
         return target_pred

@@ -119,23 +119,23 @@ def analysis_image(dataset: Dataset, correctness_arr1, correctness_arr2):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='obtain_membership_inference_sample_level_analysis')
     parser.add_argument('--dataset', type=str, default="cifar10", help='the dataset to be used')
-    parser.add_argument('--model', type=str, default="vgg16", help='architecture of the model')
+    parser.add_argument('--model', type=str, default="resnet56", help='architecture of the model')
 
     parser.add_argument('--single_action', type=str, default="", help='[venn, auc]')
     args = parser.parse_args()
 
     # loading predictions
     pred_shokri = utils.load_predictions \
-        (f"/data/public/miae_experiment_aug/preds_sd0/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
+        (f"/data/public/comp_mia_data/miae_experiment_aug/preds_sd0/{args.dataset}/{args.model}/shokri/pred_shokri.npy")
     pred_losstraj = utils.load_predictions \
-        (f"/data/public/miae_experiment_aug/preds_sd0/{args .dataset}/{args.model}/losstraj/pred_losstraj.npy")
+        (f"/data/public/comp_mia_data/miae_experiment_aug/preds_sd0/{args .dataset}/{args.model}/losstraj/pred_losstraj.npy")
     pred_yeom = utils.load_predictions \
-        (f"/data/public/miae_experiment_aug/preds_sd0/{args.dataset}/{args.model}/yeom/pred_yeom.npy")
+        (f"/data/public/comp_mia_data/miae_experiment_aug/preds_sd0/{args.dataset}/{args.model}/yeom/pred_yeom.npy")
     print(f"pearson correlation: {utils.pearson_correlation(pred_shokri, pred_losstraj):.4f}")
 
     # loading the target_dataset
     index_to_data, attack_set_membership = utils.load_target_dataset \
-        (f"/data/public/miae_experiment_aug/target/{args.dataset}")
+        (f"/data/public/comp_mia_data/miae_experiment_aug/target/{args.dataset}")
 
 
     # creating the Predictions object
@@ -147,19 +147,19 @@ if __name__ == '__main__':
     # pred_yeom_binary = pred_yeom_obj.predictions_to_labels(threshold=0.5)
 
     # loading Iteration Learned
-    il_score = utils.load_example_hardness \
-        (f"/data/public/example_hardness_aug/{args.dataset}/{args.model}/il/il_score.pkl")
-
-    il = utils.SampleHardness(il_score, "iteration learned")
-    il_hist_path = f"./{args.dataset}_{args.model}_il.png"
-    il.plot_distribution(il_hist_path)
-
-    il_shokri_tp_path = f"./{args.dataset}_{args.model}_il_shokri_tp.png"
-    il.plot_distribution_pred_TP(pred_shokri_obj, il_shokri_tp_path)
-    il_loss_traj_tp_path = f"./{args.dataset}_{args.model}_il_losstraj_tp.png"
-    il.plot_distribution_pred_TP(pred_losstraj_obj, il_loss_traj_tp_path)
-    il_yeom_tp_path = f"./{args.dataset}_{args.model}_il_yeom_tp.png"
-    il.plot_distribution_pred_TP(pred_yeom_obj, il_yeom_tp_path)
+    # il_score = utils.load_example_hardness \
+    #     (f"/data/public/comp_mia_data/example_hardness_aug/{args.dataset}/{args.model}/il/il_score.pkl")
+    #
+    # il = utils.SampleHardness(il_score, "iteration learned")
+    # il_hist_path = f"./{args.dataset}_{args.model}_il.png"
+    # il.plot_distribution(il_hist_path)
+    #
+    # il_shokri_tp_path = f"./{args.dataset}_{args.model}_il_shokri_tp.png"
+    # il.plot_distribution_pred_TP(pred_shokri_obj, il_shokri_tp_path)
+    # il_loss_traj_tp_path = f"./{args.dataset}_{args.model}_il_losstraj_tp.png"
+    # il.plot_distribution_pred_TP(pred_losstraj_obj, il_loss_traj_tp_path)
+    # il_yeom_tp_path = f"./{args.dataset}_{args.model}_il_yeom_tp.png"
+    # il.plot_distribution_pred_TP(pred_yeom_obj, il_yeom_tp_path)
 
     correctness_shokri = correct_pred(pred_shokri_obj)
     correctness_losstraj = correct_pred(pred_losstraj_obj)
@@ -173,18 +173,9 @@ if __name__ == '__main__':
     pred_average = utils.averaging_predictions([pred_shokri_obj, pred_losstraj_obj])
     pred_majority_voting = utils.majority_voting([pred_shokri_obj, pred_losstraj_obj])
     unanimous_voting = utils.unanimous_voting([pred_shokri_obj, pred_losstraj_obj])
-
-    # plot aug_graph
-    auc_graph_path = f"./{args.dataset}_{args.model}_auc with seeds.png"
-    auc_graph_name = f"{args.dataset} {args.model} auc with seeds"
-    # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
-    utils.plot_auc([pred_shokri, pred_losstraj, pred_yeom], ["shokri", "losstraj", "yeom"], attack_set_membership, auc_graph_name, auc_graph_path)
-
-
     pred_average_obj = utils.Predictions(pred_average, attack_set_membership, "average")
     pred_majority_voting_obj = utils.Predictions(pred_majority_voting, attack_set_membership, "majority_voting")
     unanimous_voting_obj = utils.Predictions(unanimous_voting, attack_set_membership, "unanimous_voting")
-
 
     # calculate the accuracy
     print(f"\ncorrect rate of shokri: {pred_shokri_obj.accuracy():.4f}")
@@ -195,21 +186,27 @@ if __name__ == '__main__':
     print(f"correct rate of unanimous_voting: {unanimous_voting_obj.accuracy():.4f}")
 
     # plot aug_graph
+    auc_graph_path = f"./{args.dataset}_{args.model}_auc with seeds.png"
+    auc_graph_name = f"{args.dataset} {args.model} auc with seeds"
+    # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
+    # utils.plot_auc([pred_shokri, pred_losstraj, pred_yeom], ["shokri", "losstraj", "yeom"], attack_set_membership, auc_graph_name, auc_graph_path)
+
+    # plot aug_graph
     # auc_graph_path = f"./{args.dataset}_{args.model}_auc with seeds.png"
     # auc_graph_name = f"{args.dataset} {args.model} auc with seeds"
     # # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting, unanimous_voting], ["shokri", "losstraj", "average", "majority_voting", "unanimous_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
     # utils.custom_auc([pred_shokri, pred_losstraj, pred_average, pred_majority_voting], ["shokri", "losstraj", "average", "majority_voting"], attack_set_membership, auc_graph_name, auc_graph_path)
 
     # plot venn diagram for different attacks to compare the similarity
-    venn_graph_path_fpr = f"./{args.dataset}_{args.model}_venn_fix_fpr.png"
-    venn_graph_name_fpr = f"{args.dataset} {args.model} Venn Diagram for Different Attacks With Fixed FPR = 0.1"
-    utils.plot_venn_diagram([pred_shokri_obj, pred_losstraj_obj], venn_graph_name_fpr, venn_graph_path_fpr,
-                            goal="different_attacks_fpr", target_fpr=0.1)
-
-    venn_graph_path = f"./{args.dataset}_{args.model}_venn.png"
-    venn_graph_name = f"{args.dataset} {args.model} Venn Diagram for Different Attacks"
-    utils.plot_venn_diagram([pred_shokri_obj, pred_losstraj_obj], venn_graph_name, venn_graph_path,
-                            goal="different_attacks_seed", target_fpr=0)
+    # venn_graph_path_fpr = f"./{args.dataset}_{args.model}_venn_fix_fpr.png"
+    # venn_graph_name_fpr = f"{args.dataset} {args.model} Venn Diagram for Different Attacks With Fixed FPR = 0.1"
+    # utils.plot_venn_diagram([pred_shokri_obj, pred_losstraj_obj], venn_graph_name_fpr, venn_graph_path_fpr,
+    #                         goal="different_attacks_fpr", target_fpr=0.1)
+    #
+    # venn_graph_path = f"./{args.dataset}_{args.model}_venn.png"
+    # venn_graph_name = f"{args.dataset} {args.model} Venn Diagram for Different Attacks"
+    # utils.plot_venn_diagram([pred_shokri_obj, pred_losstraj_obj], venn_graph_name, venn_graph_path,
+    #                         goal="different_attacks_seed", target_fpr=0)
 
     # plot the venn diagram for one attack but with different seeds
     # venn_graph_path_shokri_seed = f"./{args.dataset}_{args.model}_venn for shokri with seeds.png"
@@ -228,15 +225,15 @@ if __name__ == '__main__':
     #                         venn_graph_path_yeom_seed, goal="seed_compare")
 
     # loading the dataset
-    # trainset = utils.load_dataset(f"/data/public/miae_experiment_overfit_aug/target/{args.dataset}/target_trainset.pkl")
-    # testset = utils.load_dataset(f"/data/public/miae_experiment_overfit_aug/target/{args.dataset}/target_testset.pkl")
-    # fullset = ConcatDataset([trainset, testset])
+    trainset = utils.load_dataset(f"/data/public/comp_mia_data/miae_experiment_aug/target/{args.dataset}/target_trainset.pkl")
+    testset = utils.load_dataset(f"/data/public/comp_mia_data/miae_experiment_aug/target/{args.dataset}/target_testset.pkl")
+    fullset = ConcatDataset([trainset, testset])
 
 
     # plot tsne graph
-    # tsne_graph_path = f"./{args.dataset}_{args.model}_tsne.png"
-    # tsne_graph_name = f"{args.dataset} {args.model} tsne"
-    # utils.plot_t_sne([pred_shokri_obj, pred_losstraj_obj], fullset, tsne_graph_name, tsne_graph_path)
+    tsne_graph_path = f"./{args.dataset}_{args.model}_tsne.png"
+    tsne_graph_name = f"{args.dataset} {args.model} tsne"
+    utils.plot_t_sne([pred_shokri_obj, pred_losstraj_obj, pred_yeom_obj], fullset, args.model, tsne_graph_name, tsne_graph_path)
 
     # analysis the image
     # analysis_image(fullset, correctness_shokri, correctness_losstraj)

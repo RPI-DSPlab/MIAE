@@ -135,7 +135,7 @@ class YeomAttack(MiAttack):
         :param aux_info: the auxiliary information for the Shokri attack.
         :param target_data: the target data for the Shokri attack.
         """
-        super().__init__(target_model_access, aux_info, target_data)
+        super().__init__(target_model_access, aux_info)
         self.aux_info = aux_info
         self.target_model_access = target_model_access
         self.threshold = None  # this is the loss threshold for the attack

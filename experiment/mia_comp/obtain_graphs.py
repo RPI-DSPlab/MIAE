@@ -1,15 +1,11 @@
 """
-This script is used to obtain the graphs of MIA experiments on a specific target model, dataset and seeds.
-We will have three types of venn diagrams:
+This file is used to obtain the graphs of MIA experiments on a specific target model, dataset and seeds.
+The graphs include: Venn diagrams; AUC graphs; Hardness distribution graphs
+
+Three types of venn diagrams:
 1. Venn diagram of the single attack with different seeds  ==> to check how stable the attack is with different seeds
 2. Venn diagram of the different attacks with common TP   ==> to compare different attacks with the common TP (true positive)
-3. Venn diagram in a pairwise manner                      ==> to compare the attacks in a pairwise manner
-
-Work flow:
-1. Load the predictions of the target model on the dataset for different seeds.
-2. Create Predictions Objects.
-3. Set the graph parameters: name, save path, etc.
-4. Plot and save the graphs.
+3. Venn diagram in a pairwise manner                      ==> to compare two attacks
 """
 import argparse
 import os
@@ -54,7 +50,7 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
     return pred_dict
 
 
-def plot_venn(pred_list: List[utils.Predictions], graph_goal: str, graph_title: str, graph_path: str):
+def plot_venn(pred_list: List[utils.Predictions], pred_list2: List[utils.Predictions], graph_goal: str, graph_title: str, graph_path: str):
     """
     plot the venn diagrams and save them
     :param pred_dict: dictionary with attack names as keys and corresponding Predictions objects list as values
@@ -64,12 +60,12 @@ def plot_venn(pred_list: List[utils.Predictions], graph_goal: str, graph_title: 
     :return: None
     """
     if graph_goal == "common_tp":
-        utils.plot_venn_diagram(pred_list, graph_goal, graph_title, graph_path)
+        utils.plot_venn_diagram(pred_list, pred_list2, graph_goal, graph_title, graph_path)
     elif graph_goal == "single_attack":
-        utils.plot_venn_diagram(pred_list, graph_goal, graph_title, graph_path)
+        utils.plot_venn_single(pred_list, graph_title, graph_path)
     elif graph_goal == "pairwise":
         paired_pred_list = utils.find_pairwise_preds(pred_list)
-        utils.plot_venn_diagram_pairwise(paired_pred_list, graph_title, graph_path)
+        utils.plot_venn_pairwise(paired_pred_list, graph_title, graph_path)
 
 def plot_auc(predictions: Dict[str, utils.Predictions], graph_title: str, graph_path: str,
              fprs: List[float] = None, log_scale: bool = True):
@@ -130,44 +126,110 @@ def plot_hardness_distribution(predictions: Dict[str, List[utils.Predictions]] o
     #
 
 
-def multi_seed_convergence(predictions: Dict[str, List[utils.Predictions]], graph_title: str, graph_path: str, set_op, fpr=None,
-                           tpr_plot = False, fpr_plot = True):
+def multi_seed_convergence(predictions: Dict[str, List[utils.Predictions]], graph_title: str, graph_path: str, set_op, attack_fpr=None):
     """
     plot the convergence of the different attacks
+
     :param predictions: List[utils.Predictions]: list of Predictions objects, each element in a list is a Predictions object for a specific seed
     :param graph_title: str: title of the graph
     :param graph_path: str: path to save the graph
     :param set_op: str: set operation to be used for the convergence: [union, intersection]
-    :param fpr: float: false positive rate to be plotted as vertical line on auc graph
-    :param tpr_plot: bool: whether to plot the true positive rate
-    :param fpr_plot: bool: whether to plot the false positive rate
+    :param attack_fpr: float: false positive rate to be plotted as vertical line on auc graph
+
     :return: None
     """
     # obtain the number of true positives for each attack at num of seeds
     num_tp_dict = {}
+    tpr_dict = {}
+    fpr_dict = {}
+    precision_dict = {}
     for attack, pred_list in predictions.items():
         num_tp_dict[attack] = []
+        tpr_dict[attack] = []
+        fpr_dict[attack] = []
+        precision_dict[attack] = []
         for i in range(len(pred_list)):
+            # agg_tp is the aggregated true positives, agg_pred is the aggregated 1 (member) predictions
             if set_op == "union":
-                num_tp_dict[attack].append(len(utils.union_tp(pred_list[:i+1], fpr)))
+                agg_tp = utils.union_tp(pred_list[:i+1], attack_fpr)
+                agg_pred = utils.union_pred(pred_list[:i+1], attack_fpr)
             elif set_op == "intersection":
-                num_tp_dict[attack].append(len(utils.intersection_tp(pred_list[:i+1], fpr)))
+                agg_tp = utils.intersection_tp(pred_list[:i+1], attack_fpr)
+                agg_pred = utils.intersection_pred(pred_list[:i+1], attack_fpr)
             else:
                 raise ValueError(f"Invalid set operation: {set_op}")
+            num_tp_dict[attack].append(len(agg_tp))
 
-    # plotting
-    plt.clf()
+            # -- calculate the true positive rate -- tpr = tp / (tp + fn)
+            tp = 0
+            gt = pred_list[0].ground_truth_arr
+            fn = 0
+            for j in range(len(gt)):
+                if gt[j] == 1 and j not in agg_pred:
+                    fn += 1
+                if gt[j] == 1 and j in agg_pred:
+                    tp += 1
+            tpr = tp / (tp + fn)
+            tpr_dict[attack].append(tpr)
+
+            # --- calculate the false positive rate ---  fpr = fp / (fp + tn)
+            fp = 0
+            tn = 0
+            gt = pred_list[0].ground_truth_arr
+            for j in range(len(gt)):
+                if gt[j] == 0 and j in agg_pred:  # if j is predicted as member and it is not a member from gt
+                    fp += 1
+                if gt[j] == 0 and j not in agg_pred:  # if j is not predicted as member and it is not a member from gt
+                    tn += 1
+            fpr = fp / (fp + tn)
+            fpr_dict[attack].append(fpr)
+
+            # --- calculate the precision --- precision = tp / (tp + fp)
+            precision = tp / (tp + fp) if (tp+fp) != 0 else 0
+            precision_dict[attack].append(precision)
+
+    num_plots = 4
     num_seed = 0
+    fig, axes = plt.subplots(1, num_plots, figsize=(26, 5))
+    fig.subplots_adjust(wspace=0.4)  # Adjust the spacing between subplots
+    # Plotting the convergence of number of true positives
     for attack, num_tp in num_tp_dict.items():
-        plt.plot(num_tp, label=attack)
+        axes[0].plot(num_tp, label=attack)
         num_seed = len(num_tp)
-    plt.xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
-    plt.xlabel("Number of seeds")
-    plt.ylabel("Number of True Positives")
-    plt.title(graph_title)
-    plt.legend()
-    plt.savefig(graph_path)
-    plt.close()
+    axes[0].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    axes[0].set_xlabel("Number of seeds")
+    axes[0].set_ylabel("Number of True Positives")
+    axes[0].set_title("Number of True Positives Convergence")
+    axes[0].legend()
+
+    # Plotting the convergence of true positive rate
+    for attack, tpr in tpr_dict.items():
+        axes[1].plot(tpr, label=attack)
+    axes[1].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    axes[1].set_xlabel("Number of seeds")
+    axes[1].set_ylabel("True Positive Rate")
+    axes[1].set_title("True Positive Rate Convergence")
+    axes[1].legend()
+
+    # Plotting the convergence of false positive rate
+    for attack, tpr in fpr_dict.items():
+        axes[2].plot(tpr, label=attack)
+    axes[2].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    axes[2].set_xlabel("Number of seeds")
+    axes[2].set_ylabel("False Positive Rate")
+    axes[2].set_title("False Positive Rate Convergence")
+    axes[2].legend()
+
+    # Plotting the convergence of precision
+    for attack, precision in precision_dict.items():
+        axes[3].plot(precision, label=attack)
+    axes[3].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    axes[3].set_xlabel("Number of seeds")
+    axes[3].set_ylabel("Precision")
+    axes[3].set_title("Precision Convergence")
+    axes[3].legend()
+
+    plt.savefig(graph_path + f"_fpr{attack_fpr}.png", dpi=300)
 
 
 def single_attack_seed_ensemble(predictions: Dict[str, List[utils.Predictions]], graph_title: str, graph_path: str, num_seeds: int, skip: int=2):
@@ -240,33 +302,33 @@ if __name__ == '__main__':
     if args.graph_type == "venn":
         if args.graph_goal == "single_attack":
             pred_list = pred_dict[args.single_attack_name][:3]
-            plot_venn(pred_list, args.graph_goal, args.graph_title, args.graph_path)
+            plot_venn(pred_list, [], args.graph_goal, args.graph_title, args.graph_path)
         elif args.graph_goal == "common_tp":
             if args.threshold == 0:
                 fpr_list = [float(f) for f in args.fpr]
                 for f in fpr_list:
-                    pred_list = utils.data_process_for_venn(pred_dict, threshold=0, target_fpr=f)
+                    pred_or_list, pred_and_list = utils.data_process_for_venn(pred_dict, threshold=0, target_fpr=f)
                     graph_title = args.graph_title+f" FPR = {f}"
                     graph_path = args.graph_path+f"_{f}"
-                    plot_venn(pred_list, args.graph_goal, graph_title, graph_path)
+                    plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
             elif args.threshold != 0:
-                pred_list = utils.data_process_for_venn(pred_dict, threshold=args.threshold, target_fpr=0)
+                pred_or_list, pred_and_list = utils.data_process_for_venn(pred_dict, threshold=args.threshold, target_fpr=0)
                 graph_title = args.graph_title + f" threshold = {args.threshold}"
                 graph_path = args.graph_path + f"_{args.threshold}"
-                plot_venn(pred_list, args.graph_goal, graph_title, graph_path)
+                plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
         elif args.graph_goal == "pairwise":
             if args.threshold == 0:
                 fpr_list = [float(f) for f in args.fpr]
                 for f in fpr_list:
-                    pred_list = utils.data_process_for_venn(pred_dict, threshold=0, target_fpr=f)
+                    pred_or_list, pred_and_list = utils.data_process_for_venn(pred_dict, threshold=0, target_fpr=f)
                     graph_title = args.graph_title+f" FPR = {f}"
                     graph_path = args.graph_path+f"_{f}"
-                    plot_venn(pred_list, args.graph_goal, graph_title, graph_path)
+                    plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
             elif args.threshold != 0:
-                pred_list = utils.data_process_for_venn(pred_dict, threshold=args.threshold, target_fpr=0)
+                pred_or_list, pred_and_list = utils.data_process_for_venn(pred_dict, threshold=args.threshold, target_fpr=0)
                 graph_title = args.graph_title + f" threshold = {args.threshold}"
                 graph_path = args.graph_path + f"_{args.threshold}"
-                plot_venn(pred_list, args.graph_goal, args.graph_title, args.graph_path)
+                plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
         else:
             raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
 
@@ -284,13 +346,13 @@ if __name__ == '__main__':
     elif args.graph_type == "multi_seed_convergence_intersection":
         for fpr in args.fpr:
             graph_title = args.graph_title + f" FPR = {fpr}"
-            graph_path = args.graph_path + f"_fpr{fpr}.png"
+            graph_path = args.graph_path
             multi_seed_convergence(pred_dict, graph_title, graph_path, "intersection", fpr)
 
     elif args.graph_type == "multi_seed_convergence_union":
         for fpr in args.fpr:
             graph_title = args.graph_title + f" FPR = {fpr}"
-            graph_path = args.graph_path + f"_fpr{fpr}.png"
+            graph_path = args.graph_path
             multi_seed_convergence(pred_dict, graph_title, graph_path, "union", fpr)
 
     elif args.graph_type == "single_seed_ensemble":
