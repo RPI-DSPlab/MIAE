@@ -13,6 +13,8 @@ from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from typing import List, Dict
 import numpy as np
 import pickle
+
+import MIAE.miae.eval_methods.prediction
 import utils
 
 import utils
@@ -20,7 +22,7 @@ import sys
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 def load_and_create_predictions(attack: List[str], dataset: str, architecture: str, data_path: str, seeds: List[int] = None,
-                                ) -> Dict[str, List[utils.Predictions]]:
+                                ) -> Dict[str, List[MIAE.miae.eval_methods.prediction.Predictions]]:
     """
     load the predictions of the attack of all seeds and create the Predictions objects
     :param attack: List[str]: list of attack names
@@ -41,12 +43,12 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
             pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
             pred_arr = utils.load_predictions(pred_path)
             attack_name = f"{att}_sd{s}"
-            pred_obj = utils.Predictions(pred_arr, attack_set_membership, attack_name)
+            pred_obj = MIAE.miae.eval_methods.prediction.Predictions(pred_arr, attack_set_membership, attack_name)
             pred_list.append(pred_obj)
         pred_dict[att] = pred_list
     return pred_dict
 
-def pearson_correlation_coefficient(pred_list: List[utils.Predictions]):
+def pearson_correlation_coefficient(pred_list: List[MIAE.miae.eval_methods.prediction.Predictions]):
     """
     Calculate the person correlation coefficient between each pair of predictions
     :param pred_list: List of Predictions
@@ -60,7 +62,7 @@ def pearson_correlation_coefficient(pred_list: List[utils.Predictions]):
 
     return correlation_dict
 
-def save_accuracy_results(pred_list: List[utils.Predictions], header: str, file_path: str):
+def save_accuracy_results(pred_list: List[MIAE.miae.eval_methods.prediction.Predictions], header: str, file_path: str):
     """
     Save the accuracy results to a file
     :param pred_list: List of Predictions

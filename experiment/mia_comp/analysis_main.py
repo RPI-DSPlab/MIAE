@@ -1,17 +1,19 @@
 
 import argparse
 import os
+
+import MIAE.miae.eval_methods.prediction
 import utils
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 
 
-def correct_pred(pred: utils.Predictions) -> np.ndarray:
+def correct_pred(pred: MIAE.miae.eval_methods.prediction.Predictions) -> np.ndarray:
     """element-wise comparison of the prediction and the attack_set_membership, return a boolean array"""
     return pred.predictions_to_labels() == pred.ground_truth_arr
 
-def correct_pred_with_fpr(pred: utils.Predictions, target_fpr: float) -> np.ndarray:
+def correct_pred_with_fpr(pred: MIAE.miae.eval_methods.prediction.Predictions, target_fpr: float) -> np.ndarray:
     """element-wise comparison of the prediction and the attack_set_membership, return a boolean array"""
     return pred.adjust_fpr(target_fpr) == pred.ground_truth_arr
 
@@ -139,9 +141,9 @@ if __name__ == '__main__':
 
 
     # creating the Predictions object
-    pred_shokri_obj = utils.Predictions(pred_shokri, attack_set_membership, "shokri (seed = 0)")
-    pred_losstraj_obj = utils.Predictions(pred_losstraj, attack_set_membership, "losstraj (seed = 0)")
-    pred_yeom_obj = utils.Predictions(pred_yeom, attack_set_membership, "yeom (seed = 0)")
+    pred_shokri_obj = MIAE.miae.eval_methods.prediction.Predictions(pred_shokri, attack_set_membership, "shokri (seed = 0)")
+    pred_losstraj_obj = MIAE.miae.eval_methods.prediction.Predictions(pred_losstraj, attack_set_membership, "losstraj (seed = 0)")
+    pred_yeom_obj = MIAE.miae.eval_methods.prediction.Predictions(pred_yeom, attack_set_membership, "yeom (seed = 0)")
     # pred_shokri_binary = pred_shokri_obj.predictions_to_labels(threshold=0.5)
     # pred_losstraj_binary = pred_losstraj_obj.predictions_to_labels(threshold=0.5)
     # pred_yeom_binary = pred_yeom_obj.predictions_to_labels(threshold=0.5)
@@ -170,12 +172,12 @@ if __name__ == '__main__':
     analysis_preds_similarity(correctness_shokri, correctness_losstraj, "shokri", "losstraj")
 
     # obtain different ensemble predictions
-    pred_average = utils.averaging_predictions([pred_shokri_obj, pred_losstraj_obj])
-    pred_majority_voting = utils.majority_voting([pred_shokri_obj, pred_losstraj_obj])
-    unanimous_voting = utils.unanimous_voting([pred_shokri_obj, pred_losstraj_obj])
-    pred_average_obj = utils.Predictions(pred_average, attack_set_membership, "average")
-    pred_majority_voting_obj = utils.Predictions(pred_majority_voting, attack_set_membership, "majority_voting")
-    unanimous_voting_obj = utils.Predictions(unanimous_voting, attack_set_membership, "unanimous_voting")
+    pred_average = MIAE.miae.eval_methods.prediction.averaging_predictions([pred_shokri_obj, pred_losstraj_obj])
+    pred_majority_voting = MIAE.miae.eval_methods.prediction.majority_voting([pred_shokri_obj, pred_losstraj_obj])
+    unanimous_voting = MIAE.miae.eval_methods.prediction.unanimous_voting([pred_shokri_obj, pred_losstraj_obj])
+    pred_average_obj = MIAE.miae.eval_methods.prediction.Predictions(pred_average, attack_set_membership, "average")
+    pred_majority_voting_obj = MIAE.miae.eval_methods.prediction.Predictions(pred_majority_voting, attack_set_membership, "majority_voting")
+    unanimous_voting_obj = MIAE.miae.eval_methods.prediction.Predictions(unanimous_voting, attack_set_membership, "unanimous_voting")
 
     # calculate the accuracy
     print(f"\ncorrect rate of shokri: {pred_shokri_obj.accuracy():.4f}")
