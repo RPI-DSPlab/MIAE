@@ -137,7 +137,7 @@ def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data_to_attac
     target_list = []
     for idx, (data, target) in enumerate(dummy_data_loader):
         id_list.append(idx)
-        target_list.append(target)
+        target_list.append(target.numpy())
     id_arr = np.array(id_list)
     target_arr = np.array(target_list)
     np.save(os.path.join(attack_pred_save_dir, 'id_of_prediction.npy'), id_arr)
@@ -226,8 +226,8 @@ def main():
     attacks = [
         # losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
         # merlin_mia.MerlinAttack(merlin_target_model_access, merlin_aux_info),
-        # lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
-        boundary_mia.BoundaryAttack(boundary_target_model_access, boundary_aux_info)
+        lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
+        # boundary_mia.BoundaryAttack(boundary_target_model_access, boundary_aux_info)
     ]
 
     # -- prepare the attacks

@@ -16,7 +16,7 @@ def get_xy_from_dataset(dataset: Dataset) -> (np.ndarray, np.ndarray):
 
     for item in dataset:
         data, label = item
-        x.append(data)
+        x.append(data.numpy())
         y.append(label)
 
     # Convert lists to numpy arrays

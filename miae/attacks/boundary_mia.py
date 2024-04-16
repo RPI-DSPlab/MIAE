@@ -11,12 +11,10 @@ import numpy as np
 import torch
 from scipy.ndimage import interpolation
 from torch.utils.data import DataLoader, TensorDataset, Dataset, Subset
-from art.attacks.evasion import HopSkipJump
-from art.estimators.classification import PyTorchClassifier
-from sklearn.metrics import roc_curve
 from tqdm import tqdm
 import torch.nn as nn
 import torch.nn.functional as F
+from cleverhans.torch.attacks.hop_skip_jump_attack import hop_skip_jump_attack
 
 from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils
 from miae.utils.set_seed import set_seed
@@ -98,6 +96,8 @@ class BoundaryAuxiliaryInfo(AuxiliaryInfo):
         if self.log_path is not None:
             self.logger = logging.getLogger('boundary_logger')
             self.logger.setLevel(logging.INFO)
+            if not os.path.exists(self.log_path):
+                os.mkdir(self.log_path)
             fh = logging.FileHandler(self.log_path + '/boundary.log')
             fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
             self.logger.addHandler(fh)
@@ -180,14 +180,6 @@ class BoundaryUtil(MIAUtils):
         n_classes = aux_info.n_classes
 
         model.eval()
-        # art package requires a PyTorchClassifier model
-        art_wrapper_model = PyTorchClassifier(
-            model=model,
-            loss=nn.CrossEntropyLoss(),
-            input_shape=input_dim,
-            nb_classes=n_classes,
-            device_type=device
-        )
 
         acc = []
         dist_adv = []
@@ -196,12 +188,12 @@ class BoundaryUtil(MIAUtils):
         if attack == "CW":
             raise NotImplementedError("CW attack not implemented yet")
         elif attack == "HSJ":
-            adv_attack = HopSkipJump(classifier=art_wrapper_model, targeted=False, verbose=False)
+            adv_attack = hop_skip_jump_attack
 
         else:
             raise ValueError("Unknown attack {}".format(attack))
 
-        data_loader = DataLoader(ds, batch_size=1, shuffle=False)
+        data_loader = DataLoader(ds, batch_size=aux_info.batch_size, shuffle=False)
 
         num_samples = 0
         for batch_idx, (xbatch, ybatch) in enumerate(tqdm(data_loader)):
@@ -213,22 +205,19 @@ class BoundaryUtil(MIAUtils):
                 y_pred = torch.argmax(output, dim=1)
                 correct = (y_pred == ybatch).cpu().numpy()
                 acc.extend(correct)
-
-                if correct:
-                    # Generate adversarial examples
-                    x_adv = adv_attack.generate(xbatch.cpu().numpy(), ybatch_onehot)
-                else:
-                    x_adv = xbatch
-
-                # Compute distances
-                d = torch.norm(torch.from_numpy(x_adv).cpu() - xbatch.cpu(), p=2, dim=(1, 2, 3)).cpu().numpy()
-                dist_adv.extend(d)
-
+                x_adv = adv_attack(model_fn=model, x=xbatch, norm=2, verbose=False, num_iterations=5)
+                for i in range(x_adv.shape[0]):
+                    if correct[i]:
+                        curr_adv = x_adv[i]
+                    else:
+                        curr_adv = xbatch[i]
+                    # compute distance
+                    dist_adv.append(torch.linalg.norm(curr_adv.to(device) - xbatch[i]).item())
             num_samples += xbatch.size(0)
             if num_samples >= len(ds):
                 break
 
-        return dist_adv
+        return np.array(dist_adv)
 
     @classmethod
     def distance_augmentation_process(cls, model, data, aux_info: BoundaryAuxiliaryInfo,
