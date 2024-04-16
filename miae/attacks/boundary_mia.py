@@ -96,6 +96,8 @@ class BoundaryAuxiliaryInfo(AuxiliaryInfo):
         if self.log_path is not None:
             self.logger = logging.getLogger('boundary_logger')
             self.logger.setLevel(logging.INFO)
+            if not os.path.exists(self.log_path):
+                os.mkdir(self.log_path)
             fh = logging.FileHandler(self.log_path + '/boundary.log')
             fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
             self.logger.addHandler(fh)
