@@ -21,7 +21,7 @@ def plot_venn_single(pred_list: List[Predictions], graph_title: str, save_path: 
 
     plt.text(0.1, 0.1 + len(pred_list) * 0.03, "Accuracy of each seed:", fontsize=10, transform=plt.gcf().transFigure)
     for i, pred in enumerate(pred_list):
-        plt.text(0.15, 0.1 + i * 0.03, f"{pred.name}: {pred.accuracy():.4f}", fontsize=10,
+        plt.text(0.11, 0.1 + i * 0.03, f"{pred.name}: {pred.accuracy():.4f}", fontsize=10,
                  transform=plt.gcf().transFigure)
     plt.axis('off')
 
@@ -138,16 +138,15 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
     return result_or, result_and
 
 
-def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], goal: str, title: str, save_path: str):
+def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], title: str, save_path: str):
     """
     plot venn diagrams based on the goal including both unweighted and weighted venn diagrams.
     :param pred_or: list of Predictions for the 'pred_or' set
     :param pred_and: list of Predictions for the 'pred_and' set
-    :param goal: goal of the comparison <== choices: "common_tp", "single_attack"
     :param title: title of the graph
     :param save_path: path to save the graph
-    :param goal: goal of the comparison <== choices: "common_tp", "single_attack"
     """
+    print(f"plot venn_diagram")
     attacked_points_or = {pred.name: set() for pred in pred_or}
     attacked_points_and = {pred.name: set() for pred in pred_and}
     plt.figure(figsize=(16, 14), dpi=300)

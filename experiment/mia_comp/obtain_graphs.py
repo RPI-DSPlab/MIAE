@@ -16,13 +16,11 @@ from typing import List, Dict
 import numpy as np
 import pickle
 
-import MIAE.miae.eval_methods.prediction as prediction
-import MIAE.miae.visualization.venn_diagram as venn_diagram
-import utils
-
 import utils
 import sys
-sys.path.append(os.path.join(os.getcwd(), "..", ".."))
+sys.path.append(os.path.join(os.getcwd(), "..", "..", ".."))
+import MIAE.miae.eval_methods.prediction as prediction
+import MIAE.miae.visualization.venn_diagram as venn_diagram
 
 
 def load_and_create_predictions(attack: List[str], dataset: str, architecture: str, data_path: str, seeds: List[int] = None,
@@ -64,7 +62,7 @@ def plot_venn(pred_list: List[prediction.Predictions], pred_list2: List[
     :return: None
     """
     if graph_goal == "common_tp":
-        venn_diagram.plot_venn_diagram(pred_list, pred_list2, graph_goal, graph_title, graph_path)
+        venn_diagram.plot_venn_diagram(pred_list, pred_list2, graph_title, graph_path)
     elif graph_goal == "single_attack":
         venn_diagram.plot_venn_single(pred_list, graph_title, graph_path)
     elif graph_goal == "pairwise":
@@ -306,11 +304,15 @@ if __name__ == '__main__':
                     pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=0, target_fpr=f)
                     graph_title = args.graph_title+f" FPR = {f}"
                     graph_path = args.graph_path+f"_{f}"
+                    print(f" ")
+                    print(f"FPR = {f}")
                     plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
             elif args.threshold != 0:
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=args.threshold, target_fpr=0)
                 graph_title = args.graph_title + f" threshold = {args.threshold}"
                 graph_path = args.graph_path + f"_{args.threshold}"
+                print(f" ")
+                print(f"Threshold = {args.threshold}")
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
         elif args.graph_goal == "pairwise":
             if args.threshold == 0:

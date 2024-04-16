@@ -4,11 +4,9 @@ This file defines classes/functions for comparing the MIA's predictions down to 
 import os
 import pickle
 import sys
-
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..", "..")))
 from MIAE.miae.eval_methods.prediction import Predictions
-
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
-import models
+# import models
 from typing import Optional, Callable, Union
 from sklearn.metrics import roc_curve, auc
 from sklearn.manifold import TSNE
