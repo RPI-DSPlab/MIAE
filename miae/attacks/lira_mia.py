@@ -17,7 +17,6 @@ from torchvision.transforms import transforms
 from tqdm import tqdm
 
 from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
-from miae.model.trainer import load_model
 from miae.utils.dataset_utils import get_xy_from_dataset
 from torch.cuda.amp import GradScaler, autocast
 from miae.utils.set_seed import set_seed
@@ -233,7 +232,11 @@ class LIRAUtil:
             dir_path = f"{info.shadow_path}/{folder_name}"
 
             # Check if the directory exists and create
-            if cls._make_directory_if_not_exists(dir_path): continue
+            if os.path.exists(dir_path):
+                if os.path.exists(dir_path + "/shadow.pth") and os.path.exists(dir_path + "/keep.npy"):
+                    continue
+            else:
+                cls._make_directory_if_not_exists(dir_path)
 
             set_seed(expid + seed_base + skip_index)
 
@@ -377,9 +380,8 @@ class LIRAUtil:
             if os.path.isdir(seed_folder):
                 model_path = os.path.join(seed_folder, "shadow.pth")
                 print(f"load model [{index}/{len(model_locations)}]: {model_path}")
-                #model = cls.load_model(shadow_model_arch, path=model_path).to(info.device)
-                print(shadow_model_arch, model_path)
-                model = load_model("wrn28-1", model_path, "cifar10", info.device, num_classes=10)
+                model = cls.load_model(shadow_model_arch, path=model_path).to(info.device)
+                # print(shadow_model_arch, model_path)
                 scores, mean_acc = cls._calculate_score(cls._generate_logits(model,
                                                                              fullsetloader,
                                                                              info.device).cpu().numpy(),
@@ -502,7 +504,7 @@ class LiraAttack(MiAttack):
 
         shadow_model = self.target_model_access.get_untrained_model()
         # concatenate the target dataset and the auxiliary dataset
-        shadow_target_concat_set = self.auxiliary_dataset # ConcatDataset([self.auxiliary_dataset, dataset])
+        shadow_target_concat_set = ConcatDataset([self.auxiliary_dataset, dataset])
         LIRAUtil.train_shadow_models(shadow_model, shadow_target_concat_set, info=self.auxiliary_info)
 
         # given the model, calculate the score and generate the kept index data

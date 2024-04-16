@@ -24,7 +24,7 @@ targetset_ratio = 0.35  # percentage of training set to be used for training/tes
 train_test_ratio = 0.5  # percentage of training set to be used for training any model that uses a test set
 lr = 0.1
 target_train_epochs = 80
-attack_epochs = 100
+attack_epochs = 80
 
 current_dir = os.getcwd()
 target_model_dir = os.path.join(current_dir,"target_model")
@@ -239,6 +239,7 @@ def main():
     # mix the target trainset and testset and then attack
     dataset_to_attack = ConcatDataset([target_trainset, target_testset])
     target_membership = np.concatenate([np.ones(len(target_trainset)), np.zeros(len(target_testset))])
+
 
     obtain_roc_auc(attacks, savedir, dataset_to_attack, target_membership)
 
