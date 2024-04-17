@@ -154,6 +154,8 @@ def get_target_model_access(args, target_model, untrained_target_model) -> mia_b
         return yeom_mia.YeomModelAccess(deepcopy(target_model), untrained_target_model)
     if args.attack == "shokri":
         return shokri_mia.ShokriModelAccess(deepcopy(target_model), untrained_target_model)
+    if args.attack == "lira":
+        return lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
     else:
         raise ValueError("Invalid attack type")
 
@@ -180,7 +182,7 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
     if args.attack == "lira":
-        return lira_mia(
+        return lira_mia.LiraAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
     else:
@@ -202,6 +204,8 @@ def get_attack(args, aux_info: mia_base.AuxiliaryInfo, target_model_access: mia_
         return yeom_mia.YeomAttack(target_model_access, aux_info)
     if args.attack == "shokri":
         return shokri_mia.ShokriAttack(target_model_access, aux_info)
+    if args.attack == "lira":
+        return lira_mia.LiraAttack(target_model_access, aux_info)
     else:
         raise ValueError("Invalid attack type")
 
