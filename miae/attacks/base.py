@@ -243,14 +243,8 @@ class MIAUtils:
                         total_samples += labels.size(0)
                     train_accuracy = train_correct_predictions / total_samples
 
-                print(
-                    f"Epoch {epoch}, train_acc: {train_accuracy * 100:.2f}%, test_acc: {test_accuracy * 100:.2f}%, Loss: "
-                    f"{train_loss:.4f}, lr: {scheduler.get_last_lr()[0]:.4f}")
-
-                if aux_info.log_path is not None:
-                    aux_info.logger.info(
-                        f"Epoch {epoch}, train_acc: {train_accuracy * 100:.2f}%, test_acc: {test_accuracy * 100:.2f}%, Loss:"
-                        f"{train_loss:.4f}, lr: {scheduler.get_last_lr()[0]:.4f}")
+                cls.log(aux_info, f"Epoch {epoch}, train_acc: {train_accuracy * 100:.2f}%, test_acc: {test_accuracy * 100:.2f}%, Loss:"
+                        f"{train_loss:.4f}, lr: {scheduler.get_last_lr()[0]:.4f}", print_flag=True)
         return shadow_model
 
     @classmethod
@@ -273,7 +267,7 @@ class MIAUtils:
         for epoch in tqdm(range(aux_info.attack_epochs)):
             attack_model.train()
             train_loss = 0
-            for pred, label, membership in attack_train_loader:
+            for pred, membership in attack_train_loader:
                 pred, membership = pred.to(aux_info.device), membership.to(aux_info.device)
                 attack_optimizer.zero_grad()
                 output = attack_model(pred)
@@ -300,7 +294,7 @@ class MIAUtils:
                 with torch.no_grad():
                     correct = 0
                     total = 0
-                    for pred, _, membership in attack_train_loader:
+                    for pred, membership in attack_train_loader:
                         pred, membership = pred.to(aux_info.device), membership.to(aux_info.device)
                         output = attack_model(pred)
                         _, predicted = torch.max(output.data, 1)
@@ -309,16 +303,9 @@ class MIAUtils:
                     train_acc = correct / total
 
                 if attack_test_loader != None:
-                    print(
-                        f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, test_acc: {test_acc * 100:.2f}%, Loss: {train_loss:.4f}")
-                    if aux_info.log_path is not None:
-                        aux_info.logger.info(
-                            f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, test_acc: {test_acc * 100:.2f}%, Loss: {train_loss:.4f}")
+                    cls.log(aux_info, f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, test_acc: {test_acc * 100:.2f}%, Loss: {train_loss:.4f}", print_flag=True)
                 else:
-                    print(f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, Loss: {train_loss * 100:.4f}%")
-                    if aux_info.log_path is not None:
-                        aux_info.logger.info(
-                            f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, Loss: {train_loss * 100:.4f}%")
+                    cls.log(aux_info, f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, Loss: {train_loss:.4f}", print_flag=True)
 
         return attack_model
 

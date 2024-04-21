@@ -138,26 +138,24 @@ class ShokriUtil(MIAUtils):
 
 
 class AttackTrainingSet(Dataset):
-    def __init__(self, predictions, class_labels, in_out):
+    def __init__(self, predictions, in_out):
         self.predictions = predictions  # Prediction values
-        self.class_labels = class_labels  # Class labels
         self.in_out = in_out  # "in" or "out" indicator
 
         # ensure self.in_out is binary
         assert len(np.unique(self.in_out)) == 2, "in_out should be binary"
 
         # Ensure all inputs have the same length
-        assert len(predictions) == len(class_labels) == len(in_out), "Lengths of inputs should match"
+        assert len(predictions) == len(in_out), "Lengths of inputs should match"
 
     def __len__(self):
         return len(self.predictions)
 
     def __getitem__(self, idx):
         prediction = self.predictions[idx]
-        class_label = self.class_labels[idx]
         in_out_indicator = self.in_out[idx]
 
-        return prediction, class_label, in_out_indicator
+        return prediction, in_out_indicator
 
 
 class ShokriAttack(MiAttack):
@@ -279,19 +277,16 @@ class ShokriAttack(MiAttack):
 
             # combine in and out prediction sets
             prediction_set_pred = np.concatenate((in_prediction_set_pred, out_prediction_set_pred))
-            prediction_set_label = np.concatenate((in_prediction_set_label, out_prediction_set_label))
             prediction_set_membership = np.concatenate((in_prediction_set_membership, out_prediction_set_membership))
 
             # shuffle the prediction set
             shuffle_idx = np.arange(len(prediction_set_pred))
             np.random.shuffle(shuffle_idx)
             prediction_set_pred = prediction_set_pred[shuffle_idx]
-            prediction_set_label = prediction_set_label[shuffle_idx]
             prediction_set_membership = prediction_set_membership[shuffle_idx]
 
             # build the dataset for attack model training
-            self.attack_dataset = AttackTrainingSet(prediction_set_pred, prediction_set_label,
-                                                    prediction_set_membership)
+            self.attack_dataset = AttackTrainingSet(prediction_set_pred, prediction_set_membership)
             torch.save(self.attack_dataset, self.auxiliary_info.attack_dataset_path)
 
         # step 3: train attack model
