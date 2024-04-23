@@ -9,17 +9,14 @@ from MIAE.miae.eval_methods.prediction import Predictions
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
 import models
-from typing import Optional, Callable, Union
-from sklearn.metrics import roc_curve, auc
+from typing import Optional
 from sklearn.manifold import TSNE
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import ConcatDataset, Dataset
 from torchvision import transforms
-from typing import List, Tuple
-
-fprs_sampling = [0.001, 0.005, 0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]
+from typing import List
 
 
 class SampleHardness:
@@ -272,104 +269,6 @@ def load_dataset(file_path: str) -> Dataset:
     with open(file_path, "rb") as f:
         dataset = pickle.load(f)
     return dataset
-
-
-def plot_auc(pred_list: List[np.ndarray],
-             name_list: List[str],
-             ground_truth_arr: np.ndarray,
-             title: str,
-             fpr_values: List[float] = None,
-             log_scale: bool = True,
-             save_path: str = None):
-    """
-    Plot the AUC graph for the predictions from different attacks, the code is adapted from tensorflow_privacy.
-    :param pred_list: List of predictions.
-    :param name_list: List of names for the attacks.
-    :param ground_truth_arr: Ground truth array.
-    :param title: Title of the graph.
-    :param fpr_values: list of FPR values to plot vertical lines
-    :param log_scale: Whether to plot in log scale. Defaults to True.
-    :param save_path: Path to save the graph.
-    """
-
-    def sweep(score: np.ndarray, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float, float]:
-        """
-        Compute a Receiver Operating Characteristic (ROC) curve.
-
-        Args:
-            score (np.ndarray): The predicted scores.
-            x (np.ndarray): The ground truth labels.
-
-        Returns:
-            Tuple[np.ndarray, np.ndarray, float, float]: The False Positive Rate (FPR),
-            True Positive Rate (TPR), Area Under the Curve (AUC), and Accuracy.
-        """
-        fpr, tpr, _ = roc_curve(x, score)
-        acc = np.max(1 - (fpr + (1 - tpr)) / 2)
-        return fpr, tpr, auc(fpr, tpr), acc
-
-    def do_plot(prediction: np.ndarray,
-                answers: np.ndarray,
-                legend: str = '',
-                sweep_fn: Callable = sweep,
-                **plot_kwargs: Union[int, str, float]) -> Tuple[float, float]:
-        """
-        Generate the ROC curves.
-
-        Args:
-            prediction (np.ndarray): The predicted scores.
-            answers (np.ndarray): The ground truth labels.
-            legend (str, optional): Legend for the plot. Defaults to ''.
-            sweep_fn (Callable, optional): Function used to compute the ROC curve. Defaults to sweep.
-
-        Returns:
-            Tuple[float, float]: Accuracy and Area Under the Curve (AUC).
-        """
-        fpr, tpr, auc, acc = sweep_fn(np.array(prediction), np.array(answers, dtype=bool))
-
-        low = tpr[np.where(fpr < .001)[0][-1]] if np.any(fpr < .001) else 0
-
-        print(f'Attack: {legend.strip():<20} AUC: {auc:<8.4f} max Accuracy: {acc:<8.4f} TPR@0.1%FPR: {low:<8.4f}')
-
-        metric_text = f'auc={auc:.3f}'
-
-        plt.plot(fpr, tpr, label=legend + metric_text, **plot_kwargs)
-
-        return acc, auc
-
-    plt.figure(figsize=(6, 5))
-    plt.title(title)
-
-    membership_list = [ground_truth_arr for _ in range(len(name_list))]
-    for prediction, answer, legend in zip(pred_list, membership_list, name_list):
-        do_plot(prediction, answer,
-                f"{legend}\n")
-
-    if log_scale:
-        plt.semilogx()
-        plt.semilogy()
-    else:
-        plt.xscale('linear')
-        plt.yscale('linear')
-
-    plt.xlim(1e-5, 1)
-    plt.ylim(1e-5, 1)
-    plt.xlabel("False Positive Rate")
-    plt.ylabel("True Positive Rate")
-    plt.plot([0, 1], [0, 1], ls='--', color='gray')
-    plt.legend(fontsize=8)
-
-    # Draw vertical lines on specified FPR values
-    if fpr_values:
-        for fpr_value in fpr_values:
-            plt.axvline(x=fpr_value, color='r', linestyle='--', linewidth=1)
-            plt.text(fpr_value, 0.5, f'FPR={fpr_value:.3f}', color='r', rotation=90)
-
-    if save_path is not None:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path)
-
-    plt.show()
 
 
 def pearson_correlation(pred1: np.ndarray, pred2: np.ndarray) -> float:

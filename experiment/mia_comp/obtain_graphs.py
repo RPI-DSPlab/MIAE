@@ -18,6 +18,8 @@ import pickle
 
 import MIAE.miae.eval_methods.prediction as prediction
 import MIAE.miae.visualization.venn_diagram as venn_diagram
+
+import miae.eval_methods.prediction
 import utils
 
 import utils
@@ -72,7 +74,7 @@ def plot_venn(pred_list: List[prediction.Predictions], pred_list2: List[
         venn_diagram.plot_venn_pairwise(paired_pred_list, graph_title, graph_path)
 
 def plot_auc(predictions: Dict[str, prediction.Predictions], graph_title: str, graph_path: str,
-             fprs: List[float] = None, log_scale: bool = True):
+             fprs: List[float] = None):
     """
     plot the AUC of the different attacks
     :param predictions: List[utils.Predictions]: list of Predictions objects
@@ -80,7 +82,6 @@ def plot_auc(predictions: Dict[str, prediction.Predictions], graph_title: str, g
     :param graph_path: str: path to save the graph
     :param fprs: List[float]: list of false positive rates to be plotted as vertical lines on auc graph,
     if None, no need to plot any vertical line
-    :param log_scale: bool: whether to plot the graph in log scale
 
     :return: None
     """
@@ -91,7 +92,7 @@ def plot_auc(predictions: Dict[str, prediction.Predictions], graph_title: str, g
         prediction_list.append(pred.pred_arr)
         ground_truth = pred.ground_truth_arr if ground_truth is None else ground_truth
 
-    utils.plot_auc(prediction_list, attack_names, ground_truth, graph_title, fprs, log_scale, graph_path)
+    miae.eval_methods.prediction.plot_auc(prediction_list, attack_names, ground_truth, graph_title, fprs, graph_path)
 
 
 def plot_hardness_distribution(predictions: Dict[str, List[prediction.Predictions]] or Dict[str, prediction.Predictions],
@@ -236,23 +237,62 @@ def single_attack_seed_ensemble(predictions: Dict[str, List[prediction.Predictio
     :param num_seeds: int: number of seeds to ensemble
     :param skip: int: number of seeds to skip for each ensemble plotting
     """
-    gt_arr = predictions[list(predictions.keys())[0]][0].ground_truth_arr
-    for ensemble_method in ["HC", "HP", "avg"]:  # High Coverage and High Precision
+    gt_arr = predictions[list(predictions.keys())[0]][0]
+    # 0. create predictions for different fprs
+    predictions_fpred = {} # {attack: [[pred_{fpr1}_numsd1, pred_{fpr2}_numsd1, ...], [pred_{fpr1}_numsd2, pred_{fpr2}_numsd2, ...], ...]}
+    for attack, pred_list in predictions.items():  # for each attack
+        predictions_fpred[attack] = []
+        for i in range(0, num_seeds):  # for each number of seeds
+            # adjust the prediction to the fpr threshold for many different fprs
+            predictions_fpred[attack].append(prediction.sample_and_adjust_fpr(pred_list[i]))
+
+    num_fprs = len(predictions_fpred[list(predictions_fpred.keys())[0]])
+
+
+    # 1. plot comparison between different number of seeds used on a ROC curve, do it for each attack and for each ensemble method
+    for ensemble_method in ["HC", "HP", "majority", "avg"]:  # High Coverage, High Precision, and majority voting (these are hard ensemble methods)
         for attack, pred_list in predictions.items():
-            ensemble_pred = []
+            ensemble_pred = []  # [ensemble_sd1, ensemble_sd2, ...] for each number of seeds
             num_seeds_list = []
             name_list = []
-            for i in range(0, num_seeds, skip):
-                ensemble_pred.append(
-                    prediction.multi_seed_ensemble(pred_list[:i + 1], ensemble_method, threshold=0.5).pred_arr)
+            for i in range(0, num_seeds, skip): # for different number of seeds
+                if ensemble_method in ["HC", "HP", "majority"]:  # hard ensemble methods
+                    ensemble_pred.append([])
+                    for j in range(num_fprs): # for each fpr
+                        preds_same_fpr = [l[j] for l in predictions_fpred[attack][:i+1]]
+                        ensemble_pred[-1].append(
+                            prediction.multi_seed_ensemble(preds_same_fpr, ensemble_method))
+
+                else: # soft ensemble methods
+                    ensemble_pred.append(
+                        prediction.multi_seed_ensemble(pred_list[:i + 1], ensemble_method))
+
                 num_seeds_list.append(i+1)
                 name_list.append(attack+f"_{ensemble_method}_numsd{i+1}")
 
             title = f"{graph_title} {attack} {ensemble_method}"
-            print(f"plotting auc for {title}...")
-            utils.plot_auc(ensemble_pred, name_list, gt_arr, title, None, True, graph_path+f"_{attack}_{ensemble_method}.png")
+            miae.eval_methods.prediction.plot_auc(ensemble_pred, name_list, gt_arr, title, None,
+                                                  graph_path + f"_{attack}_{ensemble_method}.png")
 
+    # 2. plot comparison between different ensemble methods used on a ROC curve, do it for each attack with max number of seeds
+    for attack, pred_list in predictions.items(): # each attack has its own roc graph for different ensemble methods
+        ensemble_pred = [] # [ensemble_method1, ensemble_method2, ...] for each ensemble method
+        name_list = []
+        for ensemble_method in ["HC", "HP", "majority", "avg"]:
+            if ensemble_method in ["HC", "HP", "majority"]:
+                ensemble_pred.append([])
+                for j in range(num_fprs):
+                    preds_same_fpr = [l[j] for l in predictions_fpred[attack]]
+                    ensemble_pred[-1].append(
+                        prediction.multi_seed_ensemble(preds_same_fpr, ensemble_method))
+            else:
+                ensemble_pred.append(
+                    prediction.multi_seed_ensemble(pred_list, ensemble_method))
+            name_list.append(attack+f"_{ensemble_method}")
 
+        title = f"{graph_title} {attack} with {num_seeds} different seeds"
+        miae.eval_methods.prediction.plot_auc(ensemble_pred, name_list, gt_arr, title, None,
+                                              graph_path + f"_{attack}_different_ensemble.png")
 
 
 
