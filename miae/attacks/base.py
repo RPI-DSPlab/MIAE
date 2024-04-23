@@ -2,6 +2,7 @@ import copy
 
 import numpy as np
 import torch
+from torch.utils.data import Dataset, Subset
 from tqdm import tqdm
 
 from miae.attacks.attack_classifier import *
@@ -14,6 +15,31 @@ class ModelAccessType(Enum):
     GRAY_BOX = "gray_box"
     LABEL_ONLY = "label_only"
 
+class AttackTrainingSet(Dataset):
+    """
+    A dataset class for training the attack model. (for shokri, Boundary) It's designed to be used
+    with MiAUtils.train_attack_model, as the AttackTrainingSet[1] is class label
+    """
+    def __init__(self, predictions, class_labels, in_out):
+        self.predictions = predictions  # Prediction values
+        self.class_labels = class_labels  # Class labels
+        self.in_out = in_out  # "in" or "out" indicator
+
+        # ensure self.in_out is binary
+        assert len(np.unique(self.in_out)) == 2, "in_out should be binary"
+
+        # Ensure all inputs have the same length
+        assert len(predictions) == len(class_labels) == len(in_out), "Lengths of inputs should match"
+
+    def __len__(self):
+        return len(self.predictions)
+
+    def __getitem__(self, idx):
+        prediction = self.predictions[idx]
+        class_label = self.class_labels[idx]
+        in_out_indicator = self.in_out[idx]
+
+        return prediction, class_label, in_out_indicator
 
 class AuxiliaryInfo(ABC):
     """
@@ -250,9 +276,9 @@ class MIAUtils:
     @classmethod
     def train_attack_model(cls, attack_model, attack_train_loader, attack_test_loader, aux_info: AuxiliaryInfo) -> torch.nn.Module:
         """
-        Train the attack model.
+        Train the attack model. (for shokri, Boundary) Note that loader must be AttackTrainingSet.
         :param attack_model: the attack model.
-        :param attack_train_loader: the attack training data loader.
+        :param attack_train_loader: the attack training data loader. It should be an Dataloader of AttackTrainingSet.
         :param attack_test_loader: the attack test data loader, None meaning no test data.
         :param aux_info: the auxiliary information for the attack model.
         :return: the trained attack model.
@@ -267,7 +293,7 @@ class MIAUtils:
         for epoch in tqdm(range(aux_info.attack_epochs)):
             attack_model.train()
             train_loss = 0
-            for pred, membership in attack_train_loader:
+            for pred, _, membership in attack_train_loader:
                 pred, membership = pred.to(aux_info.device), membership.to(aux_info.device)
                 attack_optimizer.zero_grad()
                 output = attack_model(pred)
@@ -294,7 +320,7 @@ class MIAUtils:
                 with torch.no_grad():
                     correct = 0
                     total = 0
-                    for pred, membership in attack_train_loader:
+                    for pred, _, membership in attack_train_loader:
                         pred, membership = pred.to(aux_info.device), membership.to(aux_info.device)
                         output = attack_model(pred)
                         _, predicted = torch.max(output.data, 1)
@@ -308,4 +334,17 @@ class MIAUtils:
                     cls.log(aux_info, f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, Loss: {train_loss:.4f}", print_flag=True)
 
         return attack_model
+
+    @classmethod
+    def filter_dataset(cls, dataset: Dataset, label: int) -> Dataset:
+        """
+        Filter the dataset with the specified label. (for shokri, Boundary)
+        :param dataset: the dataset to be filtered.
+        :param label: the label to be filtered.
+        :return: the filtered dataset.
+        """
+
+        filtered_indices = [i for i in range(len(dataset)) if dataset[i][1] == label]
+        filtered_dataset = Subset(dataset, filtered_indices)
+        return filtered_dataset
 
