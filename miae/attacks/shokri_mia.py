@@ -67,7 +67,7 @@ class ShokriAuxiliaryInfo(AuxiliaryInfo):
         self.num_attack_epochs = config.get("num_attack_epochs", self.epochs)
         self.attack_batch_size = config.get("attack_batch_size", self.batch_size)
         self.attack_lr = config.get("attack_lr", 0.01)
-        self.attack_train_ratio = config.get("attack_train_ratio", 0.9)
+        self.attack_train_ratio = config.get("attack_train_ratio", 1)
         self.attack_epochs = config.get("attack_epochs", self.epochs)
 
         # -- other parameters --
