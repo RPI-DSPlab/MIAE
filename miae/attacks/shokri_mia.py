@@ -12,7 +12,7 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.nn.functional as F
 
-from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils
+from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils, AttackTrainingSet
 from miae.utils.set_seed import set_seed
 
 
@@ -123,41 +123,6 @@ class ShokriUtil(MIAUtils):
         # Return a list of datasets
         return subsets
 
-    @classmethod
-    def filter_dataset(cls, dataset: Dataset, label: int) -> Dataset:
-        """
-        Filter the dataset with the specified label.
-        :param dataset: the dataset to be filtered.
-        :param label: the label to be filtered.
-        :return: the filtered dataset.
-        """
-
-        filtered_indices = [i for i in range(len(dataset)) if dataset[i][1] == label]
-        filtered_dataset = Subset(dataset, filtered_indices)
-        return filtered_dataset
-
-
-class AttackTrainingSet(Dataset):
-    def __init__(self, predictions, class_labels, in_out):
-        self.predictions = predictions  # Prediction values
-        self.class_labels = class_labels  # Class labels
-        self.in_out = in_out  # "in" or "out" indicator
-
-        # ensure self.in_out is binary
-        assert len(np.unique(self.in_out)) == 2, "in_out should be binary"
-
-        # Ensure all inputs have the same length
-        assert len(predictions) == len(class_labels) == len(in_out), "Lengths of inputs should match"
-
-    def __len__(self):
-        return len(self.predictions)
-
-    def __getitem__(self, idx):
-        prediction = self.predictions[idx]
-        class_label = self.class_labels[idx]
-        in_out_indicator = self.in_out[idx]
-
-        return prediction, class_label, in_out_indicator
 
 
 class ShokriAttack(MiAttack):
@@ -236,14 +201,10 @@ class ShokriAttack(MiAttack):
                 shadow_test_loader = DataLoader(shadow_test_dataset, batch_size=self.auxiliary_info.shadow_batch_size,
                                                 shuffle=False)
                 if os.path.exists(model_path):
-                    print(f"Loading shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
-                    if self.auxiliary_info.log_path is not None:
-                        self.auxiliary_info.logger.info(f"Loading shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
+                    ShokriUtil.log(self.auxiliary_info, f"Loading shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
                     shadow_model_i.load_state_dict(torch.load(model_path))
                 else:
-                    print(f"Training shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
-                    if self.auxiliary_info.log_path is not None:
-                        self.auxiliary_info.logger.info(f"Training shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
+                    ShokriUtil.log(self.auxiliary_info, f"Training shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
                     shadow_model_i = ShokriUtil.train_shadow_model(shadow_model_i, shadow_train_loader,
                                                                    shadow_test_loader,
                                                                    self.auxiliary_info)
@@ -311,8 +272,7 @@ class ShokriAttack(MiAttack):
         # if attack model exists, then there's no need to retrain attack models
         if len(labels) == len(os.listdir(self.auxiliary_info.attack_model_path)):
             print("Loading attack models...")
-            if self.auxiliary_info.log_path is not None:
-                self.auxiliary_info.logger.info("Loading attack models...")
+            ShokriUtil.log(self.auxiliary_info, "Loading attack models...")
             for i, label in enumerate(labels):
                 model = self.auxiliary_info.attack_model(self.auxiliary_info.num_classes)
                 model.load_state_dict(torch.load(f"{self.auxiliary_info.attack_model_path}/attack_model_{label}.pt"))
@@ -320,9 +280,8 @@ class ShokriAttack(MiAttack):
                 self.attack_model_dict[label] = model
         else:
             for i, label in enumerate(labels):
-                print(f"Training attack model for {i}/{len(labels)} label \"{label}\" ...")
-                if self.auxiliary_info.log_path is not None:
-                    self.auxiliary_info.logger.info(f"Training attack model for {i}/{len(labels)} label \"{label}\" ...")
+                ShokriUtil.log(self.auxiliary_info, f"Training attack model for {i}/{len(labels)} label \"{label}\" ..."
+                               , print_flag=True)
                 # filter the dataset with the label
                 attack_train_dataset_filtered = ShokriUtil.filter_dataset(attack_train_dataset, label)
                 attack_test_dataset_filtered = ShokriUtil.filter_dataset(attack_test_dataset,

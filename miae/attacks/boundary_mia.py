@@ -16,26 +16,27 @@ import torch.nn as nn
 import torch.nn.functional as F
 from cleverhans.torch.attacks.hop_skip_jump_attack import hop_skip_jump_attack
 
-from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils
+from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils, AttackTrainingSet
 from miae.utils.set_seed import set_seed
 from miae.utils.dataset_utils import dataset_split, get_xy_from_dataset
 
 
 class AttackModel(nn.Module):
-    def __init__(self, aug_type='n'):
+    def __init__(self, aug_type='d'):
         super(AttackModel, self).__init__()
         if aug_type == 'n':
             self.x1 = nn.Linear(in_features=64, out_features=64)
             self.x_out = nn.Linear(in_features=64, out_features=2)
         elif aug_type == 'r' or aug_type == 'd':
-            self.x1 = nn.Linear(in_features=10, out_features=10)
-            self.x2 = nn.Linear(in_features=10, out_features=10)
-            self.x_out = nn.Linear(in_features=10, out_features=2)
+            self.x1 = nn.Linear(in_features=9, out_features=9)
+            self.x2 = nn.Linear(in_features=9, out_features=9)
+            self.x_out = nn.Linear(in_features=9, out_features=2)
         else:
             raise ValueError(f"aug_type={aug_type} is not valid.")
         self.x_activation = nn.Softmax(dim=1)
 
     def forward(self, x):
+        x = x.float()
         if hasattr(self, 'x2'):
             x = F.relu(self.x1(x))
             x = F.relu(self.x2(x))
@@ -220,9 +221,28 @@ class BoundaryUtil(MIAUtils):
         return np.array(dist_adv)
 
     @classmethod
-    def distance_augmentation_process(cls, model, data, aux_info: BoundaryAuxiliaryInfo,
-                                      attack_type='d', augment_kwarg=1) -> np.array:
-        """process data for distance augmentation attack's training and inference.
+    def check_correct(cls, dataloader, model, device) -> np.ndarray:
+        """
+        Run inference on the model and return the correctness of the predictions.
+        :param dataloader: the dataloader for the dataset.
+        :param model: the model to run inference on.
+
+        Returns: the correctness of the predictions (1 if correct, 0 if incorrect).
+        """
+        correctness = []
+        for x, y in dataloader:
+            x, y = x.to(device), y.to(device)
+            with torch.no_grad():
+                output = model(x)
+                y_pred = torch.argmax(output, dim=1)
+                correct = (y_pred == y).cpu().numpy()
+                correctness.extend(correct)
+        return np.array(correctness)
+
+    @classmethod
+    def augmentation_process(cls, model, data, aux_info: BoundaryAuxiliaryInfo,
+                             attack_type='d', augment_kwarg=2) -> np.array:
+        """process data for augmentation attack's training and inference.
 
         Args:
           model: model to approximate distances on (attack).
@@ -244,14 +264,17 @@ class BoundaryUtil(MIAUtils):
             raise ValueError(f"attack type_: {attack_type} is not valid.")
 
         processed_ds = np.zeros((len(data), len(augments)))
+        model.to(aux_info.device)
 
         for i in range(len(augments)):
             BoundaryUtil.log(aux_info, f"Processing augmentation {i + 1}/{len(augments)}", print_flag=True)
             data_x, data_y = get_xy_from_dataset(data)
             data_aug = cls.apply_augment([data_x, data_y], augments[i], attack_type)
             ds = TensorDataset(torch.tensor(data_aug[0]), torch.tensor(data_aug[1]))
-            BoundaryUtil.log(aux_info, "Obtaining distances to boundary", print_flag=True)
-            processed_ds[:, i] = cls.dists(model, ds, aux_info, attack="HSJ")
+            loader = DataLoader(ds, batch_size=aux_info.batch_size, shuffle=False)
+            correctness = cls.check_correct(loader, model, aux_info.device)
+            processed_ds[:, i] = correctness
+
         return processed_ds
 
 
@@ -268,14 +291,18 @@ class BoundaryAttack(MiAttack):
         :param target_data: the target data for the Shokri attack.
         """
         super().__init__(target_model_access, auxiliary_info)
+        self.attack_dataset = None
+        self.attack_test_loader = None
+        self.attack_train_loader = None
         self.aux_info = auxiliary_info
         self.target_model_access = target_model_access
         self.attack_model = None
+        self.attack_model_dict = {}
         self.prepared = False
 
         # directories:
         for dir in [self.aux_info.log_path, self.aux_info.save_path, self.aux_info.attack_model_path,
-                    self.aux_info.shadow_model_path]:
+                    self.aux_info.shadow_model_path, self.aux_info.attack_dataset_path]:
             if not os.path.exists(dir):
                 os.makedirs(dir)
 
@@ -297,55 +324,147 @@ class BoundaryAttack(MiAttack):
         train_set_len = int(len(auxiliary_dataset) * self.aux_info.shadow_train_ratio)
         test_set_len = len(auxiliary_dataset) - train_set_len
         train_set, test_set = dataset_split(auxiliary_dataset, [train_set_len, test_set_len])
+        trainloader = DataLoader(train_set, batch_size=self.aux_info.shadow_batch_size, shuffle=True, num_workers=2)
+        testloader = DataLoader(test_set, batch_size=self.aux_info.shadow_batch_size, shuffle=False, num_workers=2)
 
         shadow_model = self.target_model_access.get_untrained_model()
         if os.path.exists(self.aux_info.shadow_model_path + '/shadow_model.pth'):
             shadow_model = torch.load(self.aux_info.shadow_model_path + '/shadow_model.pth')
         else:
-            trainloader = DataLoader(train_set, batch_size=self.aux_info.shadow_batch_size, shuffle=True, num_workers=2)
-            testloader = DataLoader(test_set, batch_size=self.aux_info.shadow_batch_size, shuffle=False, num_workers=2)
+            BoundaryUtil.log(self.aux_info, "Training shadow model", print_flag=True)
             shadow_model = BoundaryUtil.train_shadow_model(shadow_model, trainloader, testloader, self.aux_info)
             torch.save(shadow_model, self.aux_info.shadow_model_path + '/shadow_model.pth')
 
-        # 2. Generate distance from the shadow model and auxiliary dataset
-        dist_in = BoundaryUtil.distance_augmentation_process(shadow_model, train_set, self.aux_info, attack_type='d',
-                                                             augment_kwarg=1)
-        dist_out = BoundaryUtil.distance_augmentation_process(shadow_model, test_set, self.aux_info, attack_type='d',
-                                                              augment_kwarg=1)
-        print(f"dists_in: {dist_in.shape}, dists_out: {dist_out.shape}")
-
-        # 3. Train an attack model
-        attack_model = self.aux_info.attack_model()
-        if os.path.exists(self.aux_info.attack_model_path + '/attack_model.pth'):
-            self.attack_model = torch.load(self.aux_info.attack_model_path + '/attack_model.pth')
+        # 2. Generate different augmentation of aux dataset and their predictions on the shadow model
+        if os.path.exists(self.aux_info.attack_dataset_path + '/attack_dataset.pth'):
+            BoundaryUtil.log(self.aux_info, "Loading attack dataset from file", print_flag=True)
+            self.attack_dataset = torch.load(self.aux_info.attack_dataset_path + '/attack_dataset.pth')
         else:
-            if os.path.exists(self.aux_info.attack_dataset_path + '/attack_dataset.pth'):
-                attack_dataset = torch.load(self.aux_info.attack_dataset_path + '/attack_dataset.pth')
-            else:
-                train_set = TensorDataset(torch.tensor(dist_in), torch.tensor([1] * len(dist_in)))
-                test_set = TensorDataset(torch.tensor(dist_out), torch.tensor([0] * len(dist_out)))
-                attack_dataset = torch.utils.data.ConcatDataset([train_set, test_set])
-                torch.save(attack_dataset, self.aux_info.attack_dataset_path + '/attack_dataset.pth')
+            BoundaryUtil.log(self.aux_info, "Generating attack dataset", print_flag=True)
+            aug_in = BoundaryUtil.augmentation_process(shadow_model, train_set, self.aux_info, attack_type='d',
+                                                       augment_kwarg=2)
+            aug_out = BoundaryUtil.augmentation_process(shadow_model, test_set, self.aux_info, attack_type='d',
+                                                        augment_kwarg=2)
+            in_prediction_set_label = None
+            out_prediction_set_label = None
 
-            attack_train_loader = DataLoader(attack_dataset, batch_size=self.aux_info.attack_batch_size, shuffle=True)
-            self.attack_model = BoundaryUtil.train_attack_model(attack_model, attack_train_loader, None, self.aux_info)
-            torch.save(self.attack_model, self.aux_info.attack_model_path + '/attack_model.pth')
+            for _, target in trainloader:  # getting the trainset's labels
+                target = target.to(self.aux_info.device)
+                if in_prediction_set_label is None:  # first entry
+                    in_prediction_set_label = target.cpu().detach().numpy()
+                else:
+                    in_prediction_set_label = np.concatenate(
+                        (in_prediction_set_label, target.cpu().detach().numpy()))
+
+            for _, target in testloader:  # getting the testset's labels
+                target = target.to(self.aux_info.device)
+                if out_prediction_set_label is None:  # first entry
+                    out_prediction_set_label = target.cpu().detach().numpy()
+                else:
+                    out_prediction_set_label = np.concatenate(
+                        (out_prediction_set_label, target.cpu().detach().numpy()))
+
+            in_prediction_set_membership = np.ones(len(aug_in))
+            out_prediction_set_membership = np.zeros(len(aug_out))
+
+            # combine in and out prediction sets
+            attack_set_aug = np.concatenate((aug_in, aug_out))
+            attack_set_label = np.concatenate((in_prediction_set_label, out_prediction_set_label))
+            attack_set_membership = np.concatenate((in_prediction_set_membership, out_prediction_set_membership))
+            self.attack_dataset = AttackTrainingSet(attack_set_aug, attack_set_label, attack_set_membership)
+            torch.save(self.attack_dataset, self.aux_info.attack_dataset_path + '/attack_dataset.pth')
+
+        # 3. Train an attack model for each label
+        train_len = int(len(self.attack_dataset) * self.aux_info.attack_train_ratio)
+        test_len = len(self.attack_dataset) - train_len
+        if self.aux_info.attack_train_ratio < 1.0:
+            attack_train_dataset, attack_test_dataset = torch.utils.data.random_split(self.attack_dataset,
+                                                                                      [train_len, test_len])
+        else:
+            attack_train_dataset = self.attack_dataset
+            attack_test_dataset = None
+        labels = np.unique(self.attack_dataset.class_labels)
+        if len(labels) == len(os.listdir(self.aux_info.attack_model_path)):
+            BoundaryUtil.log(self.aux_info, "Loading attack models...", print_flag=True)
+            for i, label in enumerate(labels):
+                model = self.aux_info.attack_model()
+                model.load_state_dict(torch.load(f"{self.aux_info.attack_model_path}/attack_model_{label}.pt"))
+                model.to(self.aux_info.device)
+                self.attack_model_dict[label] = model
+        else:
+            for i, label in enumerate(labels):
+                BoundaryUtil.log(self.aux_info,
+                                 f"Training attack model for {i + 1}/{len(labels)} label \"{label}\" ...",
+                                 print_flag=True)
+                # filter the dataset with the label
+                attack_train_dataset_filtered = BoundaryUtil.filter_dataset(attack_train_dataset, label)
+                attack_test_dataset_filtered = BoundaryUtil.filter_dataset(attack_test_dataset,
+                                                                           label) if attack_test_dataset else None
+                self.attack_train_loader = DataLoader(attack_train_dataset_filtered,
+                                                      batch_size=self.aux_info.attack_batch_size,
+                                                      shuffle=True)
+                self.attack_test_loader = DataLoader(attack_test_dataset_filtered,
+                                                     batch_size=self.aux_info.attack_batch_size,
+                                                     shuffle=True) if attack_test_dataset else None
+                untrained_attack_model = self.aux_info.attack_model()
+                untrained_attack_model.to(self.aux_info.device)
+                trained_attack_model = BoundaryUtil.train_attack_model(untrained_attack_model,
+                                                                       self.attack_train_loader,
+                                                                       self.attack_test_loader,
+                                                                       self.aux_info)
+                self.attack_model_dict[label] = trained_attack_model
+                torch.save(trained_attack_model.state_dict(),
+                           f"{self.aux_info.attack_model_path}/attack_model_{label}.pt")
 
         self.prepared = True
 
-    def infer(self, data) -> np.ndarray:
+    def infer(self, target_data) -> np.ndarray:
         """
         Infer the membership of the target data.
-        1. process the data for distance augmentation attack
+        1. process the data for augmentation attack
         2. infer the membership of the target data with the attack model
         """
-        super().infer(data)
+        super().infer(target_data)
         if not self.prepared:
             raise ValueError("The attack has not been prepared yet!")
 
-        # 1. process the data for distance augmentation attack
-        dist_target = BoundaryUtil.distance_augmentation_process(self.target_model_access.model, data, self.aux_info,
-                                                                 attack_type='d', augment_kwarg=1)
-        self.target_model_access.to_device(self.aux_info.device)
-        target_pred = self.attack_model(torch.tensor(dist_target).to(self.aux_info.device)).detach().cpu().numpy()
-        return target_pred[1]
+        # load the attack models
+        labels = np.unique(self.attack_dataset.class_labels)
+        for label in labels:
+            if label not in self.attack_model_dict:
+                model = self.aux_info.attack_model(self.aux_info.num_classes)
+                model.load_state_dict(torch.load(f"{self.aux_info.attack_model_path}/attack_model_{label}.pt"))
+                model.to(self.aux_info.device)
+                self.attack_model_dict[label] = model
+
+        # process the target data for augmentation attack
+        if os.path.exists(self.aux_info.attack_dataset_path + '/target_data_aug.npy'):  # for testing only
+            target_data_aug = np.load(self.aux_info.attack_dataset_path + '/target_data_aug.npy')
+        else:
+            target_data_aug = BoundaryUtil.augmentation_process(self.target_model_access.model, target_data,
+                                                                self.aux_info,
+                                                                attack_type='d', augment_kwarg=2)
+            np.save(self.aux_info.attack_dataset_path + '/target_data_aug.npy', target_data_aug)
+
+        # infer the membership
+        self.target_model_access.model.to(self.aux_info.device)
+        membership = []
+
+        # collect the label of the target_data
+        labels = [target for _, target in target_data]
+        labels = np.array(labels)
+
+        # create a dataloader for the target data
+        target_dataset = TensorDataset(torch.tensor(target_data_aug), torch.tensor(labels))
+
+        target_data_loader = DataLoader(target_dataset, batch_size=self.aux_info.attack_batch_size, shuffle=False)
+
+        for data, target in target_data_loader:
+            data = data.to(self.aux_info.device)
+            for i, label in enumerate(target):
+                label = label.item()
+                member_pred = self.attack_model_dict[label](torch.tensor(data[i]).unsqueeze(0).to(self.aux_info.device))
+                member_pred = member_pred.cpu().detach().numpy()
+                membership.append(member_pred.reshape(-1))
+
+        return np.array(np.transpose(membership)[1])
