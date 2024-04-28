@@ -5,10 +5,7 @@ import os
 import pickle
 import sys
 
-from MIAE.miae.eval_methods.prediction import Predictions
 
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
-import models
 from typing import Optional
 from sklearn.manifold import TSNE
 import numpy as np
@@ -17,6 +14,9 @@ import torch
 from torch.utils.data import ConcatDataset, Dataset
 from torchvision import transforms
 from typing import List
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
+from miae.eval_methods.prediction import Predictions
 
 
 class SampleHardness:
@@ -74,132 +74,6 @@ class SampleHardness:
         # Save the plot
         plt.savefig(save_path, dpi=300)
 
-
-def extract_features(model, dataset, target_layer=None):
-    """
-    Extract features from a given model for each image in the dataset.
-
-    :param model: the pre-trained model
-    :param dataset: the dataset
-    :param target_layer: optional, the layer from which to extract features
-    :return: extracted features
-    """
-    # Set model to evaluation mode
-    model.eval()
-
-    # Define the transformation
-    transform = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-
-    # Extract features from the chosen layer
-    features = []
-    print(f"the length of the dataset is {len(dataset)}")
-    with torch.no_grad():
-        for i in range(len(dataset)):
-            if i % 1000 == 0:
-                print(f"processing the {i}th image")
-            img, _ = dataset[i]
-            # Apply transformation
-            img_transformed = transform(img)
-            img_transformed = img_transformed.unsqueeze(0)
-            if target_layer is not None:
-                feature = model.get_features(img_transformed, target_layer)
-            else:
-                feature = model.get_features(img_transformed)
-            feature = feature.view(feature.size(0), -1)
-            features.append(feature.squeeze().numpy())
-    return np.array(features)
-
-
-def plot_t_sne(pred_list: List[Predictions], dataset: ConcatDataset, model_name: str, title: str, save_path: str,
-               perplexity: int = 30):
-    """
-    Plot the t-SNE graph for the predictions from different attacks.
-
-    :param pred_list: list of Predictions from different attacks
-    :param dataset: the dataset
-    :param model_name: the name of our model
-    :param title: title of the graph
-    :param save_path: path to save the graph
-    :param perplexity: perplexity for t-SNE (default: 30)
-    """
-    # check if the number of attacks is less than 2
-    if len(pred_list) < 2:
-        raise ValueError("At least 2 attacks are required for comparison.")
-
-    # get model
-    print(f"start loading model {model_name}")
-    try:
-        model = models.get_model(model_name, 10, 32)
-    except ValueError:
-        raise ValueError("Invalid model name.")
-    print(f"finish loading model {model_name}")
-
-    # Extract features from the chosen model
-    print(f"start extracting features from the model {model_name}")
-    high_dim_data = extract_features(model, dataset)
-    print(f"finish extracting features from the model {model_name}")
-
-    # Perform t-SNE on the extracted features
-    print(f"apply t-SNE on the extracted features")
-    tsne = TSNE(n_components=2, perplexity=perplexity)
-    low_dim_data = tsne.fit_transform(high_dim_data)
-    print(f"get low dimensional data from t-SNE, its shape is {low_dim_data.shape}")
-
-    # Plot the t-SNE graph
-    attack_names = [pred.name for pred in pred_list]
-    plt.figure(figsize=(10, 10), dpi=300)
-    for i, pred in enumerate(pred_list):
-        indices = np.where((pred.predictions_to_labels() == 1) & (pred.ground_truth_arr == 1))[0]
-        color = plt.cm.tab10(i)
-        plt.scatter(low_dim_data[indices, 0], low_dim_data[indices, 1], label=attack_names[i], s=1, color=color)
-
-    # Set limits for the plot based on the range of low-dimensional data
-    min_x, min_y = np.min(low_dim_data, axis=0)
-    max_x, max_y = np.max(low_dim_data, axis=0)
-    margin = 5
-    plt.xlim(min_x - margin, max_x + margin)
-    plt.ylim(min_y - margin, max_y + margin)
-
-    plt.title(title)
-    plt.legend()
-    plt.savefig(save_path, dpi=300)
-
-
-def plot_image_by_index(dataset: ConcatDataset, index_list: np.ndarray, title: str, save_path: str):
-    """
-    plot the image by index from the data set
-    :param dataset: the data set
-    :param index_list: list of indices
-    :param title: title of the graph
-    :param save_path: path to save the graph
-    """
-    # Define the unnormalization transformation
-    unnormalize = transforms.Compose([
-        transforms.Normalize(mean=[0, 0, 0], std=[1 / 0.229, 1 / 0.224, 1 / 0.225]),
-        transforms.Normalize(mean=[-0.485, -0.456, -0.406], std=[1, 1, 1])
-    ])
-
-    # Create a subplot for each image in the index_list
-    num_images = len(index_list)
-    num_rows = 3
-    num_cols = num_images // num_rows
-    plt.figure(figsize=(num_cols * 3, num_rows * 3), dpi=300)
-    plt.axis('off')
-    plt.title(title)
-    for i, index in enumerate(index_list, 1):
-        img, _ = dataset[index]
-        img_unnormalized = unnormalize(img)
-        img_np = img_unnormalized.permute(1, 2, 0).numpy()
-        plt.subplot(num_rows, num_cols, i)
-        plt.imshow(img_np)
-
-    plt.savefig(save_path, bbox_inches='tight', dpi=300)
 
 
 def save_accuracy(pred: List[Predictions], file_path: str, target_fpr: Optional[float] = None):
