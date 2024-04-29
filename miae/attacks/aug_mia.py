@@ -1,6 +1,6 @@
 # This code implements "Label-Only Membership Inference Attacks", PMLR 2021
 # This code is based on the implementation on https://github.com/cchoquette/membership-inference
-# Note that this file only implements their Boundary + Translation attack, which is their best performing one
+# Note that this file only implements their Augmentation (Translation) attack
 
 import copy
 import logging
@@ -14,7 +14,6 @@ from torch.utils.data import DataLoader, TensorDataset, Dataset, Subset
 from tqdm import tqdm
 import torch.nn as nn
 import torch.nn.functional as F
-from cleverhans.torch.attacks.hop_skip_jump_attack import hop_skip_jump_attack
 
 from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils, AttackTrainingSet
 from miae.utils.set_seed import set_seed
@@ -22,15 +21,16 @@ from miae.utils.dataset_utils import dataset_split, get_xy_from_dataset
 
 
 class AttackModel(nn.Module):
-    def __init__(self, aug_type='d'):
+    def __init__(self, aug_type='d', augment_kwarg=2):
         super(AttackModel, self).__init__()
+        input_dim = len(AugUtil.create_translates(augment_kwarg))
         if aug_type == 'n':
             self.x1 = nn.Linear(in_features=64, out_features=64)
             self.x_out = nn.Linear(in_features=64, out_features=2)
         elif aug_type == 'r' or aug_type == 'd':
-            self.x1 = nn.Linear(in_features=9, out_features=9)
-            self.x2 = nn.Linear(in_features=9, out_features=9)
-            self.x_out = nn.Linear(in_features=9, out_features=2)
+            self.x1 = nn.Linear(in_features=input_dim, out_features=input_dim)
+            self.x2 = nn.Linear(in_features=input_dim, out_features=input_dim)
+            self.x_out = nn.Linear(in_features=input_dim, out_features=2)
         else:
             raise ValueError(f"aug_type={aug_type} is not valid.")
         self.x_activation = nn.Softmax(dim=1)
@@ -47,9 +47,9 @@ class AttackModel(nn.Module):
         return x
 
 
-class BoundaryAuxiliaryInfo(AuxiliaryInfo):
+class AugAuxiliaryInfo(AuxiliaryInfo):
     """
-    Implementation of the auxiliary information for the Boundary attack (Label-only attack).
+    Implementation of the auxiliary information for the Augmentation attack (Label-only attack).
     """
 
     def __init__(self, config, attack_model=AttackModel):
@@ -76,13 +76,14 @@ class BoundaryAuxiliaryInfo(AuxiliaryInfo):
         self.dist_max_sample = config.get("dist_max_sample", 100)
         self.input_dim = config.get("input_dim", [3, 32, 32])
         self.n_classes = config.get("n_classes", 10)
+        self.augment_kwarg = config.get("augment_kwarg", 2)
 
         # -- attack model parameters --
         self.attack_model = attack_model
         self.num_attack_epochs = config.get("num_attack_epochs", self.epochs)
         self.attack_batch_size = config.get("attack_batch_size", self.batch_size)
         self.attack_lr = config.get("attack_lr", 0.01)
-        self.attack_train_ratio = config.get("attack_train_ratio", 0.9)
+        self.attack_train_ratio = config.get("attack_train_ratio", 1)
         self.attack_epochs = config.get("attack_epochs", self.epochs)
         # -- other parameters --
         self.save_path = config.get("save_path", "boundary")
@@ -104,7 +105,7 @@ class BoundaryAuxiliaryInfo(AuxiliaryInfo):
             self.logger.addHandler(fh)
 
 
-class BoundaryModelAccess(ModelAccess):
+class AugModelAccess(ModelAccess):
     """
     Implementation of model access for Boundary attack.
     """
@@ -118,7 +119,7 @@ class BoundaryModelAccess(ModelAccess):
         super().__init__(model, untrained_model, access_type)
 
 
-class BoundaryUtil(MIAUtils):
+class AugUtil(MIAUtils):
 
     # ----------------- helper functions for distance augmentation attacks -----------------
     @classmethod
@@ -175,57 +176,12 @@ class BoundaryUtil(MIAUtils):
         return translates
 
     @classmethod
-    def dists(cls, model, ds, aux_info: BoundaryAuxiliaryInfo, attack="HSJ"):
-        device = aux_info.device
-        input_dim = aux_info.input_dim
-        n_classes = aux_info.n_classes
-
-        model.eval()
-
-        acc = []
-        dist_adv = []
-
-        adv_attack = None
-        if attack == "CW":
-            raise NotImplementedError("CW attack not implemented yet")
-        elif attack == "HSJ":
-            adv_attack = hop_skip_jump_attack
-
-        else:
-            raise ValueError("Unknown attack {}".format(attack))
-
-        data_loader = DataLoader(ds, batch_size=aux_info.batch_size, shuffle=False)
-
-        num_samples = 0
-        for batch_idx, (xbatch, ybatch) in enumerate(tqdm(data_loader)):
-            ybatch_onehot = torch.eye(n_classes)[ybatch]
-            xbatch, ybatch = xbatch.to(device), ybatch.to(device)
-
-            with torch.no_grad():
-                output = model(xbatch)
-                y_pred = torch.argmax(output, dim=1)
-                correct = (y_pred == ybatch).cpu().numpy()
-                acc.extend(correct)
-                x_adv = adv_attack(model_fn=model, x=xbatch, norm=2, verbose=False, num_iterations=5)
-                for i in range(x_adv.shape[0]):
-                    if correct[i]:
-                        curr_adv = x_adv[i]
-                    else:
-                        curr_adv = xbatch[i]
-                    # compute distance
-                    dist_adv.append(torch.linalg.norm(curr_adv.to(device) - xbatch[i]).item())
-            num_samples += xbatch.size(0)
-            if num_samples >= len(ds):
-                break
-
-        return np.array(dist_adv)
-
-    @classmethod
-    def check_correct(cls, dataloader, model, device) -> np.ndarray:
+    def check_correct(cls, dataloader, model: AugModelAccess, device) -> np.ndarray:
         """
         Run inference on the model and return the correctness of the predictions.
         :param dataloader: the dataloader for the dataset.
         :param model: the model to run inference on.
+        :param device: the device to run inference on.
 
         Returns: the correctness of the predictions (1 if correct, 0 if incorrect).
         """
@@ -233,22 +189,20 @@ class BoundaryUtil(MIAUtils):
         for x, y in dataloader:
             x, y = x.to(device), y.to(device)
             with torch.no_grad():
-                output = model(x)
-                y_pred = torch.argmax(output, dim=1)
-                correct = (y_pred == y).cpu().numpy()
+                output = model.get_signal(x)
+                correct = (output == y).cpu().numpy()
                 correctness.extend(correct)
         return np.array(correctness)
 
     @classmethod
-    def augmentation_process(cls, model, data, aux_info: BoundaryAuxiliaryInfo,
-                             attack_type='d', augment_kwarg=2) -> np.array:
+    def augmentation_process(cls, model_access: AugModelAccess,
+                             data, aux_info: AugAuxiliaryInfo, augment_kwarg=2) -> np.array:
         """process data for augmentation attack's training and inference.
 
         Args:
-          model: model to approximate distances on (attack).
-          train_set: the training set for the shadow model
-          test_set: the test set for the shadow model
-          attack_type: either 'd' or 'r' for translation and rotation attacks, respectively.
+          model_access: model access to check correctness of augmentation.
+          data: the dataset to process.
+            aux_info: auxiliary information for the attack.
           augment_kwarg: the kwarg for each augmentation. If rotations, augment_kwarg defines the max rotation, with n=2r+1
           rotated images being used. If translations, then 4n+1 translations will be used at a max displacement of
           augment_kwarg
@@ -256,36 +210,30 @@ class BoundaryUtil(MIAUtils):
         Returns: data after processing for distance augmentation attack, with shape (len(data), len(augments)).
 
         """
-        if attack_type == 'r':
-            raise NotImplementedError("Rotation attack not implemented yet")
-        elif attack_type == 'd':
-            augments = cls.create_translates(augment_kwarg)
-        else:
-            raise ValueError(f"attack type_: {attack_type} is not valid.")
-
+        augments = cls.create_translates(augment_kwarg)
         processed_ds = np.zeros((len(data), len(augments)))
-        model.to(aux_info.device)
+        model_access.to_device(aux_info.device)
 
         for i in range(len(augments)):
-            BoundaryUtil.log(aux_info, f"Processing augmentation {i + 1}/{len(augments)}", print_flag=True)
+            AugUtil.log(aux_info, f"Processing augmentation {i + 1}/{len(augments)}", print_flag=True)
             data_x, data_y = get_xy_from_dataset(data)
-            data_aug = cls.apply_augment([data_x, data_y], augments[i], attack_type)
+            data_aug = cls.apply_augment([data_x, data_y], augments[i], 'd')
             ds = TensorDataset(torch.tensor(data_aug[0]), torch.tensor(data_aug[1]))
             loader = DataLoader(ds, batch_size=aux_info.batch_size, shuffle=False)
-            correctness = cls.check_correct(loader, model, aux_info.device)
+            correctness = cls.check_correct(loader, model_access, aux_info.device)
             processed_ds[:, i] = correctness
 
         return processed_ds
 
 
-class BoundaryAttack(MiAttack):
+class AugAttack(MiAttack):
     """
     Implementation of the Boundary attack (Label-only attack) with translation.
     """
 
-    def __init__(self, target_model_access: BoundaryModelAccess, auxiliary_info: BoundaryAuxiliaryInfo):
+    def __init__(self, target_model_access: AugModelAccess, auxiliary_info: AugAuxiliaryInfo):
         """
-        Initialize the Shokri attack with model access and auxiliary information.
+        Initialize the Augmentation attack with model access and auxiliary information.
         :param target_model_access: the model access to the target model.
         :param auxiliary_info: the auxiliary information for the Shokri attack.
         :param target_data: the target data for the Shokri attack.
@@ -331,20 +279,21 @@ class BoundaryAttack(MiAttack):
         if os.path.exists(self.aux_info.shadow_model_path + '/shadow_model.pth'):
             shadow_model = torch.load(self.aux_info.shadow_model_path + '/shadow_model.pth')
         else:
-            BoundaryUtil.log(self.aux_info, "Training shadow model", print_flag=True)
-            shadow_model = BoundaryUtil.train_shadow_model(shadow_model, trainloader, testloader, self.aux_info)
+            AugUtil.log(self.aux_info, "Training shadow model", print_flag=True)
+            shadow_model = AugUtil.train_shadow_model(shadow_model, trainloader, testloader, self.aux_info)
             torch.save(shadow_model, self.aux_info.shadow_model_path + '/shadow_model.pth')
 
         # 2. Generate different augmentation of aux dataset and their predictions on the shadow model
         if os.path.exists(self.aux_info.attack_dataset_path + '/attack_dataset.pth'):
-            BoundaryUtil.log(self.aux_info, "Loading attack dataset from file", print_flag=True)
+            AugUtil.log(self.aux_info, "Loading attack dataset from file", print_flag=True)
             self.attack_dataset = torch.load(self.aux_info.attack_dataset_path + '/attack_dataset.pth')
         else:
-            BoundaryUtil.log(self.aux_info, "Generating attack dataset", print_flag=True)
-            aug_in = BoundaryUtil.augmentation_process(shadow_model, train_set, self.aux_info, attack_type='d',
-                                                       augment_kwarg=2)
-            aug_out = BoundaryUtil.augmentation_process(shadow_model, test_set, self.aux_info, attack_type='d',
-                                                        augment_kwarg=2)
+            AugUtil.log(self.aux_info, "Generating attack dataset", print_flag=True)
+            shadow_model_access = AugModelAccess(shadow_model, shadow_model)
+            aug_in = AugUtil.augmentation_process(shadow_model_access, train_set, self.aux_info,
+                                                  augment_kwarg=self.aux_info.augment_kwarg)
+            aug_out = AugUtil.augmentation_process(shadow_model_access, test_set, self.aux_info,
+                                                   augment_kwarg=self.aux_info.augment_kwarg)
             in_prediction_set_label = None
             out_prediction_set_label = None
 
@@ -385,7 +334,7 @@ class BoundaryAttack(MiAttack):
             attack_test_dataset = None
         labels = np.unique(self.attack_dataset.class_labels)
         if len(labels) == len(os.listdir(self.aux_info.attack_model_path)):
-            BoundaryUtil.log(self.aux_info, "Loading attack models...", print_flag=True)
+            AugUtil.log(self.aux_info, "Loading attack models...", print_flag=True)
             for i, label in enumerate(labels):
                 model = self.aux_info.attack_model()
                 model.load_state_dict(torch.load(f"{self.aux_info.attack_model_path}/attack_model_{label}.pt"))
@@ -393,13 +342,13 @@ class BoundaryAttack(MiAttack):
                 self.attack_model_dict[label] = model
         else:
             for i, label in enumerate(labels):
-                BoundaryUtil.log(self.aux_info,
+                AugUtil.log(self.aux_info,
                                  f"Training attack model for {i + 1}/{len(labels)} label \"{label}\" ...",
-                                 print_flag=True)
+                            print_flag=True)
                 # filter the dataset with the label
-                attack_train_dataset_filtered = BoundaryUtil.filter_dataset(attack_train_dataset, label)
-                attack_test_dataset_filtered = BoundaryUtil.filter_dataset(attack_test_dataset,
-                                                                           label) if attack_test_dataset else None
+                attack_train_dataset_filtered = AugUtil.filter_dataset(attack_train_dataset, label)
+                attack_test_dataset_filtered = AugUtil.filter_dataset(attack_test_dataset,
+                                                                      label) if attack_test_dataset else None
                 self.attack_train_loader = DataLoader(attack_train_dataset_filtered,
                                                       batch_size=self.aux_info.attack_batch_size,
                                                       shuffle=True)
@@ -408,10 +357,10 @@ class BoundaryAttack(MiAttack):
                                                      shuffle=True) if attack_test_dataset else None
                 untrained_attack_model = self.aux_info.attack_model()
                 untrained_attack_model.to(self.aux_info.device)
-                trained_attack_model = BoundaryUtil.train_attack_model(untrained_attack_model,
-                                                                       self.attack_train_loader,
-                                                                       self.attack_test_loader,
-                                                                       self.aux_info)
+                trained_attack_model = AugUtil.train_attack_model(untrained_attack_model,
+                                                                  self.attack_train_loader,
+                                                                  self.attack_test_loader,
+                                                                  self.aux_info)
                 self.attack_model_dict[label] = trained_attack_model
                 torch.save(trained_attack_model.state_dict(),
                            f"{self.aux_info.attack_model_path}/attack_model_{label}.pt")
@@ -425,6 +374,7 @@ class BoundaryAttack(MiAttack):
         2. infer the membership of the target data with the attack model
         """
         super().infer(target_data)
+        set_seed(self.aux_info.seed)
         if not self.prepared:
             raise ValueError("The attack has not been prepared yet!")
 
@@ -441,13 +391,12 @@ class BoundaryAttack(MiAttack):
         if os.path.exists(self.aux_info.attack_dataset_path + '/target_data_aug.npy'):  # for testing only
             target_data_aug = np.load(self.aux_info.attack_dataset_path + '/target_data_aug.npy')
         else:
-            target_data_aug = BoundaryUtil.augmentation_process(self.target_model_access.model, target_data,
-                                                                self.aux_info,
-                                                                attack_type='d', augment_kwarg=2)
+            target_data_aug = AugUtil.augmentation_process(self.target_model_access, target_data,
+                                                           self.aux_info, augment_kwarg=self.aux_info.augment_kwarg)
             np.save(self.aux_info.attack_dataset_path + '/target_data_aug.npy', target_data_aug)
 
         # infer the membership
-        self.target_model_access.model.to(self.aux_info.device)
+        self.target_model_access.to_device(self.aux_info.device)
         membership = []
 
         # collect the label of the target_data

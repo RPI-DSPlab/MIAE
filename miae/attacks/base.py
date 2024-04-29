@@ -106,6 +106,9 @@ class ModelAccess(ABC):
         else:
             raise ValueError(f"Unknown access type: {self.access_type}")
 
+    def __call__(self, data):
+        return self.get_signal(data)
+
     def to_device(self, device):
         """
         Move the model to the device.

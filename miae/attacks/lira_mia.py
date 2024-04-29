@@ -291,7 +291,7 @@ class LIRAUtil:
 
     @classmethod
     def lira_mia(cls, keep, scores, check_scores, in_size=100000, out_size=100000,
-                 fix_variance=True):
+                 fix_variance=False):
         """
         Implements the core logic of the LIRA membership inference attack.
 

@@ -15,8 +15,9 @@ mkdir -p "$preds_dir"
 
 #datasets=("cifar10" "cifar100" "cinic10")
 datasets=("cifar10" "cifar100")
-archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-mias=("losstraj" "shokri" "yeom" "lira")
+#archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+archs=("resnet56" "wrn32_4")
+mias=("losstraj" "shokri" "yeom" "aug" lira)
 
 prepare_path="/data/public/prepare_sd${seed}"
 

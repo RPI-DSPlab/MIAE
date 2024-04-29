@@ -215,13 +215,13 @@ def main():
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': batch_size})
     lira_aux_info = lira_mia.LiraAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/lira'})
-    boundary_aux_info = boundary_mia.BoundaryAuxiliaryInfo(
+    boundary_aux_info = boundary_mia.AugAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/boundary', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/boundary'})
 
     losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model), untrained_target_model)
     merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model), untrained_target_model)
     lira_target_model_access = lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
-    boundary_target_model_access = boundary_mia.BoundaryModelAccess(deepcopy(target_model), untrained_target_model)
+    boundary_target_model_access = boundary_mia.AugModelAccess(deepcopy(target_model), untrained_target_model)
 
     attacks = [
         # losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
