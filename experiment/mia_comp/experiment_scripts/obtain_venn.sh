@@ -26,13 +26,13 @@ for fpr in "${fprs[@]}"; do
 done
 
 
-experiment_dir="/data/public/comp_mia_data/miae_experiment_aug"
+experiment_dir="/home/public/comp_mia_data/miae_experiment_aug_more_target_data"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 
 # Check if directory creation was successful
 if [ -d "$graph_dir" ]; then
-    echo "Directory '$graph_dir' already exists. Skipping..."
+    echo "Successfully created directory '$graph_dir'."
 else
     echo "Error: Failed to create directory '$graph_dir'."
     exit 1
@@ -41,7 +41,7 @@ fi
 venn_dir="$graph_dir/venn"
 mkdir -p "$venn_dir"
 if [ -d "$venn_dir" ]; then
-    echo "Directory '$venn_dir' already exists. Skipping..."
+    echo "Successfully created directory '$venn_dir'."
 else
     echo "Error: Failed to create directory '$venn_dir'."
     exit 1
@@ -50,7 +50,7 @@ fi
 for category in "${categories[@]}"; do
     mkdir -p "$venn_dir/$category"
     if [ -d "$venn_dir/$category" ]; then
-        echo "Directory '$venn_dir/$category' already exists. Skipping..."
+        echo "Successfully created directory '$venn_dir/$category'."
     else
         echo "Error: Failed to create directory '$venn_dir/$category'."
         exit 1

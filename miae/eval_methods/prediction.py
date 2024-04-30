@@ -63,7 +63,6 @@ class Predictions:
         """
         Compute the false positive rate (FPR) of the predictions.
         """
-        # Convert predictions and ground truth to PyTorch tensors if they are not already
         pred_tensor = torch.tensor(self.pred_arr)
         ground_truth_tensor = torch.tensor(self.ground_truth_arr)
         false_positive = torch.logical_and(pred_tensor == 1, ground_truth_tensor == 0).sum().item()
@@ -76,7 +75,6 @@ class Predictions:
         """
         Compute the true positive rate (TPR) of the predictions.
         """
-        # Convert predictions and ground truth to PyTorch tensors if they are not already
         pred_tensor = torch.tensor(self.pred_arr)
         ground_truth_tensor = torch.tensor(self.ground_truth_arr)
         true_positive = torch.logical_and(pred_tensor == 1, ground_truth_tensor == 1).sum().item()
@@ -107,6 +105,23 @@ class Predictions:
         Get the indices of the true positive samples.
         """
         return np.where((self.predictions_to_labels() == 1) & (self.ground_truth_arr == 1))[0]
+
+    def tpr_at_fpr(self, fpr: float) -> float:
+        """
+        Compute TPR at a specified FPR.
+
+        :param fpr: FPR value
+        :return: TPR value
+        """
+        adjusted_pred = self.adjust_fpr(fpr)
+        pred_tensor = torch.tensor(adjusted_pred)
+        ground_truth_tensor = torch.tensor(self.ground_truth_arr)
+        true_positive = torch.logical_and(pred_tensor == 1, ground_truth_tensor == 1).sum().item()
+        false_negative = torch.logical_and(pred_tensor == 0, ground_truth_tensor == 1).sum().item()
+        total_positive = true_positive + false_negative
+        tpr = true_positive / total_positive if total_positive > 0 else 0
+
+        return tpr
 
     def __len__(self):
         """

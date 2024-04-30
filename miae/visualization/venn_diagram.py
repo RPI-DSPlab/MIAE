@@ -146,7 +146,6 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], t
     :param title: title of the graph
     :param save_path: path to save the graph
     """
-    print(f"plot venn_diagram")
     attacked_points_or = {pred.name: set() for pred in pred_or}
     attacked_points_and = {pred.name: set() for pred in pred_and}
     plt.figure(figsize=(16, 14), dpi=300)
