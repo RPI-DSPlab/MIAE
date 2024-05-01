@@ -11,19 +11,15 @@ import os
 import torch
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from typing import List, Dict
-from tabulate import tabulate
 import numpy as np
-import pickle
-
-import MIAE.miae.eval_methods.prediction
-import utils
-
 import utils
 import sys
-sys.path.append(os.path.join(os.getcwd(), "..", ".."))
+from tqdm import tqdm
+sys.path.append(os.path.join(os.getcwd(), "..", "..", ".."))
+from MIAE.miae.eval_methods.prediction import Predictions, pred_tp_intersection
 
 def load_and_create_predictions(attack: List[str], dataset: str, architecture: str, data_path: str, seeds: List[int] = None,
-                                ) -> Dict[str, List[MIAE.miae.eval_methods.prediction.Predictions]]:
+                                ) -> Dict[str, List[Predictions]]:
     """
     load the predictions of the attack of all seeds and create the Predictions objects
     :param attack: List[str]: list of attack names
@@ -44,29 +40,26 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
             pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
             pred_arr = utils.load_predictions(pred_path)
             attack_name = f"{att}_sd{s}"
-            pred_obj = MIAE.miae.eval_methods.prediction.Predictions(pred_arr, attack_set_membership, attack_name)
+            pred_obj = Predictions(pred_arr, attack_set_membership, attack_name)
             pred_list.append(pred_obj)
         pred_dict[att] = pred_list
     return pred_dict
 
-def data_process(pred_dict: Dict[str, List[MIAE.miae.eval_methods.prediction.Predictions]], process_opt: str):
+def data_process(pred_dict: Dict[str, List[Predictions]], process_opts: List[str]):
     """
     Process the predictions based on the process option
     :param pred_dict: Dict[str, List[Predictions]]: dictionary with attack names as keys and corresponding Predictions objects list as values
-    :param process_opt: str: process option: union or intersection
-    :return: List[Predictions]: List of Predictions
+    :return: Dict[str, List[Predictions]]: dictionary with attack names as keys and corresponding Predictions objects list as values
     """
-    pred_list = []
-    for name, tmp_list in pred_dict.items():
-        if process_opt == "union":
-            pred_list = MIAE.miae.eval_methods.prediction.union_tp(tmp_list)
-        elif process_opt == "intersection":
-            pred_list = MIAE.miae.eval_methods.prediction.intersection_tp(tmp_list)
-        else:
-            raise ValueError(f"Invalid process option: {process_opt}")
-    return pred_list
+    pred_dict_processed = {opt: [] for opt in process_opts}
 
-def pearson_correlation_coefficient(pred_list: List[MIAE.miae.eval_methods.prediction.Predictions]):
+    for attack, pred_list in pred_dict.items():
+        pred_union, pred_intersection = pred_tp_intersection(pred_list)
+        pred_dict_processed["union"].append(pred_union)
+        pred_dict_processed["intersection"].append(pred_intersection)
+    return pred_dict_processed
+
+def pearson_correlation_coefficient(pred_list: List[Predictions]):
     """
     Calculate the person correlation coefficient between each pair of predictions
     :param pred_list: List of Predictions
@@ -80,25 +73,30 @@ def pearson_correlation_coefficient(pred_list: List[MIAE.miae.eval_methods.predi
 
     return correlation_dict
 
-def save_accuracy_results(pred_list: List[MIAE.miae.eval_methods.prediction.Predictions], fpr_list: List[float], model: str, dataset: str, file_path: str, process_opt: str):
+def save_accuracy_results(pred_dict_processed: Dict[str, List[Predictions]], fpr_list: List[float], model: str, dataset: str, file_path: str, process_opt: List[str]):
     """
     Save the accuracy results to a file
-    :param pred_list: List of Predictions
+    :param pred_dict_processed: Processed Predictions dictionary
     :param fpr_list: List of FPR values
+    :param model: Name of the model
     :param dataset: Name of the dataset
     :param file_path: Path to save the results
     :param process_opt: Process option: union or intersection
     """
     try:
-        with open(file_path, "w") as file:
-            for pred in pred_list:
-                file.write(f"The accuracy results for {pred.name} {process_opt} under {model} and {dataset}:\n")
-                for fpr in fpr_list:
-                    tpr = "{:.2f}".format(pred.tpr_at_fpr(fpr))
-                    file.write(f"TPR at {fpr} FPR: {tpr}")
-                balanced_accuracy = "{:.2f}".format(pred.balanced_attack_accuracy())
-                file.write(f"Balanced Accuracy: {balanced_accuracy}")
-            file.write(f"=====================\n")
+        with open(file_path, "a") as file:
+            for opt in process_opt:
+                pred_list = pred_dict_processed[opt]
+                for pred in pred_list:
+                    header = f"===== {pred.name} ({opt}) under {model} and {dataset} =====\n"
+                    line = '=' * (len(header)-1)+ '\n'
+                    file.write(line + header + line)
+                    for fpr in fpr_list:
+                        tpr = "{:.2f}".format(pred.tpr_at_fpr(float(fpr)))
+                        file.write(f"TPR at {fpr}% FPR: {tpr}\n")
+                    file.write(f"\n")
+                    balanced_accuracy = "{:.2f}".format(pred.balanced_attack_accuracy())
+                    file.write(f"Balanced Accuracy: {balanced_accuracy}\n\n")
     except IOError as e:
         print(f"Error: Unable to write to file '{file_path}': {e}")
     finally:
@@ -113,15 +111,18 @@ if __name__ == '__main__':
                         help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet]')
     parser.add_argument("--attacks", type=str, nargs="+", default=None, help='MIA type: [losstraj, yeom, shokri]')
     parser.add_argument("--fpr_list", type=str, nargs="+", help="fpr values to consider for the accuracy calculation")
-    parser.add_argument("--process_opt", type=str, help="way to process the predictions: [union, intersection]")
+    parser.add_argument("--process_opt", type=str, nargs="+", help="way to process the predictions: [union, intersection]")
     parser.add_argument("--accuracy_path", type=str, help="Path to save the accuracy results")
     parser.add_argument("--data_path", type=str, help="Path to the original predictions and target dataset")
+    parser.add_argument("--seeds", type=int, nargs="+", help="Random seed")
 
     args = parser.parse_args()
 
     pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path, args.seeds)
-    pred_list = data_process(pred_dict, args.process_opt)
-    save_accuracy_results(pred_list, args.fpr_list, args.dataset, args.accuracy_path, args.process_opt)
+    pred_dict_processed = data_process(pred_dict, args.process_opt)
+    save_accuracy_results(pred_dict_processed, args.fpr_list, args.architecture, args.dataset, args.accuracy_path, args.process_opt)
+
+
 
 
 

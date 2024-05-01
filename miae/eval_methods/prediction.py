@@ -12,6 +12,8 @@ def pred_normalization(pred: np.ndarray) -> np.ndarray:
     :param pred: predictions as a numpy array
     :return: normalized predictions
     """
+    if pred.dtype == bool:
+        pred = pred.astype(int)
     return (pred - np.min(pred)) / (np.max(pred) - np.min(pred) + 1e-6)
 
 

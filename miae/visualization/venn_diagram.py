@@ -106,10 +106,7 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
     if threshold != 0:
         result_or = []
         result_and = []
-        counter = 0
         for attack, pred_obj_list in pred_dict.items():
-            counter += 1
-
             common_tp_or, common_tp_and = pred_tp_intersection(pred_obj_list)
             result_or.append(common_tp_or)
             result_and.append(common_tp_and)
