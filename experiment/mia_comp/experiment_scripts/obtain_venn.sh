@@ -26,7 +26,7 @@ for fpr in "${fprs[@]}"; do
 done
 
 
-experiment_dir="/home/public/comp_mia_data/miae_experiment_aug_more_target_data"
+experiment_dir="/home/public/comp_mia_data/miae_experiment_aug"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 

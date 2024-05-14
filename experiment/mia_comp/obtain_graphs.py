@@ -302,8 +302,6 @@ if __name__ == '__main__':
                 fpr_list = [float(f) for f in args.fpr]
                 for f in fpr_list:
                     pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=0, target_fpr=f)
-                    print(f"the first 10 item in pred_or_list: {pred_or_list[0].pred_arr[:10]}")
-                    print(f"the first 10 item in pred to labels: {pred_or_list[0].predictions_to_labels()[:10]}")
                     graph_title = args.graph_title+f" FPR = {f}"
                     graph_path = args.graph_path+f"_{f}"
                     plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
