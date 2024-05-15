@@ -16,8 +16,11 @@ from typing import List, Dict
 import numpy as np
 import sys
 
+import miae.eval_methods.sample_hardness
+
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 import miae.eval_methods.prediction as prediction
+import miae.eval_methods.sample_hardness as SampleHardness
 import miae.visualization.venn_diagram as venn_diagram
 
 import miae.eval_methods.prediction
@@ -96,7 +99,7 @@ def plot_auc(predictions: Dict[str, prediction.Predictions], graph_title: str, g
 
 def plot_hardness_distribution(
         predictions: Dict[str, List[prediction.Predictions]] or Dict[str, prediction.Predictions],
-        hardness: utils.SampleHardness,
+        hardness: SampleHardness,
         graph_title: str, graph_path: str, fpr_list: List[float] = None):
     """
     plot the hardness distribution of the different attacks
@@ -385,8 +388,8 @@ if __name__ == '__main__':
 
     elif args.graph_type == "hardness_distribution":
         path_to_load = f"{args.hardness_path}/{args.dataset}/{args.architecture}/{args.hardness}/{args.hardness}_score.pkl"
-        hardness_arr = utils.load_example_hardness(path_to_load)
-        hardness = utils.SampleHardness(hardness_arr, args.hardness)
+        hardness_arr = SampleHardness.load_sample_hardness(path_to_load)
+        hardness = SampleHardness.SampleHardness(hardness_arr, args.hardness)
         plot_hardness_distribution(pred_dict, hardness, args.graph_title, args.graph_path, args.fpr)
 
     elif args.graph_type == "multi_seed_convergence_intersection":
