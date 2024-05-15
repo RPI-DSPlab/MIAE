@@ -4,7 +4,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib_venn import venn3_unweighted, venn3, venn2_unweighted, venn2
 
-from MIAE.miae.eval_methods.prediction import Predictions, pred_tp_intersection
+from ..eval_methods.prediction import Predictions, pred_tp_intersection
 
 
 def plot_venn_single(pred_list: List[Predictions], graph_title: str, save_path: str):
