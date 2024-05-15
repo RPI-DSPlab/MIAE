@@ -106,7 +106,7 @@ def plot_hardness_distribution(
     :param predictions: List[utils.Predictions]: list of Predictions objects
     :param graph_title: str: title of the graph
     :param graph_path: str: path to save the graph
-    :param hardness: str: type of hardness: [il]
+    :param hardness: str: type of hardness: [il, pd]
     :return: None
     """
     attack_names, prediction_list = [], []

@@ -56,6 +56,9 @@ class SampleHardness:
         # Add legend
         plt.legend()
 
+        # print the length of the true positive samples on the plot
+        plt.text(0.5, 0.5, f"TP samples: {len(tp)}", fontsize=12, transform=plt.gca().transAxes)
+
         # Save the plot
         plt.savefig(save_path, dpi=300)
 
