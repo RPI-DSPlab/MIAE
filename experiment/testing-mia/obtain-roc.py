@@ -24,7 +24,7 @@ targetset_ratio = 0.35  # percentage of training set to be used for training/tes
 train_test_ratio = 0.5  # percentage of training set to be used for training any model that uses a test set
 lr = 0.1
 target_train_epochs = 80
-attack_epochs = 100
+attack_epochs = 80
 
 current_dir = os.getcwd()
 target_model_dir = os.path.join(current_dir,"target_model")
@@ -215,13 +215,13 @@ def main():
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': batch_size})
     lira_aux_info = lira_mia.LiraAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/lira'})
-    boundary_aux_info = boundary_mia.BoundaryAuxiliaryInfo(
+    boundary_aux_info = boundary_mia.AugAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/boundary', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/boundary'})
 
     losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model), untrained_target_model)
     merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model), untrained_target_model)
     lira_target_model_access = lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
-    boundary_target_model_access = boundary_mia.BoundaryModelAccess(deepcopy(target_model), untrained_target_model)
+    boundary_target_model_access = boundary_mia.AugModelAccess(deepcopy(target_model), untrained_target_model)
 
     attacks = [
         # losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
@@ -239,6 +239,7 @@ def main():
     # mix the target trainset and testset and then attack
     dataset_to_attack = ConcatDataset([target_trainset, target_testset])
     target_membership = np.concatenate([np.ones(len(target_trainset)), np.zeros(len(target_testset))])
+
 
     obtain_roc_auc(attacks, savedir, dataset_to_attack, target_membership)
 
