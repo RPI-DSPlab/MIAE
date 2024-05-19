@@ -1,17 +1,34 @@
-experiment_dir='/data/public/miae_experiment_aug'
+# add the pwd's  ../.. to the python path
+export PYTHONPATH=$(pwd)/../..
 
-hardness_path='/data/public/example_hardness_aug'
+experiment_dir='/data/public/comp_mia_data/miae_experiment_aug_more_target_data'
 
-plot_dir='/data/public/miae_experiment_aug/graphs/hardness_dist'
+# il
+# hardness_path='/data/public/comp_mia_data/example_hardness_aug'
+# pd
+#hardness_path='/data/public/comp_mia_data/example_hardness_aug/cifar10/vgg16/pd/pd_score.pkl'
+# aleatoric
+# hardness_path='/data/public/comp_mia_data/example_hardness_external/cifar10/aleatoric_uncertainty_score.pkl'
+# epistemic
+# hardness_path='/data/public/comp_mia_data/example_hardness_external/cifar10/epistemic_uncertainty_score.pkl'
+# deepsvdd
+# hardness_path='/data/public/comp_mia_data/example_hardness_external/cifar10/deepsvdd_score.pkl'
+# gradient_norm
+# hardness_path='/data/public/comp_mia_data/example_hardness_external/cifar10/gradient_norm_score.pkl'
+# order
+hardness_path='/data/public/comp_mia_data/example_hardness_external/cifar10/order_score.pkl'
 
-datasets=("cifar10" "cifar100")
-archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-#mias=("losstraj" "shokri" "yeom" "lira")
-mias=("losstraj" "shokri" "yeom")
-fprs=(0.001 0.5 0.8)
+
+plot_dir='/data/public/comp_mia_data/miae_experiment_aug_more_target_data/graphs/hardness_dist'
+
+
+datasets=("cifar10")
+archs=("resnet56" "wrn32_4")
+mias=("losstraj" "shokri" "yeom" "aug" "lira")
+fprs=(0.001 0.1 0.8)
 seeds=(0 1 2 3)
 
-hardness=("il")
+hardness=("order")
 
 # prepare the list of mias as arguments
 mialist=""
@@ -31,27 +48,29 @@ for dataset in "${datasets[@]}"; do
     for arch in "${archs[@]}"; do
       for eh in "${hardness[@]}"; do
         # clean the plot directory
-        rm -rf ${plot_dir}/${dataset}/${arch}
-        mkdir -p ${plot_dir}/${dataset}/${arch}
+        rm -rf ${plot_dir}/${dataset}/${arch}/${eh}
+        mkdir -p ${plot_dir}/${dataset}/${arch}/${eh}
 
         # convert fprlist to space-separated string
         fprlist=$(printf "%s " "${fprs[@]}")
 
         # plot the graphs
         graph_title="${eh} distribution for ${dataset} ${arch}"
-        graph_path="${plot_dir}/${dataset}/${arch}/hardness_distribution"
-        python3 obtain_graphs.py --graph-type "hardness_distribution"\
+        graph_path="${plot_dir}/${dataset}/${arch}/${eh}/${eh}_hardness_distribution"
+        python3 obtain_graphs.py --graph_type "hardness_distribution"\
                                   --dataset "${dataset}"\
-                                  --hardness-path "${hardness_path}"\
-                                  --graph-title "${graph_title}"\
-                                  --data-path "${experiment_dir}"\
-                                  --graph-path "${graph_path}"\
+                                  --hardness_path "${hardness_path}"\
+                                  --graph_title "${graph_title}"\
+                                  --data_path "${experiment_dir}"\
+                                  --graph_path "${graph_path}"\
                                   --architecture "${arch}"\
                                   --attacks ${mialist}\
                                   --fpr ${fprlist}\
                                   --seed ${seedlist}\
-                                  --hardness ${eh}
-
+                                  --hardness ${eh}\
+                                  --external 1
+                                  # when this is 1 true, we are using an external hardness metric
+                                  # the path to hardness should be specified to .pkl file
         done
     done
 done

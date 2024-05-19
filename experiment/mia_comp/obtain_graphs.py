@@ -126,6 +126,40 @@ def plot_hardness_distribution(
                                                    title=graph_title + f" {attack} TP at {fpr} FPR")
 
 
+def plot_hardness_distribution_unique(
+        predictions: Dict[str, List[prediction.Predictions]] or Dict[str, prediction.Predictions],
+        hardness: SampleHardness,
+        graph_title: str, graph_path: str, fpr_list: List[float]):
+    """
+    plot the hardness distribution of the different attacks for all attacks on one plot,
+    each color represent oen attack's uniquely attacked TP data points
+    :param predictions: List[utils.Predictions]: list of Predictions objects
+    :param graph_title: str: title of the graph
+    :param graph_path: str: path to save the graph
+    :param hardness: str: type of hardness: [il, pd]
+    :return: None
+    """
+    attack_names, prediction_list = [], []
+    for fpr in fpr_list:
+        common_tp_across_attacks = None
+        tp_each_attack = []
+        for attack, pred in predictions.items():
+            attack_names.append(attack)
+            prediction_list.append(pred)
+            attack_tp = prediction.union_tp(pred, fpr)
+            if common_tp_across_attacks == None:  # first set to intersect
+               common_tp_across_attacks = set(attack_tp)
+            else:
+               common_tp_across_attacks = common_tp_across_attacks.intersection(set(attack_tp))
+            tp_each_attack.append(attack_tp)
+
+        # stores the tp samples that's unique to each attack
+        unqiue_tp_each_attack = [tp - common_tp_across_attacks for tp in tp_each_attack]
+
+        hardness.plot_distribution_pred_TP(unqiue_tp_each_attack, save_path=graph_path + f"_unique_tp_each_attack_fpr{fpr}.png",
+                                           title=graph_title + f" unique TP for each attack at {fpr} FPR", labels=attack_names, no_hardness=True)
+
+
 def multi_seed_convergence(predictions: Dict[str, List[prediction.Predictions]], graph_title: str, graph_path: str,
                            set_op, attack_fpr=None):
     """
@@ -332,8 +366,9 @@ if __name__ == '__main__':
     parser.add_argument("--log_scale", type=bool, default="True", help="Whether to plot the graph in log scale")
 
     # for hardness distribution graph
-    parser.add_argument("--hardness", type=str, default="None", help="Type of hardness: [il]")
+    parser.add_argument("--hardness", type=str, default="None", help="Type of hardness: [il, pd, external]")
     parser.add_argument("--hardness_path", type=str, help="Path to the hardness file")
+    parser.add_argument("--external", type=int, help="whether it’s an external hardness")
 
     # for single seed ensemble graph
     parser.add_argument("--skip", type=int, default=2, help="Number of seeds to skip for each ensemble plotting")
@@ -387,10 +422,14 @@ if __name__ == '__main__':
             plot_auc(pred_dict_seed, args.graph_title + f" sd{seed}", args.graph_path + f"_sd{seed}.png", args.fpr)
 
     elif args.graph_type == "hardness_distribution":
-        path_to_load = f"{args.hardness_path}/{args.dataset}/{args.architecture}/{args.hardness}/{args.hardness}_score.pkl"
+        if args.external == 0:
+            path_to_load = f"{args.hardness_path}/{args.dataset}/{args.architecture}/{args.hardness}/{args.hardness}_score.pkl"
+        else:
+            path_to_load = args.hardness_path
         hardness_arr = SampleHardness.load_sample_hardness(path_to_load)
         hardness = SampleHardness.SampleHardness(hardness_arr, args.hardness)
         plot_hardness_distribution(pred_dict, hardness, args.graph_title, args.graph_path, args.fpr)
+        plot_hardness_distribution_unique(pred_dict, hardness, args.graph_title, args.graph_path, args.fpr)
 
     elif args.graph_type == "multi_seed_convergence_intersection":
         for fpr in args.fpr:
