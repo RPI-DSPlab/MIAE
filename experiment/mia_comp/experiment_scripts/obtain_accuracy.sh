@@ -1,10 +1,12 @@
 # This script generates the accuracy for the MIAE experiment
 
 # Get the datasets, architectures, MIAs and categories
-datasets=("cifar10" "cifar100")
-archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-mias=("losstraj" "shokri" "yeom")
-processopt=("union" "intersection")
+#datasets=("cifar10" "cifar100")
+#archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+datasets=("cifar10")
+archs=("resnet56" "wrn32_4")
+mias=("losstraj" "shokri" "yeom" "lira" "aug")
+processopt=("union" "intersection" "avg")
 seeds=(0 1 2 3)
 fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 
@@ -43,8 +45,6 @@ else
 fi
 
 cd /home/zhangc26/MIAE/experiment/mia_comp
-
-conda activate rpidsp
 
 # Run the experiment
 for dataset in "${datasets[@]}"; do

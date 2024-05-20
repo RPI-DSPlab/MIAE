@@ -1,11 +1,19 @@
 # This script generates Venn diagrams for the MIAE experiment
 
 # Get the datasets, architectures, MIAs and categories
-datasets=("cifar10" "cifar100")
-archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-mias=("losstraj" "shokri" "yeom")
+#datasets=("cifar10" "cifar100")
+#archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+#mias=("losstraj" "shokri" "yeom" "lira" "aug")
+#categories=("threshold" "single_attack" "fpr")
+#subcategories=("common_tp" "pairwise")
+#seeds=(0 1 2 3)
+#fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
+
+datasets=("cifar10")
+archs=("resnet56" "wrn32_4")
+mias=("losstraj" "shokri" "yeom" "lira" "aug")
 categories=("threshold" "single_attack" "fpr")
-subcategories=("common_tp" "pairwise")
+subcategories=("pairwise")
 seeds=(0 1 2 3)
 fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 
@@ -58,8 +66,6 @@ for category in "${categories[@]}"; do
 done
 
 cd /home/zhangc26/MIAE/experiment/mia_comp
-
-conda activate rpidsp
 
 # Generate Venn diagrams for the MIAE experiment when the goal is common_tp
 for category in "${categories[@]}"; do

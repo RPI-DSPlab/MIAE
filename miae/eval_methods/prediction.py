@@ -250,8 +250,8 @@ def multi_seed_ensemble(pred_list: List[Predictions], method, threshold: float =
         ensemble_pred = np.mean([pred.pred_arr for pred in pred_list], axis=0)
     else:
         raise ValueError("Invalid method for ensemble the predictions.")
-
-    return Predictions(ensemble_pred, pred_list[0].ground_truth_arr, f"ensemble_{method}")
+    pred_name_ensemble = pred_list[0].name.split('_')[0] + f" ensemble_{method}"
+    return Predictions(ensemble_pred, pred_list[0].ground_truth_arr, pred_name_ensemble)
 
 
 def pred_tp_intersection(pred_list: List[Predictions]) -> Predictions:
