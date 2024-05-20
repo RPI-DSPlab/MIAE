@@ -64,7 +64,7 @@ def plot_venn(pred_list: List[prediction.Predictions], pred_list2: List[
     :return: None
     """
     if graph_goal == "common_tp":
-        venn_diagram.plot_venn_diagram(pred_list, pred_list2, graph_title, graph_path)
+        venn_diagram.plot_venn_for_all_attacks(pred_list, pred_list2, graph_title, graph_path)
     elif graph_goal == "single_attack":
         venn_diagram.plot_venn_single(pred_list, graph_title, graph_path)
     elif graph_goal == "pairwise":

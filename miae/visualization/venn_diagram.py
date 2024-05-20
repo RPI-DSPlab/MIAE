@@ -1,7 +1,10 @@
 from typing import List, Tuple, Dict, Optional
 
 import numpy as np
-from matplotlib import pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from venn import venn
 from matplotlib_venn import venn3_unweighted, venn3, venn2_unweighted, venn2
 
 from MIAE.miae.eval_methods.prediction import Predictions, pred_tp_intersection
@@ -137,7 +140,7 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
 
 def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], title: str, save_path: str):
     """
-    plot venn diagrams based on the goal including both unweighted and weighted venn diagrams.
+    plot venn diagrams based on the goal including both unweighted and weighted venn diagrams for at most 3 attacks.
     :param pred_or: list of Predictions for the 'pred_or' set
     :param pred_and: list of Predictions for the 'pred_and' set
     :param title: title of the graph
@@ -203,3 +206,62 @@ def plot_venn_diagram_pairwise(pred_pair_list: List[Tuple[Predictions, Predictio
         plt.title(f"{graph_title}: {pred_1.name} vs {pred_2.name}")
         plt.savefig(f"{save_path}_{pred_1.name}_vs_{pred_2.name}.png", dpi=300)
         plt.close()
+
+
+def plot_venn_for_all_attacks(pred_or: List[Predictions], pred_and: List[Predictions], title: str, save_path: str):
+    """
+    Plot Venn diagrams for at most 5 attacks, supporting both unweighted and weighted diagrams.
+    :param pred_or: list of Predictions for the 'pred_or' set
+    :param pred_and: list of Predictions for the 'pred_and' set
+    :param title: title of the graph
+    :param save_path: path to save the graph
+    """
+    attacked_points_or = {pred.name: set() for pred in pred_or}
+    attacked_points_and = {pred.name: set() for pred in pred_and}
+
+    venn_sets_or = []
+    venn_labels_or = [pred.name for pred in pred_or]
+    for pred in pred_or:
+        attacked_points_or[pred.name] = set(np.where((pred.pred_arr == 1) & (pred.ground_truth_arr == 1))[0])
+        venn_sets_or.append(attacked_points_or[pred.name])
+
+    venn_sets_and = []
+    venn_labels_and = [pred.name for pred in pred_and]
+    for pred in pred_and:
+        attacked_points_and[pred.name] = set(np.where((pred.pred_arr == 1) & (pred.ground_truth_arr == 1))[0])
+        venn_sets_and.append(attacked_points_and[pred.name])
+
+    if len(venn_sets_and) == 0:
+        print(f"the venn_sets_and is empty for {title}")
+
+    if len(venn_sets_or) == 0:
+        print(f"the venn_sets_or is empty for {title}")
+
+    if len(venn_labels_or) == 0:
+        print(f"the venn_labels_or is empty for {title}")
+
+    if len(venn_labels_and) == 0:
+        print(f"the venn_labels_and is empty for {title}")
+
+    plt.figure(figsize=(20, 14), dpi=300)
+
+    gs = plt.GridSpec(1, 2, width_ratios=[1, 1])
+    cmaps = ["cool", "viridis"]
+    for i, (venn_sets, venn_labels, venn_title, cmap) in enumerate(zip(
+            [venn_sets_or, venn_sets_and],
+            [venn_labels_or, venn_labels_and],
+            ["Union", "Intersection"],
+            cmaps
+    )):
+        ax = plt.subplot(gs[0, i], aspect='equal')
+        dataset_dict = {name: data for name, data in zip(venn_labels, venn_sets)}
+        # error handling to make sure the dataset_dict is not empty
+        if len(dataset_dict) == 0:
+            print(f"the dataset_dict is empty for {title}")
+            continue
+        venn(dataset_dict, fmt="{size}", cmap=cmap, fontsize=8, legend_loc="upper left", ax=ax)
+        plt.title(f"{venn_title} Unweighted")
+
+    plt.suptitle(title, fontweight='bold')
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.savefig(f"{save_path}.png", dpi=300)

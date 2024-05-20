@@ -13,7 +13,7 @@ datasets=("cifar10")
 archs=("resnet56" "wrn32_4")
 mias=("losstraj" "shokri" "yeom" "lira" "aug")
 categories=("threshold" "single_attack" "fpr")
-subcategories=("pairwise")
+subcategories=("common_tp" "pairwise")
 seeds=(0 1 2 3)
 fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 
@@ -34,7 +34,7 @@ for fpr in "${fprs[@]}"; do
 done
 
 
-experiment_dir="/home/public/comp_mia_data/miae_experiment_aug"
+experiment_dir="/home/public/comp_mia_data/miae_experiment_aug_more_target_data"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 
