@@ -35,7 +35,7 @@ class YeomAuxiliaryInfo(AuxiliaryInfo):
         self.batch_size = config.get("batch_size", 128)
         self.num_classes = config.get("num_classes", 10)
         self.lr = config.get("lr", 0.001)
-        self.epochs = config.get("epochs", 100)
+        self.num_shadow_epochs = config.get("epochs", 100)
         self.momentum = config.get("momentum", 0.9)
         self.weight_decay = config.get("weight_decay", 0.0001)
         self.num_classes = config.get("num_classes", 10)
