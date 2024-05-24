@@ -4,77 +4,15 @@ This file defines classes/functions for comparing the MIA's predictions down to 
 import os
 import pickle
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..", "..")))
-from MIAE.miae.eval_methods.prediction import Predictions
-# import models
-from typing import Optional, Callable, Union
-from sklearn.metrics import roc_curve, auc
-from sklearn.manifold import TSNE
+
+
+from typing import Optional
 import numpy as np
-import matplotlib.pyplot as plt
-import torch
-from torch.utils.data import ConcatDataset, Dataset
-from torchvision import transforms
-from typing import List, Tuple
+from torch.utils.data import Dataset
+from typing import List
 
-fprs_sampling = [0.001, 0.005, 0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]
-
-
-class SampleHardness:
-    def __init__(self, score_arr, name: str):
-        """
-
-        """
-        self.score_arr = score_arr
-        self.name = name
-
-        self.max_score = int(np.max(self.score_arr))
-        self.min_score = int(np.min(self.score_arr))
-
-    def plot_distribution(self, save_dir):
-        """
-        plot a histogram of the sample hardness scores
-        """
-        plt.hist(self.score_arr, bins=20, range=(self.min_score, self.max_score))
-        plt.title(f"Distribution of {self.name}")
-        plt.xlabel(f"{self.name}")
-        plt.ylabel("Number of Samples")
-        plt.savefig(save_dir)
-
-    def plot_distribution_pred_TP(self, tp, save_path, title=None):
-        """
-        Plot the distribution of the sample hardness scores for the true positive samples and entire score_arr.
-
-        :param tp: true positive samples
-        :param score_arr: sample hardness scores
-        """
-        # Define colors for each distribution
-        plt.clf()
-        all_samples_color = 'blue'
-        true_positives_color = 'orange'
-
-        # Plot histogram for all samples
-        plt.hist(self.score_arr, bins=self.max_score, range=(np.min(self.score_arr), np.max(self.score_arr)),
-                 color=all_samples_color, alpha=0.5, label='All Samples')
-
-        # Plot histogram for true positive samples
-        plt.hist(self.score_arr[list(tp)], bins=self.max_score, range=(np.min(self.score_arr), np.max(self.score_arr)),
-                 color=true_positives_color, alpha=0.5, label='TP Sample')
-
-        # Set plot title and labels
-        if title is not None:
-            plt.title(title)
-        else:
-            plt.title(f"Distribution of {self.name} for True Positives and All Samples")
-        plt.xlabel(f"{self.name}")
-        plt.ylabel("Number of Samples")
-
-        # Add legend
-        plt.legend()
-
-        # Save the plot
-        plt.savefig(save_path, dpi=300)
-
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
+from miae.eval_methods.prediction import Predictions
 
 
 def save_accuracy(pred: List[Predictions], file_path: str, target_fpr: Optional[float] = None):
@@ -105,18 +43,6 @@ def load_predictions(file_path: str) -> np.ndarray:
     """
     prediction = np.load(file_path)
     return prediction
-
-
-def load_example_hardness(file_path: str) -> np.ndarray:
-    """
-    Load example hardness scores from a file.
-
-    :param file_path: path to the file containing the example hardness scores
-    :return: example hardness scores as a numpy array
-    """
-    with open(file_path, "rb") as f:
-        example_hardness = pickle.load(f)
-    return example_hardness
 
 
 def load_target_dataset(filepath: str):

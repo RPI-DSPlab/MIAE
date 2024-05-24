@@ -7,16 +7,17 @@ fi
 
 echo "obtain_pred.sh seed = $seed"
 
-data_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data/target"
+data_dir="/data/public/comp_mia_data/multiseed_convergence/target"
 
-preds_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data/preds_sd${seed}"
+preds_dir="/data/public/comp_mia_data/multiseed_convergence/preds_sd${seed}"
 mkdir -p "$preds_dir"
 
 
 #datasets=("cifar10" "cifar100" "cinic10")
 datasets=("cifar10" "cifar100")
-archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-mias=("losstraj" "shokri" "yeom")
+#archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+archs=("resnet56" "wrn32_4")
+mias=("losstraj" "shokri" "yeom" "aug" lira)
 
 prepare_path="/data/public/prepare_sd${seed}"
 
@@ -56,10 +57,20 @@ for dataset in "${datasets[@]}"; do
             echo "Running $dataset $arch $mia"
             target_model_save_path="$target_model_path/$dataset/$arch"
 
-            python3 obtain_pred.py --dataset "$dataset" --target_model "$arch" --attack "$mia" \
-            --result_path "$result_dir" --seed "$seed" --delete-files "True" --preparation_path "$prepare_dir" \
-            --data_aug "False"  --target_model_path "$target_model_save_path" --attack_epochs "$num_epoch" \
-            --target_epochs "$num_epoch" --data_path "$data_dir"
+            python3 obtain_pred.py \
+            --dataset "$dataset"\
+            --target_model "$arch"\
+            --attack "$mia"\
+            --result_path "$result_dir"\
+            --seed "$seed"\
+            --delete-files "True" \
+            --preparation_path "$prepare_dir" \
+            --data_aug "False"  \
+            --target_model_path "$target_model_save_path" \
+            --attack_epochs "$num_epoch" \
+            --target_epochs "$num_epoch" \
+            --data_path "$data_dir" \
+            --device "cuda:1"
 
             rm -r "$prepare_path"
         done
