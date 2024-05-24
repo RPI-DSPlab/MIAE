@@ -57,7 +57,8 @@ def plot_venn(pred_list: List[prediction.Predictions], pred_list2: List[
     prediction.Predictions], graph_goal: str, graph_title: str, graph_path: str):
     """
     plot the venn diagrams and save them
-    :param pred_dict: dictionary with attack names as keys and corresponding Predictions objects list as values
+    :param pred_list: list of Predictions objects processed using union
+    :param pred_list2: list of Predictions objects processed using intersection
     :param graph_goal: goal of the venn diagram: "common_TP" or "single attack"
     :param graph_title: title of the graph
     :param graph_path: path to save the graph
