@@ -6,7 +6,7 @@ if [ "$#" -lt 1 ]; then
     exit 1
 fi
 
-if $1 != "train_shadow" && $1 != "train_ensemble" && $1 != run_ensemble; then
+if $1 != "train_shadow" && $1 != "train_ensemble" && $1 != "run_ensemble"; then
     echo "Error: Invalid argument."
     exit 1
 fi
@@ -26,13 +26,14 @@ fi
 mode=$1
 if [ "$mode" == "train_shadow" ]; then
     echo "ENSEMBLE: Training shadow models"
-    python3 obtain_pred.py \
+    python3 ensemble.py \
+    --mode "train_shadow" \
     --dataset "$dataset" \
     --target_model "resnet56" \
-    --num_epoch "$num_epoch" \
     --target_epochs "$num_epoch" \
     --aux_set_path "$data_dir" \
     --shadow_save_path "$shadow_target_dir" \
+    --target_model_path "$shadow_target_dir" \
     --device "cuda:1" \
     --seed 0
 elif [ "$mode" == "train_ensemble" ]; then

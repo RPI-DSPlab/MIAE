@@ -101,17 +101,19 @@ if __name__ == "__main__":
     parser.add_argument('--shadow_save_path', type=str, help='Save path for shadow model')
     parser.add_argument('--target_model', type=str, default=None,
                         help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet]')
+    parser.add_argument('--target_model_path', type=str, help='same as shadow_save_path')
     parser.add_argument('--data_aug', type=bool, default=False, help='whether to use data augmentation')
     parser.add_argument('--attack_lr', type=float, default=0.1, help='learning rate for MIA training')
     parser.add_argument('--attack_epochs', type=int, default=100, help='number of epochs for MIA training')
     parser.add_argument('--target_epochs', type=int, default=100, help='number of epochs for target model training')
     parser.add_argument('--batch_size', type=int, default=512, help='batch size')
     parser.add_argument('--num_workers', type=int, default=2, help='number of workers')
+    parser.add_argument("--dataset", type=str, default="cifar10", help='dataset: [cifar10, cifar100]')
 
     args = parser.parse_args()
 
-    set_seed(args.seed)
 
+    set_seed(args.seed)
     if args.mode == "train_shadow":  # train shadow-target model
         with open(os.path.join(args.aux_set_path, "aux_set.pkl"), "rb") as f:
             original_aux_set = pickle.load(f)
@@ -136,17 +138,17 @@ if __name__ == "__main__":
         target_model = models.get_model(args.target_model, num_classes, input_size).to(args.device)
         target_model = train_target_model(target_model, args.shadow_save_path, args.device, target_train_set, target_test_set, args)
 
-        # save target model
-        torch.save(target_model.state_dict(), os.path.join(args.shadow_save_path, "target_model.pth"))
 
         # save datasets
         dataset_save_path = os.path.join(args.shadow_save_path, f"{args.dataset}")
-        with open(os.path.join(dataset_save_path, "target_trainset.pkl"), "rb") as f:
-            target_trainset = pickle.load(f)
-        with open(os.path.join(dataset_save_path, "target_testset.pkl"), "rb") as f:
-            target_testset = pickle.load(f)
-        with open(os.path.join(dataset_save_path, "aux_set.pkl"), "rb") as f:
-            aux_set = pickle.load(f)
+        if not os.path.exists(dataset_save_path):
+            os.makedirs(dataset_save_path)
+        with open(os.path.join(dataset_save_path, "target_trainset.pkl"), "wb") as f:
+            pickle.dump(target_train_set, f)
+        with open(os.path.join(dataset_save_path, "target_testset.pkl"), "wb") as f:
+            pickle.dump(target_test_set, f)
+        with open(os.path.join(dataset_save_path, "aux_set.pkl"), "wb") as f:
+            pickle.dump(aux_set, f)
         index_to_data = {}
         for i in range(len(dataset_to_attack)):
             index_to_data[i] = dataset_to_attack[i]
