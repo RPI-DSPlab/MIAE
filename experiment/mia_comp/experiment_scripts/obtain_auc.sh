@@ -1,11 +1,14 @@
+# add the pwd's  ../.. to the python path
+export PYTHONPATH=$(pwd)/../..
 experiment_dir='/data/public/comp_mia_data/miae_experiment_aug_more_target_data'
 
 plot_dir='/data/public/comp_mia_data/miae_experiment_aug_more_target_data/auc'
 
 datasets=("cifar10" "cifar100")
-archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+archs=("resnet56" "wrn32_4")
 mias=("losstraj" "shokri" "yeom" "aug" "lira")
-fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
+#fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
+fprs=()
 seeds=(0 1 2 3)
 
 # prepare the list of mias and fprs as arguments
@@ -41,7 +44,6 @@ for dataset in "${datasets[@]}"; do
                                   --graph_path "${graph_path}"\
                                   --architecture "${arch}"\
                                   --attacks ${mialist}\
-                                  --fpr ${fprlist}\
                                   --seed ${seedlist}
     done
 done

@@ -7,17 +7,17 @@ fi
 
 echo "obtain_pred.sh seed = $seed"
 
-data_dir="/data/public/comp_mia_data/multiseed_convergence/target"
+data_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data/shadow_target_model_and_data"
 
-preds_dir="/data/public/comp_mia_data/multiseed_convergence/preds_sd${seed}"
+preds_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data/preds_sd${seed}_ensemble_base"
 mkdir -p "$preds_dir"
 
 
-#datasets=("cifar10" "cifar100" "cinic10")
-datasets=("cifar10" "cifar100")
+#datasets=("cifar10" "cifar100")
+datasets=("cifar10")
 #archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-archs=("resnet56" "wrn32_4")
-mias=("losstraj" "shokri" "yeom" "aug" lira)
+archs=("resnet56" )
+mias=("losstraj" "shokri" "yeom" "aug" "lira")
 
 prepare_path="/data/public/prepare_sd${seed}"
 
@@ -55,8 +55,8 @@ for dataset in "${datasets[@]}"; do
             mkdir -p "$result_dir"
             prepare_dir="$prepare_path"
             echo "Running $dataset $arch $mia"
-            target_model_save_path="$target_model_path/$dataset/$arch"
-
+#            target_model_save_path="$target_model_path/$dataset/$arch"
+            target_model_save_path="/data/public/comp_mia_data/miae_experiment_aug_more_target_data/shadow_target_model_and_data"
             python3 obtain_pred.py \
             --dataset "$dataset"\
             --target_model "$arch"\
