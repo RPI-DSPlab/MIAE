@@ -240,7 +240,6 @@ def main():
     dataset_to_attack = ConcatDataset([target_trainset, target_testset])
     target_membership = np.concatenate([np.ones(len(target_trainset)), np.zeros(len(target_testset))])
 
-
     obtain_roc_auc(attacks, savedir, dataset_to_attack, target_membership)
 
 

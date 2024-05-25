@@ -7,7 +7,7 @@ archs=("resnet56" "wrn32_4")
 #mias=("losstraj" "shokri" "yeom" "lira")
 mias=("losstraj" "shokri" "yeom")
 seeds=(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
-#seeds=(0 1 2 3)
+#seeds=(0 1 2 3 4 5 6 7 8 9 10 11)
 
 # prepare the list of mias and fprs as arguments
 mialist=""
@@ -27,7 +27,7 @@ for dataset in "${datasets[@]}"; do
 
         # plot the graphs
         # common TP (intersection of all seeds)
-        graph_title="single seed ensemble ${dataset} ${arch}"
+        graph_title="single_seed_ensemble ${dataset} ${arch}"
         graph_path="${plot_dir}/${dataset}/${arch}/single_attack_seed_ensemble"
         python3 obtain_graphs.py --graph_type "single_attack_seed_ensemble"\
                                   --dataset "${dataset}"\
