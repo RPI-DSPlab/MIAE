@@ -52,7 +52,7 @@ class MetaModel(nn.Module):
         return x
 
 
-def mia_ensemble_stacking(base_preds: List[prediction], gt: np.array):
+def mia_ensemble_stacking(base_preds: List[prediction.Predictions], gt: np.array):
     """
     This function ensembles the predictions of the base models using stacking
 
@@ -62,7 +62,8 @@ def mia_ensemble_stacking(base_preds: List[prediction], gt: np.array):
 
     num_base_model = len(base_preds)
     meta_model = MetaModel(input_dim=num_base_model)
-    meta_features = torch.stack([p.pred_arr for p in base_preds], dim=1)  # stack all predictions from attacks
+    # Ensure the numpy arrays are converted to torch.float32 tensors
+    meta_features = torch.stack([torch.from_numpy(p.pred_arr).float() for p in base_preds], dim=1)  # stack all predictions from attacks
     meta_labels = torch.tensor(gt, dtype=torch.long)
 
     # Train the meta model
@@ -93,9 +94,9 @@ def mia_ensemble_avg(base_preds: List[prediction]):
 
     num_base_model = len(base_preds)
     num_samples = base_preds[0].pred_arr.shape[0]
-    ensemble_preds = np.zeros((num_samples, 2))
+    ensemble_preds = np.zeros_like(base_preds[0].pred_arr, dtype=np.float32)
     for p in base_preds:
-        ensemble_preds += p.pred_arr
+        ensemble_preds += p.pred_arr.astype(np.float32)
     ensemble_preds /= num_base_model
 
     return ensemble_preds
@@ -104,7 +105,7 @@ def mia_ensemble_avg(base_preds: List[prediction]):
 # --------------------- helping functions -----------------------------------------
 
 def read_pred(preds_path: str, extend_name: str, sd: int, dataset: str, model: str,
-              attack: str) -> prediction.Predictions:
+              attack: str, gt:np.ndarray) -> prediction.Predictions:
     """
     Read the prediction file and return them, the format of prediction follows: f"preds_sd{seed}{extend_name}"
 
@@ -114,17 +115,17 @@ def read_pred(preds_path: str, extend_name: str, sd: int, dataset: str, model: s
     :param dataset: the dataset used for the predictions
     :param model: the model used for the predictions
     :param attack: the attack used for the predictions
+    :param gt: ground true of the membership prediction
     """
 
-    pred_file = os.path.join(preds_path, f"preds_sd{sd}{extend_name}", dataset, model, attack, f"preds_{attack}.pkl")
-    with open(pred_file, "rb") as f:
-        pred = pickle.load(f)
-
-    return pred
+    pred_file = os.path.join(preds_path, f"preds_sd{sd}{extend_name}", dataset, model, attack, f"pred_{attack}.npy")
+    pred = np.load(pred_file)
+    pred = (pred - np.min(pred)) / (np.max(pred) - np.min(pred))
+    return prediction.Predictions(pred, gt, name=f"{dataset}_{model}_{attack}")
 
 
 def read_preds(preds_path: str, extend_name: str, sds: List[int], datasets: List[str], models: List[str],
-               attacks: List[str]) -> List[List[List[List[prediction.Predictions]]]]:
+               attacks: List[str], gt: np.ndarray) -> List[List[List[List[prediction.Predictions]]]]:
     """
     wrapper function to read multiple predictions
     file directory is organized as: seed -> dataset -> model -> attack -> preds_{attack}.pkl
@@ -135,6 +136,7 @@ def read_preds(preds_path: str, extend_name: str, sds: List[int], datasets: List
     :param datasets: list of dataset used for the predictions
     :param models: list of model used for the predictions
     :param attacks: list of attack used for the predictions
+    :param gt: ground true of the membership prediction
     """
 
     ret_list = []
@@ -145,7 +147,7 @@ def read_preds(preds_path: str, extend_name: str, sds: List[int], datasets: List
             for model in models:
                 list_z = []
                 for attack in attacks:
-                    list_z.append(read_pred(preds_path, extend_name, sd, dataset, model, attack))
+                    list_z.append(read_pred(preds_path, extend_name, sd, dataset, model, attack, gt))
                 list_y.append(list_z)
             list_x.append(list_y)
         ret_list.append(list_x)
@@ -187,13 +189,13 @@ def run_ensemble(base_preds: List[prediction.Predictions], dataset_to_attack: Da
         ensemble_preds = mia_ensemble_avg(base_preds)
     elif ensemble_method == "stacking":
         meta_model = torch.load(ensemble_save_path + "/stacking_meta_model.pth")
-        meta_features = torch.stack([p.pred_arr for p in base_preds], dim=1)
+        meta_features = torch.stack([torch.from_numpy(p.pred_arr).float() for p in base_preds], dim=1)
         ensemble_preds = meta_model(meta_features).detach().numpy()
     else:
         raise ValueError("Invalid ensemble method")
 
     # save the ensemble result
-    with open(save_path + "/ensemble_preds.pkl", "wb") as f:
+    with open(save_path + f"/ensemble_preds_{ensemble_method}.pkl", "wb") as f:
         pickle.dump(ensemble_preds, f)
 
 
@@ -282,12 +284,9 @@ if __name__ == "__main__":
         # save the membership
         np.save(os.path.join(dataset_save_path, "attack_set_membership.npy"), target_membership)
 
-    elif args.model == "train_ensemble":
+    elif args.mode == "train_ensemble":
         # read the predictions
         pred_path = args.preds_path
-        shadow_target_preds = read_preds(pred_path, "_shadow_target", args.ensemble_seeds, [args.dataset],
-                                         [args.target_model],
-                                         args.attacks)
 
         # read data
         with open(os.path.join(args.shadow_target_data_path, "target_trainset.pkl"), "rb") as f:
@@ -299,16 +298,22 @@ if __name__ == "__main__":
         target_dataset_path = os.path.join(args.shadow_target_data_path, f"{args.dataset}")
         index_to_data, membership = load_target_dataset(target_dataset_path)
 
+        shadow_target_preds = read_preds(pred_path, "_ensemble_base", args.ensemble_seeds, [args.dataset],
+                                         [args.target_model],
+                                         args.attacks, membership)
+
         # prepare the ensemble (single seed)
         preds_on_shadow_target_list = shadow_target_preds[0][0][0]  # getting preds from the 0th seeds' prediction
         save_path = os.path.join(args.ensemble_save_path, "single_seed")
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
         prepare_ensemble(preds_on_shadow_target_list, membership, args.ensemble_method, save_path)
 
-    elif args.model == "run_ensemble":
+    elif args.mode == "run_ensemble":
         # read the predictions
         pred_path = args.preds_path
         base_preds = read_preds(pred_path, "", args.ensemble_seeds, [args.dataset], [args.target_model],
-                                args.attacks)
+                                args.attacks, None)
 
         # read data
         with open(os.path.join(args.target_data_path, "target_trainset.pkl"), "rb") as f:
@@ -321,5 +326,11 @@ if __name__ == "__main__":
         # run the ensemble (single seed)
         base_preds_list = base_preds[0][0][0]
         dataset_to_attack = ConcatDataset([target_trainset, target_testset])
-        run_ensemble(base_preds_list, dataset_to_attack, args.ensemble_method, args.ensemble_result_path, args.ensemble_save_path)
+        args.ensemble_result_path = os.path.join(args.ensemble_result_path, "single_seed")
+        if not os.path.exists(args.ensemble_result_path):
+            os.makedirs(args.ensemble_result_path)
+        run_ensemble(base_preds_list, dataset_to_attack, args.ensemble_method, args.ensemble_result_path, args.ensemble_save_path+"/single_seed")
 
+
+    elif args.mode == "evaluation":
+        

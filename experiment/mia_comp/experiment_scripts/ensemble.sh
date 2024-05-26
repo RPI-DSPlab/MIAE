@@ -1,18 +1,24 @@
 #!/bin/bash
 
+# This script is used for experiments regarding to inter-attack ensemble, there's these arguments:
+# -train_shadow: Train shadow-target data
+# -train_ensemble: Train ensemble methods on shadow-target data
+# -run_ensemble: Run ensemble inference on target data
+# -evaluation: Evaluate ensemble predictions
+
 # Check if at least 1 argument is passed
 if [ "$#" -lt 1 ]; then
     echo "Error: You must provide at least one argument."
     exit 1
 fi
 
-if $1 != "train_shadow" && $1 != "train_ensemble" && $1 != "run_ensemble"; then
+if $1 != "train_shadow" && $1 != "train_ensemble" && $1 != "run_ensemble" && $1 != "evaluation"; then
     echo "Error: Invalid argument."
     exit 1
 fi
 
 mias=("losstraj" "shokri" "yeom" "aug" "lira")
-archs=("resnet56")
+arch="resnet56"
 dataset="cifar10"
 seeds=(0 1 2 3 4 5)
 seedlist=""
@@ -42,7 +48,7 @@ if [ "$mode" == "train_shadow" ]; then
     python3 ensemble.py \
     --mode "train_shadow" \
     --dataset "$dataset" \
-    --target_model "resnet56" \
+    --target_model $arch \
     --target_epochs "$num_epoch" \
     --aux_set_path "$data_dir" \
     --shadow_save_path "$shadow_target_dir" \
@@ -50,23 +56,29 @@ if [ "$mode" == "train_shadow" ]; then
     --device "cuda:1" \
     --seed 0
 elif [ "$mode" == "train_ensemble" ]; then
-  for method in "${ensemble_method[@]}"; do
-    echo "ENSEMBLE: Training ensemble model"
-    python3 ensemble.py \
-    --mode "train_ensemble" \
-    --preds_path $preds_path \
-    --ensemble_seeds $seedlist \
-    --attacks $mialist \
-    --ensemble_save_path "${preds_path}/ensemble_file_save" \
-    --shadow_target_data_path "$shadow_target_dir" \
-    --ensemble_method $method
-  done
+
+
+    for method in "${ensemble_method[@]}"; do
+      echo "ENSEMBLE: Training ensemble model"
+      python3 ensemble.py \
+      --mode "train_ensemble" \
+      --target_model $arch \
+      --dataset "$dataset" \
+      --preds_path $preds_path \
+      --ensemble_seeds $seedlist \
+      --attacks $mialist \
+      --ensemble_save_path "${preds_path}/ensemble_file_save/${dataset}" \
+      --shadow_target_data_path "$shadow_target_dir" \
+      --ensemble_method $method
+    done
 
 elif [ "$mode" == "run_ensemble" ]; then
     echo "ENSEMBLE: Running ensemble model"
     for method in "${ensemble_method[@]}"; do
         python3 ensemble.py \
         --mode "run_ensemble" \
+        --target_model $arch \
+        --dataset "$dataset" \
         --preds_path $preds_path \
         --ensemble_seeds $seedlist \
         --attacks $mialist \
@@ -75,6 +87,8 @@ elif [ "$mode" == "run_ensemble" ]; then
         --ensemble_method $method \
         --target_data_path ${preds_path}/target/${dataset} \
         --ensemble_result_path "${preds_path}/ensemble_result"
+    done
+elif ["$mode" == "evaluation" ]; then
 
     done
 fi
