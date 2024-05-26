@@ -44,12 +44,19 @@ class MetaModel(nn.Module):
 
     def __init__(self, input_dim: int):
         super(MetaModel, self).__init__()
-        self.fc1 = nn.Linear(input_dim, 64)
-        self.fc2 = nn.Linear(64, 2)
+        self.fc1 = nn.Linear(input_dim, 128)
+        self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(64, 32)
+        self.fc4 = nn.Linear(32, 2)
+        self.dropout = nn.Dropout(0.5)  # Adding dropout for regularization
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
-        x = self.fc2(x)
+        x = self.dropout(x)
+        x = torch.relu(self.fc2(x))
+        x = self.dropout(x)
+        x = torch.relu(self.fc3(x))
+        x = self.fc4(x)
         return x
 
 
@@ -198,7 +205,11 @@ def run_ensemble(base_preds: List[prediction.Predictions], dataset_to_attack: Da
 
     # save the ensemble result
     with open(save_path + f"/ensemble_preds_{ensemble_method}.pkl", "wb") as f:
-        pickle.dump(ensemble_preds, f)
+        if ensemble_method == "stacking":
+            pickle.dump(np.transpose(ensemble_preds)[1], f)
+        else:
+            pickle.dump(ensemble_preds, f)
+
 
 
 def get_ensemble_methods(directory):
@@ -315,8 +326,7 @@ if __name__ == "__main__":
             target_testset = pickle.load(f)
         with open(os.path.join(args.shadow_target_data_path, "aux_set.pkl"), "rb") as f:
             aux_set = pickle.load(f)
-        target_dataset_path = os.path.join(args.shadow_target_data_path, f"{args.dataset}")
-        index_to_data, membership = load_target_dataset(target_dataset_path)
+        index_to_data, membership = load_target_dataset(args.shadow_target_data_path)
 
         shadow_target_preds = read_preds(pred_path, "_ensemble_base", args.ensemble_seeds, [args.dataset],
                                          [args.target_model],
@@ -350,7 +360,7 @@ if __name__ == "__main__":
         if not os.path.exists(args.ensemble_result_path):
             os.makedirs(args.ensemble_result_path)
         run_ensemble(base_preds_list, dataset_to_attack, args.ensemble_method, args.ensemble_result_path,
-                     args.ensemble_save_path + "/single_seed")
+                     args.ensemble_save_path + f"/{args.dataset}" + "/single_seed")
 
 
     elif args.mode == "evaluation":
@@ -361,8 +371,7 @@ if __name__ == "__main__":
             target_testset = pickle.load(f)
         with open(os.path.join(args.target_data_path, "aux_set.pkl"), "rb") as f:
             aux_set = pickle.load(f)
-        target_dataset_path = os.path.join(args.target_data_path, f"{args.dataset}")
-        index_to_data, membership = load_target_dataset(target_dataset_path)
+        index_to_data, membership = load_target_dataset(args.target_data_path)
 
         # read original preds
         pred_path = args.preds_path
@@ -371,10 +380,11 @@ if __name__ == "__main__":
         base_preds_list = base_preds[0][0][0]
 
         # read ensemble preds
-        methods_names, file_names = get_ensemble_methods(args.ensemble_result_path)
+        ensemble_result_path = args.ensemble_result_path + "/single_seed"
+        methods_names, file_names = get_ensemble_methods(ensemble_result_path)
         ensemble_preds = []
         for fn in file_names:
-            with open(os.path.join(args.ensemble_result_path, fn), "rb") as f:
+            with open(os.path.join(ensemble_result_path, fn), "rb") as f:
                 ensemble_preds.append(prediction.Predictions(pickle.load(f), membership, fn))
 
         # combine single attack result with ensemble result
@@ -382,4 +392,5 @@ if __name__ == "__main__":
         preds_list = base_preds_list + ensemble_preds
 
         # auc
-        prediction.plot_auc(preds_list, name_list, "single seed ensemble AUC", save_path=args.ensemble_result_path)
+        print(args.ensemble_result_path + '/single_seed_ensemble_roc.png')
+        prediction.plot_auc(preds_list, name_list, "single seed ensemble AUC", save_path=args.ensemble_result_path + '/single_seed_ensemble_roc.png')

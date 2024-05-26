@@ -66,7 +66,7 @@ elif [ "$mode" == "train_ensemble" ]; then
       --ensemble_seeds $seedlist \
       --attacks $mialist \
       --ensemble_save_path "${preds_path}/ensemble_file_save/${dataset}" \
-      --shadow_target_data_path "$shadow_target_dir" \
+      --shadow_target_data_path "$shadow_target_dir/${dataset}" \
       --ensemble_method $method
     done
 
@@ -90,15 +90,13 @@ elif [ "$mode" == "run_ensemble" ]; then
 elif [ "$mode" == "evaluation" ]; then
     echo "ENSEMBLE: Evaluating ensemble predictions"
       python3 ensemble.py \
-      --mode "run_ensemble" \
+      --mode "evaluation" \
       --target_model $arch \
       --dataset "$dataset" \
       --preds_path $preds_path \
       --ensemble_seeds $seedlist \
       --attacks $mialist \
       --ensemble_save_path "${preds_path}/ensemble_file_save" \
-      --shadow_target_data_path "$shadow_target_dir" \
-      --ensemble_method $method \
       --target_data_path ${preds_path}/target/${dataset} \
       --ensemble_result_path "${preds_path}/ensemble_result"
 fi
