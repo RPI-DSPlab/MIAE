@@ -13,6 +13,7 @@ what does this file do?
 import argparse
 import os
 import pickle
+import re
 import sys
 
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
@@ -63,7 +64,8 @@ def mia_ensemble_stacking(base_preds: List[prediction.Predictions], gt: np.array
     num_base_model = len(base_preds)
     meta_model = MetaModel(input_dim=num_base_model)
     # Ensure the numpy arrays are converted to torch.float32 tensors
-    meta_features = torch.stack([torch.from_numpy(p.pred_arr).float() for p in base_preds], dim=1)  # stack all predictions from attacks
+    meta_features = torch.stack([torch.from_numpy(p.pred_arr).float() for p in base_preds],
+                                dim=1)  # stack all predictions from attacks
     meta_labels = torch.tensor(gt, dtype=torch.long)
 
     # Train the meta model
@@ -105,7 +107,7 @@ def mia_ensemble_avg(base_preds: List[prediction]):
 # --------------------- helping functions -----------------------------------------
 
 def read_pred(preds_path: str, extend_name: str, sd: int, dataset: str, model: str,
-              attack: str, gt:np.ndarray) -> prediction.Predictions:
+              attack: str, gt: np.ndarray) -> prediction.Predictions:
     """
     Read the prediction file and return them, the format of prediction follows: f"preds_sd{seed}{extend_name}"
 
@@ -197,6 +199,24 @@ def run_ensemble(base_preds: List[prediction.Predictions], dataset_to_attack: Da
     # save the ensemble result
     with open(save_path + f"/ensemble_preds_{ensemble_method}.pkl", "wb") as f:
         pickle.dump(ensemble_preds, f)
+
+
+def get_ensemble_methods(directory):
+    files = os.listdir(directory)
+    methods = []
+    fns = []
+
+    # Regex pattern to match the ensemble method names
+    pattern = re.compile(r'ensemble_preds_(.+)\.pkl')
+
+    for file in files:
+        # Match the pattern to extract the method name
+        match = pattern.match(file)
+        if match:
+            methods.append(match.group(1))
+            fns.append(file)
+
+    return methods, fns
 
 
 # --------------------- scripts for each mode of this file  -------------------------
@@ -315,7 +335,7 @@ if __name__ == "__main__":
         base_preds = read_preds(pred_path, "", args.ensemble_seeds, [args.dataset], [args.target_model],
                                 args.attacks, None)
 
-        # read data
+        # read target data
         with open(os.path.join(args.target_data_path, "target_trainset.pkl"), "rb") as f:
             target_trainset = pickle.load(f)
         with open(os.path.join(args.target_data_path, "target_testset.pkl"), "rb") as f:
@@ -329,8 +349,37 @@ if __name__ == "__main__":
         args.ensemble_result_path = os.path.join(args.ensemble_result_path, "single_seed")
         if not os.path.exists(args.ensemble_result_path):
             os.makedirs(args.ensemble_result_path)
-        run_ensemble(base_preds_list, dataset_to_attack, args.ensemble_method, args.ensemble_result_path, args.ensemble_save_path+"/single_seed")
+        run_ensemble(base_preds_list, dataset_to_attack, args.ensemble_method, args.ensemble_result_path,
+                     args.ensemble_save_path + "/single_seed")
 
 
     elif args.mode == "evaluation":
-        
+        # read target data
+        with open(os.path.join(args.target_data_path, "target_trainset.pkl"), "rb") as f:
+            target_trainset = pickle.load(f)
+        with open(os.path.join(args.target_data_path, "target_testset.pkl"), "rb") as f:
+            target_testset = pickle.load(f)
+        with open(os.path.join(args.target_data_path, "aux_set.pkl"), "rb") as f:
+            aux_set = pickle.load(f)
+        target_dataset_path = os.path.join(args.target_data_path, f"{args.dataset}")
+        index_to_data, membership = load_target_dataset(target_dataset_path)
+
+        # read original preds
+        pred_path = args.preds_path
+        base_preds = read_preds(pred_path, "", args.ensemble_seeds, [args.dataset], [args.target_model],
+                                args.attacks, membership)
+        base_preds_list = base_preds[0][0][0]
+
+        # read ensemble preds
+        methods_names, file_names = get_ensemble_methods(args.ensemble_result_path)
+        ensemble_preds = []
+        for fn in file_names:
+            with open(os.path.join(args.ensemble_result_path, fn), "rb") as f:
+                ensemble_preds.append(prediction.Predictions(pickle.load(f), membership, fn))
+
+        # combine single attack result with ensemble result
+        name_list = args.attacks + methods_names
+        preds_list = base_preds_list + ensemble_preds
+
+        # auc
+        prediction.plot_auc(preds_list, name_list, "single seed ensemble AUC", save_path=args.ensemble_result_path)

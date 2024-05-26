@@ -56,8 +56,6 @@ if [ "$mode" == "train_shadow" ]; then
     --device "cuda:1" \
     --seed 0
 elif [ "$mode" == "train_ensemble" ]; then
-
-
     for method in "${ensemble_method[@]}"; do
       echo "ENSEMBLE: Training ensemble model"
       python3 ensemble.py \
@@ -88,7 +86,19 @@ elif [ "$mode" == "run_ensemble" ]; then
         --target_data_path ${preds_path}/target/${dataset} \
         --ensemble_result_path "${preds_path}/ensemble_result"
     done
-elif ["$mode" == "evaluation" ]; then
 
-    done
+elif [ "$mode" == "evaluation" ]; then
+    echo "ENSEMBLE: Evaluating ensemble predictions"
+      python3 ensemble.py \
+      --mode "run_ensemble" \
+      --target_model $arch \
+      --dataset "$dataset" \
+      --preds_path $preds_path \
+      --ensemble_seeds $seedlist \
+      --attacks $mialist \
+      --ensemble_save_path "${preds_path}/ensemble_file_save" \
+      --shadow_target_data_path "$shadow_target_dir" \
+      --ensemble_method $method \
+      --target_data_path ${preds_path}/target/${dataset} \
+      --ensemble_result_path "${preds_path}/ensemble_result"
 fi
