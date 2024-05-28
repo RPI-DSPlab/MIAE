@@ -377,18 +377,18 @@ if __name__ == "__main__":
         # run the ensemble (single seed)
         base_preds_list = base_preds[0]
         dataset_to_attack = ConcatDataset([target_trainset, target_testset])
-        args.ensemble_result_path = os.path.join(args.ensemble_result_path, "single_seed")
-        if not os.path.exists(args.ensemble_result_path):
-            os.makedirs(args.ensemble_result_path)
-        run_ensemble(base_preds_list, dataset_to_attack, args.ensemble_method, args.ensemble_result_path,
+        ensemble_result_path = os.path.join(args.ensemble_result_path, "single_seed")
+        if not os.path.exists(ensemble_result_path):
+            os.makedirs(ensemble_result_path)
+        run_ensemble(base_preds_list, dataset_to_attack, args.ensemble_method, ensemble_result_path,
                      args.ensemble_save_path + f"/{args.dataset}" + "/single_seed")
 
         # run the ensemble (multi seed)
         base_preds_list = multi_seed_avg(base_preds)
-        args.ensemble_result_path = os.path.join(args.ensemble_result_path, "multi_seed")
-        if not os.path.exists(args.ensemble_result_path):
-            os.makedirs(args.ensemble_result_path)
-        run_ensemble(base_preds_list, dataset_to_attack, args.ensemble_method, args.ensemble_result_path,
+        ensemble_result_path_multi = os.path.join(args.ensemble_result_path, "multi_seed")
+        if not os.path.exists(ensemble_result_path_multi):
+            os.makedirs(ensemble_result_path_multi)
+        run_ensemble(base_preds_list, dataset_to_attack, args.ensemble_method, ensemble_result_path_multi,
                      args.ensemble_save_path + f"/{args.dataset}" + "/multi_seed")
 
 
@@ -431,7 +431,6 @@ if __name__ == "__main__":
         preds_list = base_preds_list + ensemble_preds_single_seed + ensemble_preds_multi_seed
 
         # auc
-        print(args.ensemble_result_path + '/ensemble_roc.png')
         prediction.plot_auc(preds_list, name_list, f"{args.dataset} {args.target_model} ensemble AUC", save_path=args.ensemble_result_path + '/ensemble_roc.png')
 
         # printing some stats
@@ -443,4 +442,4 @@ if __name__ == "__main__":
             balanced_acc.append(pred.balanced_attack_accuracy())
 
         for i in range(len(name_list)):
-            print(f"{name_list[i]}: acc: {acc[i]}, balanced acc: {balanced_acc[i]}")
+            print(f"{name_list[i]}: \tacc: {acc[i]:.4f}, \tbalanced acc: {balanced_acc[i]:.4f}")
