@@ -474,5 +474,3 @@ def plot_auc(pred_list: List[List[Predictions]] | List[Predictions],
         plt.savefig(save_path)
 
     plt.show()
-
-    return

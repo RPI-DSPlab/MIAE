@@ -133,8 +133,8 @@ def read_pred(preds_path: str, extend_name: str, sd: int, dataset: str, model: s
     return prediction.Predictions(pred, gt, name=f"{dataset}_{model}_{attack}")
 
 
-def read_preds(preds_path: str, extend_name: str, sds: List[int], datasets: List[str], models: List[str],
-               attacks: List[str], gt: np.ndarray) -> List[List[List[List[prediction.Predictions]]]]:
+def read_preds(preds_path: str, extend_name: str, sds: List[int], dataset: str, model: str,
+               attacks: List[str], gt: np.ndarray) -> List[List[prediction.Predictions]]:
     """
     wrapper function to read multiple predictions
     file directory is organized as: seed -> dataset -> model -> attack -> preds_{attack}.pkl
@@ -142,23 +142,19 @@ def read_preds(preds_path: str, extend_name: str, sds: List[int], datasets: List
     :param preds_path: the path to the predictions folders
     :param extend_name: the extension of the name of the file (what goes after preds_sd{seed})
     :param sds: list of seed to obtain the predictions
-    :param datasets: list of dataset used for the predictions
-    :param models: list of model used for the predictions
+    :param dataset: dataset used for the predictions
+    :param model: model used for the predictions
     :param attacks: list of attack used for the predictions
     :param gt: ground true of the membership prediction
+
+    :return: List of predictions
     """
 
     ret_list = []
     for sd in sds:
         list_x = []
-        for dataset in datasets:
-            list_y = []
-            for model in models:
-                list_z = []
-                for attack in attacks:
-                    list_z.append(read_pred(preds_path, extend_name, sd, dataset, model, attack, gt))
-                list_y.append(list_z)
-            list_x.append(list_y)
+        for attack in attacks:
+            list_x.append(read_pred(preds_path, extend_name, sd, dataset, model, attack, gt))
         ret_list.append(list_x)
 
     return ret_list
@@ -228,6 +224,24 @@ def get_ensemble_methods(directory):
             fns.append(file)
 
     return methods, fns
+
+
+def multi_seed_avg(pred_list: List[List[prediction.Predictions]]) -> List[prediction.Predictions]:
+    """
+    Average the predictions across multiple seeds
+
+    :param pred_list: List of predictions from multiple seeds that follows the structure of read_preds
+    :return: List of averaged predictions
+    """
+
+    avg_preds = []
+    for i in range(len(pred_list[0])):
+        pred_attack_i = []
+        for j in range(len(pred_list)):
+            pred_attack_i.append(pred_list[j][i])
+        avg_preds.append(prediction.multi_seed_ensemble(pred_attack_i, "avg"))
+
+    return avg_preds
 
 
 # --------------------- scripts for each mode of this file  -------------------------
@@ -328,13 +342,20 @@ if __name__ == "__main__":
             aux_set = pickle.load(f)
         index_to_data, membership = load_target_dataset(args.shadow_target_data_path)
 
-        shadow_target_preds = read_preds(pred_path, "_ensemble_base", args.ensemble_seeds, [args.dataset],
-                                         [args.target_model],
+        shadow_target_preds = read_preds(pred_path, "_ensemble_base", args.ensemble_seeds, args.dataset,
+                                         args.target_model,
                                          args.attacks, membership)
 
         # prepare the ensemble (single seed)
-        preds_on_shadow_target_list = shadow_target_preds[0][0][0]  # getting preds from the 0th seeds' prediction
+        preds_on_shadow_target_list = shadow_target_preds[0]  # getting preds from the 0th seeds' prediction
         save_path = os.path.join(args.ensemble_save_path, "single_seed")
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+        prepare_ensemble(preds_on_shadow_target_list, membership, args.ensemble_method, save_path)
+
+        # prepare the ensemble (multi-seed)
+        preds_on_shadow_target_list = multi_seed_avg(shadow_target_preds)
+        save_path = os.path.join(args.ensemble_save_path, "multi_seed")
         if not os.path.exists(save_path):
             os.makedirs(save_path)
         prepare_ensemble(preds_on_shadow_target_list, membership, args.ensemble_method, save_path)
@@ -342,7 +363,7 @@ if __name__ == "__main__":
     elif args.mode == "run_ensemble":
         # read the predictions
         pred_path = args.preds_path
-        base_preds = read_preds(pred_path, "", args.ensemble_seeds, [args.dataset], [args.target_model],
+        base_preds = read_preds(pred_path, "", args.ensemble_seeds, args.dataset, args.target_model,
                                 args.attacks, None)
 
         # read target data
@@ -354,13 +375,21 @@ if __name__ == "__main__":
             aux_set = pickle.load(f)
 
         # run the ensemble (single seed)
-        base_preds_list = base_preds[0][0][0]
+        base_preds_list = base_preds[0]
         dataset_to_attack = ConcatDataset([target_trainset, target_testset])
         args.ensemble_result_path = os.path.join(args.ensemble_result_path, "single_seed")
         if not os.path.exists(args.ensemble_result_path):
             os.makedirs(args.ensemble_result_path)
         run_ensemble(base_preds_list, dataset_to_attack, args.ensemble_method, args.ensemble_result_path,
                      args.ensemble_save_path + f"/{args.dataset}" + "/single_seed")
+
+        # run the ensemble (multi seed)
+        base_preds_list = multi_seed_avg(base_preds)
+        args.ensemble_result_path = os.path.join(args.ensemble_result_path, "multi_seed")
+        if not os.path.exists(args.ensemble_result_path):
+            os.makedirs(args.ensemble_result_path)
+        run_ensemble(base_preds_list, dataset_to_attack, args.ensemble_method, args.ensemble_result_path,
+                     args.ensemble_save_path + f"/{args.dataset}" + "/multi_seed")
 
 
     elif args.mode == "evaluation":
@@ -375,22 +404,43 @@ if __name__ == "__main__":
 
         # read original preds
         pred_path = args.preds_path
-        base_preds = read_preds(pred_path, "", args.ensemble_seeds, [args.dataset], [args.target_model],
+        base_preds = read_preds(pred_path, "", args.ensemble_seeds, args.dataset, args.target_model,
                                 args.attacks, membership)
-        base_preds_list = base_preds[0][0][0]
+        base_preds_list = base_preds[0]
 
-        # read ensemble preds
+        # read ensemble preds (single seed)
         ensemble_result_path = args.ensemble_result_path + "/single_seed"
-        methods_names, file_names = get_ensemble_methods(ensemble_result_path)
-        ensemble_preds = []
+        methods_names_single_seed, file_names = get_ensemble_methods(ensemble_result_path)
+        methods_names_single_seed = ["single_seed_" + x for x in methods_names_single_seed]
+        ensemble_preds_single_seed = []
         for fn in file_names:
             with open(os.path.join(ensemble_result_path, fn), "rb") as f:
-                ensemble_preds.append(prediction.Predictions(pickle.load(f), membership, fn))
+                ensemble_preds_single_seed.append(prediction.Predictions(pickle.load(f), membership, fn))
+
+        # read ensemble preds (multi seed)
+        ensemble_result_path = args.ensemble_result_path + "/multi_seed"
+        methods_names_multi_seed, file_names = get_ensemble_methods(ensemble_result_path)
+        methods_names_multi_seed = ["multi_seed_" + x for x in methods_names_multi_seed]
+        ensemble_preds_multi_seed = []
+        for fn in file_names:
+            with open(os.path.join(ensemble_result_path, fn), "rb") as f:
+                ensemble_preds_multi_seed.append(prediction.Predictions(pickle.load(f), membership, fn))
 
         # combine single attack result with ensemble result
-        name_list = args.attacks + methods_names
-        preds_list = base_preds_list + ensemble_preds
+        name_list = args.attacks + methods_names_single_seed + methods_names_multi_seed
+        preds_list = base_preds_list + ensemble_preds_single_seed + ensemble_preds_multi_seed
 
         # auc
-        print(args.ensemble_result_path + '/single_seed_ensemble_roc.png')
-        prediction.plot_auc(preds_list, name_list, "single seed ensemble AUC", save_path=args.ensemble_result_path + '/single_seed_ensemble_roc.png')
+        print(args.ensemble_result_path + '/ensemble_roc.png')
+        prediction.plot_auc(preds_list, name_list, f"{args.dataset} {args.target_model} ensemble AUC", save_path=args.ensemble_result_path + '/ensemble_roc.png')
+
+        # printing some stats
+        balanced_acc = []
+        acc = []
+
+        for attack_name, pred in zip(name_list, preds_list):
+            acc.append(pred.accuracy())
+            balanced_acc.append(pred.balanced_attack_accuracy())
+
+        for i in range(len(name_list)):
+            print(f"{name_list[i]}: acc: {acc[i]}, balanced acc: {balanced_acc[i]}")
