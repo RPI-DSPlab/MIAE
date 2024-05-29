@@ -132,6 +132,13 @@ class Predictions:
         return np.all(np.logical_or(self.pred_arr == 0, self.pred_arr == 1))
 
 
+    def save_pred(self, file_name: str, path: str):
+        """
+        Save the prediction to a file.
+        """
+        np.save(os.path.join(path, file_name), self.pred_arr)
+
+
 def _common_tp(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):
     """
     Find the union/intersection true positive samples among the predictions
