@@ -59,7 +59,7 @@ class YeomAuxiliaryInfo(AuxiliaryInfo):
 
 class YeomModelAccess(ModelAccess):
     """
-    Implementation of model access for Shokri attack.
+    Implementation of model access for Yeom attack.
     """
 
     def __init__(self, model, untrained_model, access_type: ModelAccessType = ModelAccessType.BLACK_BOX):
