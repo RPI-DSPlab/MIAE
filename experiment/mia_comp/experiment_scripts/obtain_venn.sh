@@ -1,9 +1,17 @@
 # This script generates Venn diagrams for the MIAE experiment
 
 # Get the datasets, architectures, MIAs and categories
-datasets=("cifar10" "cifar100")
-archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-mias=("losstraj" "shokri" "yeom")
+#datasets=("cifar10" "cifar100")
+#archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+#mias=("losstraj" "shokri" "yeom" "lira" "aug")
+#categories=("threshold" "single_attack" "fpr")
+#subcategories=("common_tp" "pairwise")
+#seeds=(0 1 2 3)
+#fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
+
+datasets=("cifar10")
+archs=("resnet56" "wrn32_4")
+mias=("losstraj" "shokri" "yeom" "lira" "aug")
 categories=("threshold" "single_attack" "fpr")
 subcategories=("common_tp" "pairwise")
 seeds=(0 1 2 3)
@@ -26,13 +34,13 @@ for fpr in "${fprs[@]}"; do
 done
 
 
-experiment_dir="/data/public/comp_mia_data/miae_experiment_aug"
+experiment_dir="/home/public/comp_mia_data/miae_experiment_aug_more_target_data"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 
 # Check if directory creation was successful
 if [ -d "$graph_dir" ]; then
-    echo "Directory '$graph_dir' already exists. Skipping..."
+    echo "Successfully created directory '$graph_dir'."
 else
     echo "Error: Failed to create directory '$graph_dir'."
     exit 1
@@ -41,7 +49,7 @@ fi
 venn_dir="$graph_dir/venn"
 mkdir -p "$venn_dir"
 if [ -d "$venn_dir" ]; then
-    echo "Directory '$venn_dir' already exists. Skipping..."
+    echo "Successfully created directory '$venn_dir'."
 else
     echo "Error: Failed to create directory '$venn_dir'."
     exit 1
@@ -50,7 +58,7 @@ fi
 for category in "${categories[@]}"; do
     mkdir -p "$venn_dir/$category"
     if [ -d "$venn_dir/$category" ]; then
-        echo "Directory '$venn_dir/$category' already exists. Skipping..."
+        echo "Successfully created directory '$venn_dir/$category'."
     else
         echo "Error: Failed to create directory '$venn_dir/$category'."
         exit 1
@@ -58,8 +66,6 @@ for category in "${categories[@]}"; do
 done
 
 cd /home/zhangc26/MIAE/experiment/mia_comp
-
-conda activate rpidsp
 
 # Generate Venn diagrams for the MIAE experiment when the goal is common_tp
 for category in "${categories[@]}"; do
