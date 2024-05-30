@@ -1,6 +1,6 @@
-experiment_dir='/data/public/miae_experiment_aug'
+experiment_dir='/data/public/comp_mia_data/miae_experiment_aug_more_target_data'
 
-plot_dir='/data/public/miae_experiment_aug/graphs/auc'
+plot_dir='/data/public/comp_mia_data/miae_experiment_aug_more_target_data/graphs/auc'
 
 datasets=("cifar10" "cifar100")
 archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")

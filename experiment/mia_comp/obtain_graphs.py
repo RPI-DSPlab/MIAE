@@ -131,6 +131,7 @@ def plot_auc(predictions: Dict[str, prediction.Predictions], graph_title: str, g
     prediction.plot_auc(prediction_list, attack_names, graph_title, fprs, graph_path)
 
 
+
 def plot_hardness_distribution(
         predictions: Dict[str, List[prediction.Predictions]] or Dict[str, prediction.Predictions],
         hardness: SampleHardness,
