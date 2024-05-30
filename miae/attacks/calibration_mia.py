@@ -75,22 +75,24 @@ class CalibrationModelAccess(ModelAccess):
 class CalibrationUtil(MIAUtils):
 
     @classmethod
-    def get_loss(cls, dataset: Dataset, model) -> np.ndarray:
+    def get_loss(cls, dataset: Dataset, model, device="cpu") -> np.ndarray:
         """
         Get the loss of the dataset from the model.
 
         dataset: the dataset to get the loss (data, label).
         model: the model to calculate the loss.
+        device: the device model and data shall be on
 
         return: the loss of each dataset the dataset.
         """
 
         model.eval()
+        model.to(device)
         loss = []
-        for data, label in dataset:
+        for data, label in tqdm(dataset, desc="Calculating loss"):
             data = data.unsqueeze(0)
-            label = torch.tensor([label])
-            output = model(data)
+            label = torch.tensor([label]).to(device)
+            output = model(data.to(device))
             loss.append(F.cross_entropy(output, label).item())
 
         return np.array(loss)
@@ -148,8 +150,8 @@ class CalibrationAttack(MiAttack):
 
         # get the loss values of aux set (public set) from shadow model (auxiliary model) and target model
         recombined_aux_set = ConcatDataset([train_set, test_set])  # make sure the order aligned with membership is correct
-        shadow_model_loss = CalibrationUtil.get_loss(recombined_aux_set, self.shadow_model)
-        target_model_loss = CalibrationUtil.get_loss(recombined_aux_set, self.target_model_access.model)
+        shadow_model_loss = CalibrationUtil.get_loss(recombined_aux_set, self.shadow_model, self.aux_info.device)
+        target_model_loss = CalibrationUtil.get_loss(recombined_aux_set, self.target_model_access.model, self.aux_info.device)
 
         calibrated_loss = target_model_loss - shadow_model_loss
         membership_label = np.concatenate([np.ones(len(train_set)), np.zeros(len(test_set))])
@@ -177,8 +179,8 @@ class CalibrationAttack(MiAttack):
         # load the attack models
         target_data_loader = DataLoader(target_data, batch_size=self.aux_info.batch_size, shuffle=False, num_workers=2)
         self.target_model_access.to_device(self.aux_info.device)
-        shadow_model_loss = CalibrationUtil.get_loss(target_data, self.shadow_model)
-        target_model_loss = CalibrationUtil.get_loss(target_data, self.target_model_access)
+        shadow_model_loss = CalibrationUtil.get_loss(target_data, self.shadow_model, self.aux_info.device)
+        target_model_loss = CalibrationUtil.get_loss(target_data, self.target_model_access, self.aux_info.device)
         calibrated_loss = target_model_loss - shadow_model_loss
         losses_threshold_diff = calibrated_loss - self.threshold
 
