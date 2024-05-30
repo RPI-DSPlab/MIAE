@@ -14,7 +14,7 @@ import sys
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 from miae.utils.set_seed import set_seed
-from miae.attacks import losstraj_mia, merlin_mia, lira_mia, boundary_mia
+from miae.attacks import losstraj_mia, merlin_mia, lira_mia, aug_mia, calibration_mia
 from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
 from experiment import models
@@ -215,19 +215,25 @@ def main():
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': batch_size})
     lira_aux_info = lira_mia.LiraAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/lira'})
-    boundary_aux_info = boundary_mia.AugAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/boundary', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/boundary'})
+    aug_aux_info = aug_mia.AugAuxiliaryInfo(
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/aug', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/aug'})
+    calibration_aux_info = calibration_mia.CalibrationAuxiliaryInfo(
+        {'device': device, 'seed': seed, 'save_path': attack_dir + '/calibration', 'num_classes': 10, 'batch_size': batch_size,
+         'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir + '/calibration'})
 
     losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model), untrained_target_model)
     merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model), untrained_target_model)
     lira_target_model_access = lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
-    boundary_target_model_access = boundary_mia.AugModelAccess(deepcopy(target_model), untrained_target_model)
+    aug_target_model_access = aug_mia.AugModelAccess(deepcopy(target_model), untrained_target_model)
+    calibration_target_model_access = calibration_mia.CalibrationModelAccess(deepcopy(target_model), untrained_target_model)
 
     attacks = [
         # losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
         # merlin_mia.MerlinAttack(merlin_target_model_access, merlin_aux_info),
-        lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
-        # boundary_mia.BoundaryAttack(boundary_target_model_access, boundary_aux_info)
+        # lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
+        # aug_mia.augAttack(aug_target_model_access, aug_aux_info)
+        calibration_mia.CalibrationAttack(calibration_target_model_access, calibration_aux_info)
+
     ]
 
     # -- prepare the attacks

@@ -95,7 +95,7 @@ def plot_auc(predictions: Dict[str, prediction.Predictions], graph_title: str, g
         prediction_list.append(pred)
         ground_truth = pred.ground_truth_arr if ground_truth is None else ground_truth
 
-    MIAE.eval_methods.prediction.plot_auc(prediction_list, attack_names, graph_title, fprs, graph_path)
+    prediction.plot_auc(prediction_list, attack_names, graph_title, fprs, graph_path)
 
 
 def plot_hardness_distribution(
