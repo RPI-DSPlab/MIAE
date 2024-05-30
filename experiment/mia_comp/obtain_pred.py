@@ -22,7 +22,7 @@ import sys
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 from miae.utils.set_seed import set_seed
-from miae.attacks import losstraj_mia, shokri_mia, lira_mia, yeom_mia, aug_mia
+from miae.attacks import losstraj_mia, shokri_mia, lira_mia, yeom_mia, aug_mia, calibration_mia
 from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
 from experiment import models
@@ -159,6 +159,8 @@ def get_target_model_access(args, target_model, untrained_target_model) -> mia_b
         return lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
     if args.attack == "aug":
         return aug_mia.AugModelAccess(deepcopy(target_model), untrained_target_model)
+    if args.attack == "calibration":
+        return calibration_mia.CalibrationModelAccess(deepcopy(target_model), untrained_target_model)
     else:
         raise ValueError("Invalid attack type")
 
@@ -178,6 +180,10 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
              'log_path': args.result_path})
     if args.attack == "yeom":
         return yeom_mia.YeomAuxiliaryInfo(
+            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
+             'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+    if args.attack == "calibration":
+        return calibration_mia.CalibrationAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
     if args.attack == "shokri":
@@ -209,6 +215,8 @@ def get_attack(args, aux_info: mia_base.AuxiliaryInfo, target_model_access: mia_
         return losstraj_mia.LosstrajAttack(target_model_access, aux_info)
     if args.attack == "yeom":
         return yeom_mia.YeomAttack(target_model_access, aux_info)
+    if args.attack == "calibration":
+        return calibration_mia.CalibrationAttack(target_model_access, aux_info)
     if args.attack == "shokri":
         return shokri_mia.ShokriAttack(target_model_access, aux_info)
     if args.attack == "lira":
@@ -239,7 +247,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_target_model', type=bool, default=False, help='whether to train the target model')
 
     # mandatory arguments
-    parser.add_argument('--attack', type=str, default=None, help='MIA type: [losstraj, yeom, shokri ,lira, aug]')
+    parser.add_argument('--attack', type=str, default=None, help='MIA type: [losstraj, yeom, shokri ,lira, aug, calibration]')
     parser.add_argument('--target_model', type=str, default=None,
                         help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet]')
     parser.add_argument('--dataset', type=str, default=None, help='dataset: [cifar10, cifar100, cinic10]')
