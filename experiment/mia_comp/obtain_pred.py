@@ -29,13 +29,14 @@ from experiment import models
 from experiment.mia_comp import datasets
 
 
-def get_dataset(datset_name, aug, targetset_ratio, train_test_ratio) -> tuple:
+def get_dataset(datset_name, aug, targetset_ratio, train_test_ratio, shuffle_seed=1) -> tuple:
     """
     Get the datasets for the target model and MIA
     :param datset_name: name of the dataset
     :param aug: data augmentation when loading the dataset
     :param targetset_ratio: the ratio of the data used for target model training over the whole dataset
     :param train_test_ratio: the ratio of the data used for target model training over the target set
+    :param shuffle_seed: seed for shuffling the dataset, default to 1
     :return:
     """
     if datset_name == "cifar10":
@@ -56,12 +57,12 @@ def get_dataset(datset_name, aug, targetset_ratio, train_test_ratio) -> tuple:
     # prepare the shadow set and target set
     target_len = int(len(dataset) * targetset_ratio)
     shadow_len = len(dataset) - target_len
-    target_set, aux_set = dataset_utils.dataset_split(dataset, [target_len, shadow_len])
+    target_set, aux_set = dataset_utils.dataset_split(dataset, [target_len, shadow_len], shuffle_seed)
 
     target_trainset, target_testset = dataset_utils.dataset_split(target_set,
                                                                   [int(len(target_set) * train_test_ratio),
                                                                    len(target_set) - int(
-                                                                       len(target_set) * train_test_ratio)])
+                                                                       len(target_set) * train_test_ratio)], shuffle_seed)
 
     return target_trainset, target_testset, aux_set, num_classes, input_size
 
@@ -251,6 +252,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_test_ratio', type=float, default=0.5, help='train test ratio for target and MIA')
     parser.add_argument('--delete-files', type=bool, default=True,
                         help='whether to delete the preparation files after training')
+    parser.add_argument('--shuffle_seed', type=int, default=1, help='seed for shuffling the dataset')
 
     # optional arguments (eg. training hyperparameters)
     parser.add_argument('--seed', type=int, default=0, help='random seed')
@@ -276,7 +278,7 @@ if __name__ == '__main__':
         # initialize the dataset
         target_trainset, target_testset, aux_set, num_classes, input_size = get_dataset(args.dataset, args.data_aug,
                                                                                         args.target_set_ratio,
-                                                                                        args.train_test_ratio)
+                                                                                        args.train_test_ratio, args.shuffle_seed)
         dataset_save_path = os.path.join(args.data_path, f"{args.dataset}")
         if not os.path.exists(dataset_save_path):
             os.makedirs(dataset_save_path)
@@ -317,7 +319,7 @@ if __name__ == '__main__':
 
     _, _, _, num_classes, input_size = get_dataset(args.dataset, args.data_aug,
                                                    args.target_set_ratio,
-                                                   args.train_test_ratio)
+                                                   args.train_test_ratio, args.shuffle_seed)
     dataset_to_attack = ConcatDataset([target_trainset, target_testset])
     target_membership = np.concatenate([np.ones(len(target_trainset)), np.zeros(len(target_testset))])
 
