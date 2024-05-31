@@ -16,8 +16,8 @@ import pandas as pd
 import utils
 import sys
 from tqdm import tqdm
-sys.path.append(os.path.join(os.getcwd(), "..", "..", ".."))
-from MIAE.miae.eval_methods.prediction import Predictions, pred_tp_intersection, multi_seed_ensemble
+sys.path.append(os.path.join(os.getcwd(), "..", ".."))
+from miae.eval_methods.prediction import Predictions, pred_tp_intersection, multi_seed_ensemble
 
 def load_and_create_predictions(attack: List[str], dataset: str, architecture: str, data_path: str, seeds: List[int] = None,
                                 ) -> Dict[str, List[Predictions]]:
