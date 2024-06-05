@@ -175,6 +175,44 @@ def intersection_tp(preds: List[Predictions], fpr=None):
     """
     return _common_tp(preds, fpr, set_op="intersection")
 
+def _common_fp(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):
+    """
+    Find the union/intersection false positive samples among the predictions.
+    Note that this is used for both different attacks or the same attack with different seeds.
+
+    :param preds: list of Predictions
+    :param fpr: FPR values for adjusting the predictions
+    :param threshold: threshold for converting predictions to binary labels (only used when not using fpr)
+
+    :return: common false positive samples
+    """
+    if fpr is None:
+        FP = [np.where((pred.predictions_to_labels(threshold) == 1) & (pred.ground_truth_arr == 0))[0] for pred in preds]
+    else:
+        adjusted_preds = [pred.adjust_fpr(fpr) for pred in preds]
+        FP = [np.where((adjusted_preds[i] == 1) & (preds[i].ground_truth_arr == 0))[0] for i in range(len(preds))]
+    common_FP = set(FP[0])
+    if len(FP) < 2:
+        return common_FP
+    for i in range(1, len(FP)):
+        if set_op == "union":
+            common_FP = common_FP.union(set(FP[i]))
+        elif set_op == "intersection":
+            common_FP = common_FP.intersection(set(FP[i]))
+    return common_FP
+
+def union_fp(preds: List[Predictions], fpr=None):
+    """
+    Find the union false positive samples among the predictions, it's a wrapper for common_fp
+    """
+    return _common_fp(preds, fpr, set_op="union")
+
+def intersection_fp(preds: List[Predictions], fpr=None):
+    """
+    Find the intersection false positive samples among the predictions, it's a wrapper for common_fp
+    """
+    return _common_fp(preds, fpr, set_op="intersection")
+
 
 def _common_pred(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):
     """
