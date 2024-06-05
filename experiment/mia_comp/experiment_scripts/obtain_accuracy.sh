@@ -4,10 +4,10 @@
 #datasets=("cifar10" "cifar100")
 #archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
 datasets=("cifar10")
-archs=("resnet56" "wrn32_4")
+archs=("resnet56")
 mias=("losstraj" "shokri" "yeom" "lira" "aug")
 processopt=("union" "intersection" "avg")
-seeds=(0 1 2 3)
+seeds=(0 1 2 3 4 5)
 fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 
 # Prepare the parameter lists for the experiment
@@ -31,8 +31,11 @@ for opt in "${processopt[@]}"; do
     optlist+="${opt} "
 done
 
-experiment_dir="/home/public/comp_mia_data/miae_experiment_aug_more_target_data"
-accuracy_dir="$experiment_dir/accuracy"
+#experiment_dir="/home/public/comp_mia_data/miae_experiment_aug_more_target_data"
+#accuracy_dir="$experiment_dir/accuracy"
+experiment_dir="/home/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_3"
+tmp_dir="/home/public/comp_mia_data"
+accuracy_dir="$tmp_dir/repeat_accuracy3"
 mkdir -p "$accuracy_dir"
 
 
