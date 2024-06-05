@@ -59,7 +59,6 @@ class ShokriAuxiliaryInfo(AuxiliaryInfo):
         self.num_shadow_models = config.get("num_shadow_models", 4)
         self.num_shadow_epochs = config.get("num_shadow_epochs", self.epochs)
         self.shadow_batch_size = config.get("shadow_batch_size", self.batch_size)
-        self.shadow_lr = config.get("shadow_lr", self.batch_size)
         self.shadow_train_ratio = config.get("shadow_train_ratio", 0.5)  # 0.5 for a balanced prior for membership
 
         # -- attack model parameters --
@@ -175,6 +174,9 @@ class ShokriAttack(MiAttack):
 
         # create shadow datasets
         sub_shadow_dataset_list = ShokriUtil.split_dataset(auxiliary_dataset, self.auxiliary_info.num_shadow_models)
+        # log/print the shadow dataset sizes
+        ShokriUtil.log(self.auxiliary_info, f"Shadow dataset[0] size: {sub_shadow_dataset_list[0].__len__()}")
+
 
         # step 1: train shadow models
         if not os.path.exists(self.auxiliary_info.attack_dataset_path):
@@ -195,6 +197,7 @@ class ShokriAttack(MiAttack):
                 test_len = len(sub_shadow_dataset_list[i]) - train_len
                 shadow_train_dataset, shadow_test_dataset = torch.utils.data.random_split(sub_shadow_dataset_list[i],
                                                                                           [train_len, test_len])
+
 
                 shadow_train_loader = DataLoader(shadow_train_dataset, batch_size=self.auxiliary_info.shadow_batch_size,
                                                  shuffle=True)

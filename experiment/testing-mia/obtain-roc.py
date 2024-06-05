@@ -14,7 +14,7 @@ import sys
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 from miae.utils.set_seed import set_seed
-from miae.attacks import losstraj_mia, merlin_mia, lira_mia, aug_mia, calibration_mia
+from miae.attacks import losstraj_mia, merlin_mia, lira_mia, aug_mia, calibration_mia, shokri_mia
 from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
 from experiment import models
@@ -142,6 +142,7 @@ def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data_to_attac
     target_arr = np.array(target_list)
     np.save(os.path.join(attack_pred_save_dir, 'id_of_prediction.npy'), id_arr)
     np.save(os.path.join(attack_pred_save_dir, 'target_of_prediction.npy'), target_arr)
+    np.save(os.path.join(attack_pred_save_dir, 'membership.npy'), membership)
 
     predictions = []
     attacks_names = []
@@ -210,13 +211,19 @@ def main():
 
     # -- STEP 2: prepare the attacks
     losstraj_aux_info = losstraj_mia.LosstrajAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/losstraj', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'distillation_epochs': attack_epochs})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/losstraj', 'num_classes': 10,
+             'batch_size': batch_size, 'lr': lr, 'distillation_epochs': attack_epochs})
     merlin_aux_info = merlin_mia.MerlinAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': batch_size})
     lira_aux_info = lira_mia.LiraAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/lira'})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size,
+             'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/lira'})
     aug_aux_info = aug_mia.AugAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/aug', 'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/aug'})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/aug', 'num_classes': 10, 'batch_size': batch_size,
+             'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/aug'})
+    shokri_aux_info = shokri_mia.ShokriAuxiliaryInfo(
+        {'num_shadow_models': 10, 'device': device, 'seed': seed, 'save_path': attack_dir + '/shokri', 'num_classes': 10, 'batch_size': batch_size,
+         'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir + '/shokri'})
     calibration_aux_info = calibration_mia.CalibrationAuxiliaryInfo(
         {'device': device, 'seed': seed, 'save_path': attack_dir + '/calibration', 'num_classes': 10, 'batch_size': batch_size,
          'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir + '/calibration'})
@@ -225,6 +232,7 @@ def main():
     merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model), untrained_target_model)
     lira_target_model_access = lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
     aug_target_model_access = aug_mia.AugModelAccess(deepcopy(target_model), untrained_target_model)
+    shokri_target_model_access = shokri_mia.ShokriModelAccess(deepcopy(target_model), untrained_target_model)
     calibration_target_model_access = calibration_mia.CalibrationModelAccess(deepcopy(target_model), untrained_target_model)
 
     attacks = [
@@ -232,8 +240,8 @@ def main():
         # merlin_mia.MerlinAttack(merlin_target_model_access, merlin_aux_info),
         # lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
         # aug_mia.augAttack(aug_target_model_access, aug_aux_info)
-        calibration_mia.CalibrationAttack(calibration_target_model_access, calibration_aux_info)
-
+        # calibration_mia.CalibrationAttack(calibration_target_model_access, calibration_aux_info)
+        shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info)
     ]
 
     # -- prepare the attacks
