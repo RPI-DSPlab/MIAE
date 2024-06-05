@@ -258,7 +258,7 @@ def multi_seed_ensemble(pred_list: List[Predictions], method, threshold: float =
     return Predictions(ensemble_pred, pred_list[0].ground_truth_arr, pred_name_ensemble)
 
 
-def pred_tp_set_op(pred_list: List[Predictions]) -> Predictions:
+def pred_tp_set_op(pred_list: List[Predictions]) -> (Predictions, Predictions):
     """
     Get the union and intersection of true positive predictions across different seeds of a single attack
     this is used for the Venn diagram
