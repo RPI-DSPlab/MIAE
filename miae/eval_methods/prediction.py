@@ -258,13 +258,13 @@ def multi_seed_ensemble(pred_list: List[Predictions], method, threshold: float =
     return Predictions(ensemble_pred, pred_list[0].ground_truth_arr, pred_name_ensemble)
 
 
-def pred_tp_intersection(pred_list: List[Predictions]) -> Predictions:
+def pred_tp_set_op(pred_list: List[Predictions]) -> Predictions:
     """
-    Get the common true positive predictions across different seeds of a single attack
+    Get the union and intersection of true positive predictions across different seeds of a single attack
     this is used for the Venn diagram
 
     :param pred_list: List of Predictions objects for the same attack but different seeds
-    :return: Predictions object containing only common true positives
+    :return: Predictions, Predictions for the union and intersection of true positive predictions
     """
     if len(pred_list) < 2:
         raise ValueError("At least 2 predictions are required for comparison.")
