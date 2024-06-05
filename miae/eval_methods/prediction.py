@@ -4,6 +4,10 @@ import numpy as np
 import torch
 from sklearn.metrics import balanced_accuracy_score, roc_curve
 
+FPR_SAMPLES = []
+for fpr in [10e-6, 10e-5, 10e-4, 10e-3, 10e-2, 10e-1, 10e0]:
+    FPR_SAMPLES.extend([i*fpr for i in range(1, 10)])
+
 
 def pred_normalization(pred: np.ndarray) -> np.ndarray:
     """
@@ -321,6 +325,44 @@ def unanimous_voting(pred_list: List[Predictions]) -> np.ndarray:
     unanimous_voted_labels = np.mean(labels_list, axis=0)
     unanimous_voted_labels = (unanimous_voted_labels == 1).astype(int)
     return unanimous_voted_labels
+
+def hard_label_ensembling_single_method(pred_list: List[Predictions], method: str, skip=2) -> List[Predictions]:
+    """
+    Hard label ensemble is when after ensemble, the prediction is either 0 or 1.
+    Single method refers to that we are comparing the same methods while incrementing number of preds to ensemble.
+
+    pred_list: List of Predictions of the same attack but different seeds.
+    method: method for ensemble the predictions, should be one of ["HC", "HP", "avg", "majority"]
+    """
+    ensemble_pred = []
+    for i in range(0, len(pred_list), skip):
+        ensemble_pred.append(multi_seed_ensemble(pred_list[:i + 1], method))
+        ensemble_pred[-1].name = f"num_attack_{i + 1}"
+    return ensemble_pred
+
+def hard_label_ensembling_multiple_methods(pred_list: List[Predictions], method: List[str]) -> List[Predictions]:
+    """
+    Hard label ensemble is when after ensemble, the prediction is either 0 or 1.
+    Multiple methods refers to that we are comparing different methods with all seeds.
+
+    """
+    ensemble_pred = []
+    for m in method:
+        ensemble_pred.append(multi_seed_ensemble(pred_list, m))
+        ensemble_pred[-1].name = f"ensemble_{m}"
+    return ensemble_pred
+
+
+def sample_and_adjust_fpr(pred: Predictions) -> List[Predictions]:
+    """
+    Adjust the predictions to achieve a target FPR, and sample the predictions for different FPR values.
+    :param pred: List of Predictions of the same attack but different seeds.
+    :return: List of Predictions at different FPR values.
+    """
+    adjusted_preds_arr = [pred.adjust_fpr(fpr) for fpr in FPR_SAMPLES]
+    adjusted_preds = [Predictions(pred_arr, pred.ground_truth_arr, pred.name + f"_{i}") for i, pred_arr in enumerate(adjusted_preds_arr)]
+
+    return adjusted_preds
 
 def plot_auc(pred_list: List[List[Predictions]] | List[Predictions],
              name_list: List[str],
