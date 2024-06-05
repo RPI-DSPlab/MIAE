@@ -417,9 +417,13 @@ if __name__ == '__main__':
     # plot and save the graphs
     if args.graph_type == "venn" and len(args.seed) > 1:
         if args.graph_goal == "single_attack":
-            pred_list = pred_dict[args.single_attack_name][:3]
-            plot_venn(pred_list, [], args.graph_goal, args.graph_title, args.graph_path)
-            eval_metrics(pred_list, args.graph_path, args.graph_title, "None")
+            target_pred_list = pred_dict[args.single_attack_name]
+            for f in args.fpr:
+                adjusted_pred_list = venn_diagram.single_attack_process_for_venn(target_pred_list, f)
+                graph_title = args.graph_title + f" FPR = {f}"
+                graph_path = args.graph_path + f"_{f}"
+                plot_venn(adjusted_pred_list, [], args.graph_goal, graph_title, graph_path)
+                eval_metrics(adjusted_pred_list, graph_path, graph_title, "None")
         elif args.graph_goal == "common_tp":
             if args.threshold == 0:
                 fpr_list = [float(f) for f in args.fpr]
@@ -460,10 +464,12 @@ if __name__ == '__main__':
                 eval_metrics(pred_and_list, graph_path, graph_title, "intersection")
         else:
             raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
+
     elif args.graph_type == "venn" and len(args.seed) == 1:
         if args.graph_goal == "single_attack":
-            pred_list = pred_dict[args.single_attack_name][:3]
-            plot_venn(pred_list, [], args.graph_goal, args.graph_title, args.graph_path)
+            target_pred_list = pred_dict[args.single_attack_name]
+            adjusted_pred_list = [prediction.adjust_fpr(pred) for pred in target_pred_list][:3]
+            plot_venn(adjusted_pred_list, [], args.graph_goal, args.graph_title, args.graph_path)
         elif args.graph_goal == "common_tp":
             if args.threshold == 0:
                 fpr_list = [float(f) for f in args.fpr]

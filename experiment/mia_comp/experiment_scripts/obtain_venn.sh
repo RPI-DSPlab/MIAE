@@ -10,11 +10,11 @@
 #fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 
 datasets=("cifar10")
-archs=("resnet56" "wrn32_4")
+archs=("resnet56")
 mias=("losstraj" "shokri" "yeom" "lira" "aug")
 categories=("threshold" "single_attack" "fpr")
 subcategories=("common_tp" "pairwise")
-seeds=(0 1 2 3)
+seeds=(0 1 2 3 4 5)
 fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 
 # Prepare the parameter lists for the experiment
@@ -35,6 +35,7 @@ done
 
 
 experiment_dir="/home/public/comp_mia_data/miae_experiment_aug_more_target_data"
+#experiment_dir="/home/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_3"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 
@@ -47,6 +48,7 @@ else
 fi
 
 venn_dir="$graph_dir/venn"
+#venn_dir="$graph_dir/venn3"
 mkdir -p "$venn_dir"
 if [ -d "$venn_dir" ]; then
     echo "Successfully created directory '$venn_dir'."
@@ -123,14 +125,13 @@ for category in "${categories[@]}"; do
                     # run the experiment
                     graph_title="$dataset, $arch, $mia"
                     graph_path="${plot_dir}/venn_${mia}"
-                    fpr_tmp_list="0.0 0.0 0.0"
                     python obtain_graphs.py --dataset "$dataset" \
                                                     --architecture "$arch" \
                                                     --attacks ${mialist} \
                                                     --data_path "$experiment_dir" \
                                                     --single_attack_name "$mia" \
                                                     --threshold "0" \
-                                                    --fpr ${fpr_tmp_list} \
+                                                    --fpr ${fprlist} \
                                                     --graph_type "venn" \
                                                     --graph_goal "single_attack" \
                                                     --graph_title "$graph_title" \
