@@ -56,7 +56,7 @@ class ShokriAuxiliaryInfo(AuxiliaryInfo):
         self.momentum = config.get("momentum", 0.9)
         self.weight_decay = config.get("weight_decay", 0.0001)
         # -- Shadow model parameters --
-        self.num_shadow_models = config.get("num_shadow_models", 4)
+        self.num_shadow_models = config.get("num_shadow_models", 10)
         self.num_shadow_epochs = config.get("num_shadow_epochs", self.epochs)
         self.shadow_batch_size = config.get("shadow_batch_size", self.batch_size)
         self.shadow_train_ratio = config.get("shadow_train_ratio", 0.5)  # 0.5 for a balanced prior for membership

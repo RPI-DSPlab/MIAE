@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from venn import venn
 from matplotlib_venn import venn3_unweighted, venn3, venn2_unweighted, venn2
 
-from MIAE.miae.eval_methods.prediction import Predictions, pred_tp_intersection
+from MIAE.miae.eval_methods.prediction import Predictions, pred_tp_set_op
 
 
 def plot_venn_single(pred_list: List[Predictions], graph_title: str, save_path: str):
@@ -110,7 +110,7 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
         result_or = []
         result_and = []
         for attack, pred_obj_list in pred_dict.items():
-            common_tp_or, common_tp_and = pred_tp_intersection(pred_obj_list)
+            common_tp_or, common_tp_and = pred_tp_set_op(pred_obj_list)
             result_or.append(common_tp_or)
             result_and.append(common_tp_and)
 
@@ -128,7 +128,7 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
             adjusted_pred_dict[attack] = adjusted_pred_list
 
         for attack, adjusted_list in adjusted_pred_dict.items():
-            common_tp_or, common_tp_and = pred_tp_intersection(adjusted_list)
+            common_tp_or, common_tp_and = pred_tp_set_op(adjusted_list)
             result_or.append(common_tp_or)
             result_and.append(common_tp_and)
 

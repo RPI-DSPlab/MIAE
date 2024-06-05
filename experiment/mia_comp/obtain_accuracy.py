@@ -17,7 +17,7 @@ import utils
 import sys
 from tqdm import tqdm
 sys.path.append(os.path.join(os.getcwd(), "..", "..", ".."))
-from MIAE.miae.eval_methods.prediction import Predictions, pred_tp_intersection, multi_seed_ensemble
+from MIAE.miae.eval_methods.prediction import Predictions, pred_tp_set_op, multi_seed_ensemble
 
 def load_and_create_predictions(attack: List[str], dataset: str, architecture: str, data_path: str, seeds: List[int] = None,
                                 ) -> Dict[str, List[Predictions]]:
@@ -55,7 +55,7 @@ def data_process(pred_dict: Dict[str, List[Predictions]], process_opts: List[str
     pred_dict_processed = {opt: [] for opt in process_opts}
 
     for attack, pred_list in pred_dict.items():
-        pred_union, pred_intersection = pred_tp_intersection(pred_list)
+        pred_union, pred_intersection = pred_tp_set_op(pred_list)
         pred_avg = multi_seed_ensemble(pred_list, "avg")
         pred_dict_processed["union"].append(pred_union)
         pred_dict_processed["intersection"].append(pred_intersection)

@@ -17,12 +17,12 @@ import numpy as np
 import pickle
 
 import sys
-import miae.eval_methods.sample_hardness
-
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
+
+import miae.eval_methods.sample_hardness
 import miae.eval_methods.prediction as prediction
 import miae.eval_methods.sample_hardness as SampleHardness
-import miae.visualization.venn_diagram as venn_diagram
+# import miae.visualization.venn_diagram as venn_diagram
 
 import miae.eval_methods.prediction
 import utils
