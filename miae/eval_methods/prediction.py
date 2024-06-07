@@ -1,8 +1,10 @@
-from typing import List
+import os
+from typing import List, Union, Tuple
 
 import numpy as np
 import torch
-from sklearn.metrics import balanced_accuracy_score, roc_curve
+from matplotlib import pyplot as plt
+from sklearn.metrics import balanced_accuracy_score, roc_curve, auc
 
 FPR_SAMPLES = []
 for fpr in [10e-6, 10e-5, 10e-4, 10e-3, 10e-2, 10e-1, 10e0]:
