@@ -1,26 +1,27 @@
-# This code implements the loss threshold based membership inference attack "Privacy Risk in Machine Learning:
-# Analyzing the Connection to Overfitting".
+# This code implements the Loss Attack with Difficalty Calibration in the paper  On the Importance of Difficulty
+# Calibration in Membership Inference Attacks
 # The code is based on the code from
-# https://github.com/TinfoilHat0/MemberInference-by-LossThreshold
+# https://github.com/facebookresearch/calibration_membership/tree/e2fde52aa67833bdba0f97a9a3b55a7500a273c9
 import logging
 import os
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, TensorDataset, Dataset, Subset
+from torch.utils.data import DataLoader, TensorDataset, Dataset, Subset, ConcatDataset
 from sklearn.metrics import roc_curve
 from tqdm import tqdm
 import torch.nn as nn
 import torch.nn.functional as F
+from sklearn.metrics import accuracy_score
 
 from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils
 from miae.utils.set_seed import set_seed
 from miae.utils.dataset_utils import dataset_split
 
 
-class YeomAuxiliaryInfo(AuxiliaryInfo):
+class CalibrationAuxiliaryInfo(AuxiliaryInfo):
     """
-    The auxiliary information for the Yeom attack.
+    The auxiliary information for the Calibration attack.
     """
 
     def __init__(self, config, attack_model=None):
@@ -35,31 +36,31 @@ class YeomAuxiliaryInfo(AuxiliaryInfo):
         self.batch_size = config.get("batch_size", 128)
         self.num_classes = config.get("num_classes", 10)
         self.lr = config.get("lr", 0.001)
+        # note that aux model in this attack is equivalent to the definition of shadow model
+        self.num_aux = config.get("num_aux", 1)  # number of auxiliary model, aux model is the model g in the paper
         self.num_shadow_epochs = config.get("epochs", 100)
         self.momentum = config.get("momentum", 0.9)
         self.weight_decay = config.get("weight_decay", 0.0001)
         self.num_classes = config.get("num_classes", 10)
-        self.shadow_train_ratio = config.get("shadow_train_ratio", 0.8)
-        # note that since this shadow model is just used to obtain the loss threshold, so there is no need to
-        # have a balanced train and test partition
+        self.shadow_train_ratio = config.get("shadow_train_ratio", 0.5)
 
         # -- other parameters --
-        self.save_path = config.get("save_path", "yeom")
+        self.save_path = config.get("save_path", "calibration")
         self.device = config.get("device", 'cuda' if torch.cuda.is_available() else 'cpu')
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
         if self.log_path is not None:
-            self.logger = logging.getLogger('yeom_logger')
+            self.logger = logging.getLogger('calibration_logger')
             self.logger.setLevel(logging.INFO)
-            fh = logging.FileHandler(self.log_path + '/yeom.log')
+            fh = logging.FileHandler(self.log_path + '/calibration.log')
             fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
             self.logger.addHandler(fh)
 
 
-class YeomModelAccess(ModelAccess):
+class CalibrationModelAccess(ModelAccess):
     """
-    Implementation of model access for Yeom attack.
+    Implementation of model access for Calibration attack.
     """
 
     def __init__(self, model, untrained_model, access_type: ModelAccessType = ModelAccessType.BLACK_BOX):
@@ -71,66 +72,39 @@ class YeomModelAccess(ModelAccess):
         super().__init__(model, untrained_model, access_type)
 
 
-class YeomUtil(MIAUtils):
+class CalibrationUtil(MIAUtils):
 
     @classmethod
-    def get_loss_n_accuracy(cls, model, data_loader, num_classes, aux_info: YeomAuxiliaryInfo):
+    def get_loss(cls, dataset: Dataset, model, device="cpu") -> np.ndarray:
         """
-        Returns loss/acc, and per-class loss/accuracy on supplied data loader
-        model: model to evaluate
-        data_loader: data loader to evaluate
-        num_classes: number of classes in the dataset
-        aux_info: auxiliary information of Yeom
+        Get the loss of the dataset from the model.
+
+        dataset: the dataset to get the loss (data, label).
+        model: the model to calculate the loss.
+        device: the device model and data shall be on
+
+        return: the loss of each dataset the dataset.
         """
 
-        with torch.inference_mode():
-            # disable BN stats during inference
-            model.eval()
-            total_loss, correctly_labeled_samples = 0, 0
-            confusion_matrix = torch.zeros(num_classes, num_classes)
-            per_class_loss = torch.zeros(num_classes, device=aux_info.device)
-            per_class_ctr = torch.zeros(num_classes, device=aux_info.device)
+        model.eval()
+        model.to(device)
+        loss = []
+        for data, label in tqdm(dataset, desc="Calculating loss"):
+            data = data.unsqueeze(0)
+            label = torch.tensor([label]).to(device)
+            output = model(data.to(device))
+            loss.append(F.cross_entropy(output, label).item())
 
-            criterion = torch.nn.CrossEntropyLoss(reduction='none').to(aux_info.device)
-            for _, (inputs, labels) in enumerate(data_loader):
-                inputs, labels = inputs.to(device=aux_info.device, non_blocking=True), \
-                    labels.to(device=aux_info.device, non_blocking=True)
+        return np.array(loss)
 
-                outputs = model(inputs)
-                losses = criterion(outputs, labels)
-                # keep track of total loss
-                total_loss += losses.sum()
-                # get num of correctly predicted inputs in the current batch
-                _, pred_labels = torch.max(outputs, 1)
-                pred_labels = pred_labels.view(-1)
-                correctly_labeled_samples += torch.sum(torch.eq(pred_labels, labels)).item()
-
-                # per-class acc (filling confusion matrix)
-                for t, p in zip(labels.view(-1), pred_labels.view(-1)):
-                    confusion_matrix[t.long(), p.long()] += 1
-                # per-class loss
-                for i in range(num_classes):
-                    filt = labels == i
-                    per_class_loss[i] += losses[filt].sum()
-                    per_class_ctr[i] += filt.sum()
-
-            loss = total_loss / len(data_loader.dataset)
-            loss = int(loss.cpu().item())
-            accuracy = correctly_labeled_samples / len(data_loader.dataset)
-            per_class_accuracy = confusion_matrix.diag() / confusion_matrix.sum(1)
-            per_class_loss = per_class_loss / per_class_ctr
-
-            return (loss, accuracy), (per_class_accuracy, per_class_loss)
-
-
-class YeomAttack(MiAttack):
+class CalibrationAttack(MiAttack):
     """
-    Implementation of the Yeom attack.
+    Implementation of the Calibration attack.
     """
 
-    def __init__(self, target_model_access: YeomModelAccess, aux_info: YeomAuxiliaryInfo, target_data=None):
+    def __init__(self, target_model_access: CalibrationModelAccess, aux_info: CalibrationAuxiliaryInfo, target_data=None):
         """
-        Initialize the Yeom attack with model access and auxiliary information.
+        Initialize the Calibration attack with model access and auxiliary information.
         :param target_model_access: the model access to the target model.
         :param aux_info: the auxiliary information for the Shokri attack.
         :param target_data: the target data for the Shokri attack.
@@ -138,6 +112,7 @@ class YeomAttack(MiAttack):
         super().__init__(target_model_access, aux_info)
         self.aux_info = aux_info
         self.target_model_access = target_model_access
+        self.shadow_model = None  # this is the shadow model
         self.threshold = None  # this is the loss threshold for the attack
 
         self.prepared = False  # this flag indicates whether the attack has been prepared
@@ -163,21 +138,32 @@ class YeomAttack(MiAttack):
         train_set, test_set = dataset_split(auxiliary_dataset, [train_set_len, test_set_len])
 
         # train the shadow model
-        shadow_model = self.target_model_access.untrained_model
+        self.shadow_model = self.target_model_access.untrained_model
         if os.path.exists(self.aux_info.save_path + '/shadow_model.pth'):
-            shadow_model = torch.load(self.aux_info.save_path + '/shadow_model.pth')
+            self.shadow_model = torch.load(self.aux_info.save_path + '/shadow_model.pth')
         else:
             trainloader = DataLoader(train_set, batch_size=self.aux_info.batch_size, shuffle=True, num_workers=2)
             testloader = DataLoader(test_set, batch_size=self.aux_info.batch_size, shuffle=False, num_workers=2)
 
-            shadow_model = YeomUtil.train_shadow_model(shadow_model, trainloader, testloader, self.aux_info)
-            torch.save(shadow_model, self.aux_info.save_path + '/shadow_model.pth')
+            self.shadow_model = CalibrationUtil.train_shadow_model(self.shadow_model, trainloader, testloader, self.aux_info)
+            torch.save(self.shadow_model, self.aux_info.save_path + '/shadow_model.pth')
 
-        # get the loss threshold
-        train_loader = DataLoader(train_set, batch_size=self.aux_info.batch_size, shuffle=False, num_workers=2)
-        (self.threshold, _), _ = YeomUtil.get_loss_n_accuracy(shadow_model, train_loader, self.aux_info.num_classes,
-                                                              self.aux_info)
+        # get the loss values of aux set (public set) from shadow model (auxiliary model) and target model
+        recombined_aux_set = ConcatDataset([train_set, test_set])  # make sure the order aligned with membership is correct
+        shadow_model_loss = CalibrationUtil.get_loss(recombined_aux_set, self.shadow_model, self.aux_info.device)
+        target_model_loss = CalibrationUtil.get_loss(recombined_aux_set, self.target_model_access.model, self.aux_info.device)
 
+        calibrated_loss = target_model_loss - shadow_model_loss
+        membership_label = np.concatenate([np.ones(len(train_set)), np.zeros(len(test_set))])
+
+        # calculate the threshold
+        thresholds = np.linspace(min(calibrated_loss), max(calibrated_loss), 1000)
+        accuracies = []
+        for threshold in thresholds:
+            pred = calibrated_loss > threshold
+            accuracies.append(accuracy_score(membership_label, pred))
+
+        self.threshold = thresholds[np.argmax(accuracies)]
 
         self.prepared = True
 
@@ -193,13 +179,10 @@ class YeomAttack(MiAttack):
         # load the attack models
         target_data_loader = DataLoader(target_data, batch_size=self.aux_info.batch_size, shuffle=False, num_workers=2)
         self.target_model_access.to_device(self.aux_info.device)
-        for data, _ in target_data_loader:
-            data = data.to(self.aux_info.device)
-            with torch.no_grad():
-                outputs = self.target_model_access.model(data)
-                losses = F.cross_entropy(outputs, torch.argmax(outputs, dim=1), reduction='none')
-                losses = losses.cpu().numpy()
-                losses_threshold_diff += (losses - self.threshold).tolist()
+        shadow_model_loss = CalibrationUtil.get_loss(target_data, self.shadow_model, self.aux_info.device)
+        target_model_loss = CalibrationUtil.get_loss(target_data, self.target_model_access, self.aux_info.device)
+        calibrated_loss = target_model_loss - shadow_model_loss
+        losses_threshold_diff = calibrated_loss - self.threshold
 
         # for the purpose of obtaining the prediction as a score, we couldn't just use the boolean value of the
         # losses_threshold_diff, but we need to normalize the value to [0, 1]

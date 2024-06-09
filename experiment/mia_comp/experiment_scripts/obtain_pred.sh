@@ -7,16 +7,16 @@ fi
 
 echo "obtain_pred.sh seed = $seed"
 
-data_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data/shadow_target_model_and_data"
+data_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_3/target"
 
-preds_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data/preds_sd${seed}_ensemble_base"
+preds_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_3/preds_sd${seed}"
 mkdir -p "$preds_dir"
 
 
-#datasets=("cifar10" "cifar100")
+#datasets=("cifar10" "cifar100" "cinic10")
 datasets=("cifar10")
 #archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-archs=("resnet56" )
+archs=("resnet56")
 mias=("losstraj" "shokri" "yeom" "aug" "lira")
 
 prepare_path="/data/public/prepare_sd${seed}"

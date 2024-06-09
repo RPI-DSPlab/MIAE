@@ -1,12 +1,14 @@
 # This script is used to partition the dataset into target dataset and shadow dataset, then train the target model
 seed=0
-data_dir="/data/public/miae_experiment_aug/target"
+# for repeat training, we do shuffle_seed from 2 to 5
+shuffle_seed=4
+data_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_3/target"
 mkdir -p "$data_dir"
 
 
 #datasets=("cifar10" "cifar100" "cinic10")
-datasets=("cifar10" "cifar100")
-archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+datasets=("cifar10")
+archs=("resnet56")
 
 prepare_path="/data/public/prepare_sd${seed}"
 
@@ -42,6 +44,6 @@ for dataset in "${datasets[@]}"; do
       echo "Obtaining target_model for $dataset $arch"
       python3 obtain_pred.py --train_target_model "True" --dataset "$dataset" --target_model "$arch" \
        --seed "$seed" --delete-files "True" --data_aug "True"  --target_model_path "$target_model_save_path" \
-       --attack_epochs "$num_epoch" --target_epochs "$num_epoch" --data_path "$data_dir"
+       --attack_epochs "$num_epoch" --target_epochs "$num_epoch" --data_path "$data_dir" --shuffle_seed "$shuffle_seed"
     done
 done

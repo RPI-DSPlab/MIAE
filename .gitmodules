@@ -1,0 +1,6 @@
+[submodule "experiment/mia_comp/pyvenn"]
+	path = experiment/mia_comp/pyvenn
+	url = https://github.com/tctianchi/pyvenn.git
+[submodule "miae/visualization/pyvenn"]
+	path = miae/visualization/pyvenn
+	url = https://github.com/tctianchi/pyvenn.git

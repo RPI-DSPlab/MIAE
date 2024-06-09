@@ -1,14 +1,13 @@
-# add the pwd's  ../.. to the python path
-export PYTHONPATH=$(pwd)/../..
-experiment_dir='/data/public/comp_mia_data/miae_experiment_aug_more_target_data'
+experiment_dir='/data/public/miae_experiment_aug'
 
-plot_dir='/data/public/comp_mia_data/miae_experiment_aug_more_target_data/auc'
+
+plot_dir='/data/public/miae_experiment_aug/graphs/auc'
 
 datasets=("cifar10" "cifar100")
-archs=("resnet56" "wrn32_4")
-mias=("losstraj" "shokri" "yeom" "aug" "lira")
-#fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
-fprs=()
+archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+#mias=("losstraj" "shokri" "yeom" "lira")
+mias=("losstraj" "shokri" "yeom")
+fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 seeds=(0 1 2 3)
 
 # prepare the list of mias and fprs as arguments
@@ -44,6 +43,21 @@ for dataset in "${datasets[@]}"; do
                                   --graph_path "${graph_path}"\
                                   --architecture "${arch}"\
                                   --attacks ${mialist}\
-                                  --seed ${seedlist}
+                                  --fpr ${fprlist}\
+                                  --seed ${seedlist}\
+                                  --log_scale "True"
+
+        graph_title="auc for ${dataset} ${arch}"
+        graph_path="${plot_dir}/${dataset}/${arch}/auc_linear_scale"
+        python3 obtain_graphs.py --graph_type "auc"\
+                                  --dataset "${dataset}"\
+                                  --graph_title "${graph_title}"\
+                                  --data_path "${experiment_dir}"\
+                                  --graph_path "${graph_path}"\
+                                  --architecture "${arch}"\
+                                  --attacks ${mialist}\
+                                  --fpr ${fprlist}\
+                                  --seed ${seedlist}\
+                                  --log_scale "False"
     done
 done
