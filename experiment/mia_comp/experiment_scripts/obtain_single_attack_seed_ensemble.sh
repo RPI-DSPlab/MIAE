@@ -27,7 +27,7 @@ for dataset in "${datasets[@]}"; do
 
         # plot the graphs
         # common TP (intersection of all seeds)
-        graph_title="single seed ensemble ${dataset} ${arch}"
+        graph_title="single_seed_ensemble ${dataset} ${arch}"
         graph_path="${plot_dir}/${dataset}/${arch}/single_attack_seed_ensemble"
         python3 obtain_graphs.py --graph_type "single_attack_seed_ensemble"\
                                   --dataset "${dataset}"\

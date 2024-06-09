@@ -109,6 +109,14 @@ class ModelAccess(ABC):
     def __call__(self, data):
         return self.get_signal(data)
 
+    def to(self, device):
+        """
+        Move the model to the device.
+        :param device:
+        :return:
+        """
+        self.model.to(device)
+
     def to_device(self, device):
         """
         Move the model to the device.
