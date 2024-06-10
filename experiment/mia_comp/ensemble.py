@@ -16,6 +16,8 @@ import pickle
 import re
 import sys
 
+from torchvision.models import resnet18
+
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 import torch
@@ -60,7 +62,41 @@ class MetaModel(nn.Module):
         return x
 
 
-def mia_ensemble_stacking(base_preds: List[prediction.Predictions], gt: np.array):
+class LearningBasedMetaModel(nn.Module):
+    def __init__(self, cv_model: nn.Module, num_attack_predictions, fine_tune=True):
+        super(LearningBasedMetaModel, self).__init__()
+        self.cv_model = cv_model
+
+        if not fine_tune:
+            for param in self.resnet.parameters():
+                param.requires_grad = False
+
+        self.resnet.fc = nn.Identity()
+
+        # Fully connected layers for combining image features and attack predictions
+        self.fc1 = nn.Linear(512 + num_attack_predictions, 256)
+        self.fc2 = nn.Linear(256, 128)
+        self.fc3 = nn.Linear(128, 2)  # output_dim=2: membership prediction is binary
+
+    def forward(self, image, attack_predictions):
+        image_features = self.cv_model(image)
+
+        # Concatenate image features with attack predictions
+        combined_features = torch.cat((image_features, attack_predictions), dim=1)
+
+        # Fully connected layers
+        x = torch.relu(self.fc1(combined_features))
+        x = torch.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
+
+
+
+
+
+
+
+def mia_ensemble_stacking_prepare(base_preds: List[prediction.Predictions], gt: np.array):
     """
     This function ensembles the predictions of the base models using stacking
 
@@ -109,6 +145,49 @@ def mia_ensemble_avg(base_preds: List[prediction]):
     ensemble_preds /= num_base_model
 
     return ensemble_preds
+
+
+def mia_learning_based_ensemble_prepare(aux_set, base_preds: List[prediction.Predictions], gt: np.array, cv_model_choice: str = "pretrained_resnet18"):
+    """
+    This function prepare to ensemble the predictions of the base models using a learning-based approach
+
+    :param aux_set: auxiliary set used to train the learning-based meta model
+    :param base_preds: List of predictions of the base models
+    :param gt: Ground truth labels
+    :param cv_model_choice: choice of the convolutional model to use for the learning-based meta model [pretrained_resnet18]
+    """
+
+    # Prepare the features for the meta model
+    num_attack_predictions = len(base_preds)
+    base_preds_stacked = torch.stack([torch.from_numpy(p.pred_arr).float() for p in base_preds], dim=1)
+    meta_labels = torch.tensor(gt, dtype=torch.long)
+
+    # Prepare the image features for the meta model
+    images = []
+    for data in aux_set:
+        images.append(data[0])
+    images = torch.stack(images)
+
+    # Train the learning-based meta model
+    cv_model = resnet18(pretrained=True)
+    meta_model = LearningBasedMetaModel(cv_model, num_attack_predictions, fine_tune=True)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(meta_model.parameters(), lr=0.001)
+    for epoch in range(100):
+        optimizer.zero_grad()
+        outputs = meta_model(images, base_preds_stacked)
+        loss = criterion(outputs, meta_labels)
+        loss.backward()
+        optimizer.step()
+        if epoch % 10 == 0:
+            # calculate training accuracy
+            _, predicted = torch.max(outputs, 1)
+            total = meta_labels.size(0)
+            correct = (predicted == meta_labels).sum().item()
+            print(f"Epoch {epoch}, Loss: {loss.item()}, Accuracy: {100 * correct / total}")
+
+    return meta_model
+
 
 
 # --------------------- helping functions -----------------------------------------
@@ -160,7 +239,8 @@ def read_preds(preds_path: str, extend_name: str, sds: List[int], dataset: str, 
     return ret_list
 
 
-def prepare_ensemble(preds_on_shadow_target: List[prediction.Predictions], gt, ensemble_method: str, save_path: str):
+def prepare_ensemble(preds_on_shadow_target: List[prediction.Predictions], gt, ensemble_method: str, save_path: str,
+                     aux_set):
     """
     prepare_ensemble prepares a ensemble and save the ensemble model if needed
 
@@ -172,8 +252,11 @@ def prepare_ensemble(preds_on_shadow_target: List[prediction.Predictions], gt, e
     if ensemble_method == "avg":
         print("NO need to prepare for avg")
     elif ensemble_method == "stacking":
-        meta_model = mia_ensemble_stacking(preds_on_shadow_target, gt)
+        meta_model = mia_ensemble_stacking_prepare(preds_on_shadow_target, gt)
         torch.save(meta_model, save_path + "/stacking_meta_model.pth")
+    elif ensemble_method == "learning_based_cnn_pretrained":
+        meta_model = mia_learning_based_ensemble_prepare(aux_set, preds_on_shadow_target, gt)
+        torch.save(meta_model, save_path + "/learning_based_meta_model.pth")
     else:
         raise ValueError("Invalid ensemble method")
 
@@ -196,6 +279,14 @@ def run_ensemble(base_preds: List[prediction.Predictions], dataset_to_attack: Da
         meta_model = torch.load(ensemble_save_path + "/stacking_meta_model.pth")
         meta_features = torch.stack([torch.from_numpy(p.pred_arr).float() for p in base_preds], dim=1)
         ensemble_preds = meta_model(meta_features).detach().numpy()
+    elif ensemble_method == "learning_based_cnn_pretrained":
+        meta_model = torch.load(ensemble_save_path + "/learning_based_meta_model.pth")
+        base_preds_stacked = torch.stack([torch.from_numpy(p.pred_arr).float() for p in base_preds], dim=1)
+        images = []
+        for data in dataset_to_attack:
+            images.append(data[0])
+        images = torch.stack(images)
+        ensemble_preds = meta_model(images, base_preds_stacked).detach().numpy()
     else:
         raise ValueError("Invalid ensemble method")
 
@@ -271,11 +362,11 @@ if __name__ == "__main__":
                         help='Save path for the predictions (both shadow preds and base preds)')
     parser.add_argument("--ensemble_seeds", type=int, nargs="+", help="Random seed")
     parser.add_argument("--attacks", type=str, nargs="+", default=None,
-                        help='MIA type: [losstraj, yeom, shokri, aug, lira]')
+                        help='MIA type: [losstraj, yeom, shokri, aug, lira, calibration]')
     parser.add_argument("--ensemble_save_path", type=str, help="Path to save the ensemble files (ie: meta model)")
     parser.add_argument('--shadow_target_data_path', type=str,
                         help='Save path for shadow target data, ground truth, etc')
-    parser.add_argument('--ensemble_method', type=str, help='Ensemble method [avg, stacking]')
+    parser.add_argument('--ensemble_method', type=str, help='Ensemble method [avg, stacking, learning_based_cnn_pretrained]')
     # ---- run ensemble arguments ----
     parser.add_argument('--target_data_path', type=str, help='path to target data')
     parser.add_argument('--ensemble_result_path', type=str, help='path to save the ensemble pred result')
@@ -351,14 +442,15 @@ if __name__ == "__main__":
         save_path = os.path.join(args.ensemble_save_path, "single_seed")
         if not os.path.exists(save_path):
             os.makedirs(save_path)
-        prepare_ensemble(preds_on_shadow_target_list, membership, args.ensemble_method, save_path)
+
+        prepare_ensemble(preds_on_shadow_target_list, membership, args.ensemble_method, save_path, aux_set)
 
         # prepare the ensemble (multi-seed)
         preds_on_shadow_target_list = multi_seed_avg(shadow_target_preds)
         save_path = os.path.join(args.ensemble_save_path, "multi_seed")
         if not os.path.exists(save_path):
             os.makedirs(save_path)
-        prepare_ensemble(preds_on_shadow_target_list, membership, args.ensemble_method, save_path)
+        prepare_ensemble(preds_on_shadow_target_list, membership, args.ensemble_method, save_path, aux_set)
 
     elif args.mode == "run_ensemble":
         # read the predictions
