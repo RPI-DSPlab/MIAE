@@ -9,6 +9,7 @@ Work flow:
 import argparse
 import os
 import torch
+from torch.utils import data
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from typing import List
 import numpy as np
@@ -27,7 +28,23 @@ from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
 from experiment import models
 from experiment.mia_comp import datasets
+from torchvision import transforms
 
+# adding mia that's not in MIAE package
+from experiment.mia_comp.same_attack_different_signal import top_k_shokri_mia
+
+
+class CINIC10(data.Dataset):
+    def __init__(self, image_folder):
+        self.image_folder = image_folder
+        self.transform = transforms.Compose([transforms.ToTensor()])
+
+    def __len__(self):
+        return len(self.image_folder)
+
+    def __getitem__(self, idx):
+        img, label = self.image_folder[idx]
+        return (self.transform(img), label)
 
 def get_dataset(datset_name, aug, targetset_ratio, train_test_ratio, shuffle_seed=1) -> tuple:
     """
@@ -48,11 +65,13 @@ def get_dataset(datset_name, aug, targetset_ratio, train_test_ratio, shuffle_see
         num_classes = 100
         input_size = 32
     elif datset_name == "cinic10":
-        dataset = datasets.get_cinic10(aug)
         num_classes = 10
         input_size = 32
     else:
         raise ValueError("Invalid dataset")
+
+    if datset_name == "cinic10":  # cinci10 requires manual loading
+        return None, None, None, num_classes, input_size
 
     # prepare the shadow set and target set
     target_len = int(len(dataset) * targetset_ratio)
@@ -155,6 +174,8 @@ def get_target_model_access(args, target_model, untrained_target_model) -> mia_b
         return yeom_mia.YeomModelAccess(deepcopy(target_model), untrained_target_model)
     if args.attack == "shokri":
         return shokri_mia.ShokriModelAccess(deepcopy(target_model), untrained_target_model)
+    if args.attack == "top_k_shokri":
+        return top_k_shokri_mia.TopKShokriModelAccess(deepcopy(target_model), untrained_target_model)
     if args.attack == "lira":
         return lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
     if args.attack == "aug":
@@ -190,6 +211,12 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
         return shokri_mia.ShokriAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+    if args.attack == "top_k_shokri":
+        return top_k_shokri_mia.TopKShokriAuxiliaryInfo(
+            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
+             'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path,
+             'top_k': 1})
+
     if args.attack == "lira":
         return lira_mia.LiraAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
@@ -219,6 +246,8 @@ def get_attack(args, aux_info: mia_base.AuxiliaryInfo, target_model_access: mia_
         return calibration_mia.CalibrationAttack(target_model_access, aux_info)
     if args.attack == "shokri":
         return shokri_mia.ShokriAttack(target_model_access, aux_info)
+    if args.attack == "top_k_shokri":
+        return top_k_shokri_mia.TopKShokriAttack(target_model_access, aux_info)
     if args.attack == "lira":
         return lira_mia.LiraAttack(target_model_access, aux_info)
     if args.attack == "aug":
@@ -247,7 +276,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_target_model', type=bool, default=False, help='whether to train the target model')
 
     # mandatory arguments
-    parser.add_argument('--attack', type=str, default=None, help='MIA type: [losstraj, yeom, shokri ,lira, aug, calibration]')
+    parser.add_argument('--attack', type=str, default=None, help='MIA type: [losstraj, yeom, shokri ,lira, aug, calibration, top_k_shokri]')
     parser.add_argument('--target_model', type=str, default=None,
                         help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet]')
     parser.add_argument('--dataset', type=str, default=None, help='dataset: [cifar10, cifar100, cinic10]')
