@@ -44,11 +44,11 @@ def dataset_split(dataset, lengths: list, shuffle_seed=1):
     :param lengths: the lengths of each subset.
     :param shuffle_seed: the seed for shuffling the dataset.
     """
+    np.random.seed(shuffle_seed)
     if sum(lengths) != len(dataset):
         raise ValueError("Sum of input lengths does not equal the length of the input dataset!")
 
     indices = list(range(sum(lengths)))
-    np.random.seed(shuffle_seed)
     np.random.shuffle(indices)
     return [torch.utils.data.Subset(dataset, indices[offset - length:offset]) for offset, length in
             zip(torch._utils._accumulate(lengths), lengths)]
