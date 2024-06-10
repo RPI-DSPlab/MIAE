@@ -77,7 +77,6 @@ def get_dataset(datset_name, aug, targetset_ratio, train_test_ratio, shuffle_see
     target_len = int(len(dataset) * targetset_ratio)
     shadow_len = len(dataset) - target_len
     target_set, aux_set = dataset_utils.dataset_split(dataset, [target_len, shadow_len], shuffle_seed)
-
     target_trainset, target_testset = dataset_utils.dataset_split(target_set,
                                                                   [int(len(target_set) * train_test_ratio),
                                                                    len(target_set) - int(
@@ -157,7 +156,8 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
 
     # save the target model
     torch.save(target_model.state_dict(),
-               os.path.join(args.target_model_path, "target_model_" + args.target_model + args.dataset + ".pkl"))
+               os.path.join(arg.target_model_path, "target_model_" + arg.target_model + arg.dataset + ".pkl"))
+    return target_model
 
 
 def get_target_model_access(args, target_model, untrained_target_model) -> mia_base.ModelAccess:
@@ -215,7 +215,7 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
         return top_k_shokri_mia.TopKShokriAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path,
-             'top_k': 1})
+             'top_k': 3})
 
     if args.attack == "lira":
         return lira_mia.LiraAuxiliaryInfo(
@@ -300,7 +300,6 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=512, help='batch size')
     parser.add_argument('--num_workers', type=int, default=2, help='number of workers')
     parser.add_argument('--device', type=str, default='cuda', help='device to train the model')
-
     args = parser.parse_args()
 
     # set seed
