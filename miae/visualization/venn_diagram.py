@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from venn import venn
 from matplotlib_venn import venn3_unweighted, venn3, venn2_unweighted, venn2
 
-from miae.eval_methods.prediction import Predictions, pred_tp_intersection
+from miae.eval_methods.prediction import Predictions, union_pred, intersection_pred, pred_tp_intersection
 
 def find_pairwise_preds(pred_list: List[Predictions]) -> List[Tuple[Predictions, Predictions]]:
     """
@@ -137,7 +137,7 @@ def single_seed_process_for_venn(pred_dict: Dict[str, List[Predictions]], thresh
         result = []
         for attack, pred_obj_list in pred_dict.items():
             adjusted_pred_arr = pred_obj_list[0].adjust_fpr(target_fpr)
-            name = pred_obj_list[0].name.split('_')[0]
+            name = pred_obj_list[0].name.rsplit('_', 1)[0]
             adjusted_pred_obj = Predictions(adjusted_pred_arr, pred_obj_list[0].ground_truth_arr, name)
             result.append(adjusted_pred_obj)
     else:
@@ -156,8 +156,7 @@ def single_attack_process_for_venn(pred_list: List[Predictions], target_fpr: flo
         result = []
         for pred in pred_list:
             adjusted_pred_arr = pred.adjust_fpr(target_fpr)
-            name = pred.name.split('_')[0]
-            adjusted_pred_obj = Predictions(adjusted_pred_arr, pred.ground_truth_arr, name)
+            adjusted_pred_obj = Predictions(adjusted_pred_arr, pred.ground_truth_arr, pred.name)
             result.append(adjusted_pred_obj)
     else:
         raise ValueError("Target_fpr should be provided.")
@@ -198,6 +197,36 @@ def plot_venn_single(pred_list: List[Predictions], graph_title: str, save_path: 
     plt.suptitle(graph_title, fontweight='bold')
     plt.savefig(f"{save_path}.png")
 
+def plot_venn_single_for_all_seeds(pred_list: List[Predictions], graph_title: str, save_path: str):
+    """
+    Plot Venn diagrams for a single attack with up to 6 different seeds including both unweighted and weighted Venn diagrams.
+    :param pred_list: list of Predictions objects
+    :param graph_title: title of the graph
+    :param save_path: path to save the graphs
+    """
+    plt.figure(figsize=(20, 10))
+    attacked_points = {pred.name: set() for pred in pred_list}
+    for pred in pred_list:
+        attacked_points[pred.name] = set(np.where((pred.predictions_to_labels() == pred.ground_truth_arr))[0].tolist())
+
+    venn_sets = [attacked_points[pred.name] for pred in pred_list]
+    venn_labels = [pred.name for pred in pred_list]
+    circle_colors = ['red', 'blue', 'green', 'purple', 'orange', 'cyan']
+
+    gs = plt.GridSpec(1, 2, width_ratios=[1, 1])
+    # Plotting unweighted Venn diagram
+    ax1 = plt.subplot(gs[0, 0], aspect='equal')
+    venn({label: set_ for label, set_ in zip(venn_labels, venn_sets)}, cmap="cool", fontsize=10, legend_loc="upper left", ax=ax1)
+    plt.title("Unweighted")
+
+    # Plotting weighted Venn diagram
+    ax2 = plt.subplot(gs[0, 1], aspect='equal')
+    venn({label: set_ for label, set_ in zip(venn_labels, venn_sets)}, cmap="viridis", fontsize=10, legend_loc="upper left", ax=ax2)
+    plt.title("Weighted")
+
+    plt.suptitle(graph_title, fontweight='bold', fontsize=16)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.savefig(f"{save_path}.png")
 
 def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
                        pred_pair_list_and: List[Tuple[Predictions, Predictions]], graph_title: str, save_path: str):
@@ -264,11 +293,12 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
         result_or = []
         result_and = []
         for attack, pred_obj_list in pred_dict.items():
-            common_tp_or, common_tp_and = pred_tp_intersection(pred_obj_list)
+
+            common_tp_or, common_tp_and = pred_tp_intersection(pred_obj_list, fpr=target_fpr)
             result_or.append(common_tp_or)
             result_and.append(common_tp_and)
 
-    elif target_fpr != 0:
+    elif target_fpr != None:
         adjusted_pred_dict = {}
         result_or = []
         result_and = []
@@ -276,13 +306,13 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
             adjusted_pred_list = []
             for pred in pred_obj_list:
                 adjusted_pred_arr = pred.adjust_fpr(target_fpr)
-                name = pred.name.split('_')[0]
+                name = pred.name.rsplit('_', 1)[0]
                 adjusted_pred_obj = Predictions(adjusted_pred_arr, pred.ground_truth_arr, name)
                 adjusted_pred_list.append(adjusted_pred_obj)
             adjusted_pred_dict[attack] = adjusted_pred_list
 
         for attack, adjusted_list in adjusted_pred_dict.items():
-            common_tp_or, common_tp_and = pred_tp_intersection(adjusted_list)
+            common_tp_or, common_tp_and = pred_tp_intersection(adjusted_list, fpr=target_fpr)
             result_or.append(common_tp_or)
             result_and.append(common_tp_and)
 

@@ -46,7 +46,11 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
     for att in attack:
         pred_list = []
         for s in seeds:
-            pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
+            # pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
+            if att != "shokri":
+                pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_top_k_shokri.npy"
+            else:
+                pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
             pred_arr = utils.load_predictions(pred_path)
             attack_name = f"{att}_sd{s}"
             pred_obj = prediction.Predictions(pred_arr, attack_set_membership, attack_name)
@@ -69,7 +73,7 @@ def plot_venn(pred_list: List[prediction.Predictions], pred_list2: List[
     if graph_goal == "common_tp":
         venn_diagram.plot_venn_for_all_attacks(pred_list, pred_list2, graph_title, graph_path)
     elif graph_goal == "single_attack":
-        venn_diagram.plot_venn_single(pred_list, graph_title, graph_path)
+        venn_diagram.plot_venn_single_for_all_seeds(pred_list, graph_title, graph_path)
     elif graph_goal == "pairwise":
         paired_pred_list_or = venn_diagram.find_pairwise_preds(pred_list)
         paired_pred_list_and = venn_diagram.find_pairwise_preds(pred_list2)
@@ -437,7 +441,7 @@ if __name__ == '__main__':
                     eval_metrics(pred_and_list, graph_path, graph_title, "intersection")
             elif args.threshold != 0:
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=args.threshold,
-                                                                                 target_fpr=0)
+                                                                                 target_fpr=None)
                 graph_title = args.graph_title + f" threshold = {args.threshold}"
                 graph_path = args.graph_path + f"_{args.threshold}"
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
@@ -456,7 +460,7 @@ if __name__ == '__main__':
                     eval_metrics(pred_and_list, graph_path, graph_title, "intersection")
             elif args.threshold != 0:
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=args.threshold,
-                                                                                 target_fpr=0)
+                                                                                 target_fpr=None)
                 graph_title = args.graph_title + f" threshold = {args.threshold}"
                 graph_path = args.graph_path + f"_{args.threshold}"
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)

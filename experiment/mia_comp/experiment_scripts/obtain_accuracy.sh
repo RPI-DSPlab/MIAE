@@ -31,11 +31,8 @@ for opt in "${processopt[@]}"; do
     optlist+="${opt} "
 done
 
-#experiment_dir="/home/public/comp_mia_data/miae_experiment_aug_more_target_data"
-#accuracy_dir="$experiment_dir/accuracy"
-experiment_dir="/home/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_3"
-tmp_dir="/home/public/comp_mia_data"
-accuracy_dir="$tmp_dir/repeat_accuracy3"
+experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"
+accuracy_dir="$experiment_dir/accuracy"
 mkdir -p "$accuracy_dir"
 
 

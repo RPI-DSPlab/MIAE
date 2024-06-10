@@ -293,30 +293,30 @@ def multi_seed_ensemble(pred_list: List[Predictions], method, threshold: float =
     return Predictions(ensemble_pred, pred_list[0].ground_truth_arr, pred_name_ensemble)
 
 
-def pred_tp_intersection(pred_list: List[Predictions]) -> Predictions:
+def pred_tp_intersection(pred_list: List[Predictions], fpr) -> Predictions:
     """
     Get the common true positive predictions across different seeds of a single attack
     this is used for the Venn diagram
 
     :param pred_list: List of Predictions objects for the same attack but different seeds
+    :param fpr: FPR value for adjusting the predictions
     :return: Predictions object containing only common true positives
     """
     if len(pred_list) < 2:
         raise ValueError("At least 2 predictions are required for comparison.")
 
-    # get the common true positive predictions using logical and
-    common_tp_or = pred_list[0].predictions_to_labels()
-    common_tp_and = pred_list[0].predictions_to_labels()
-    for i in range(1, len(pred_list)):
-        common_tp_or = np.logical_or(common_tp_or, pred_list[i].predictions_to_labels())  # union
-        common_tp_and = np.logical_and(common_tp_and, pred_list[i].predictions_to_labels())  # intersection
+    common_tp_union_indices = union_tp(pred_list, fpr=fpr)
+    common_tp_union = np.zeros_like(pred_list[0].pred_arr)
+    common_tp_union[list(common_tp_union_indices)] = 1
 
-    # create a new Predictions object for the common true positive predictions
-    ground_truth_arr = pred_list[0].ground_truth_arr
-    name = pred_list[0].name.split('_')[0]
-    pred_or = Predictions(common_tp_or, ground_truth_arr, name)
-    pred_and = Predictions(common_tp_and, ground_truth_arr, name)
-    return pred_or, pred_and
+    common_tp_intersection_indices = intersection_tp(pred_list, fpr=fpr)
+    common_tp_intersection = np.zeros_like(pred_list[0].pred_arr)
+    common_tp_intersection[list(common_tp_intersection_indices)] = 1
+
+    pred_union = Predictions(common_tp_union, pred_list[0].ground_truth_arr, pred_list[0].name + "_union")
+    pred_intersection = Predictions(common_tp_intersection, pred_list[0].ground_truth_arr, pred_list[0].name + "_intersection")
+
+    return pred_union, pred_intersection
 
 
 def averaging_predictions(pred_list: List[Predictions]) -> np.ndarray:
