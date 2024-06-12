@@ -7,14 +7,14 @@ mkdir -p "$data_dir"
 
 
 #datasets=("cifar10" "cifar100" "cinic10")
-datasets=("cifar10")
-archs=("resnet56")
+datasets=("cifar10" "cifar100")
+archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
 
 prepare_path="/data/public/prepare_sd${seed}"
 
 target_model_path="$data_dir/target_models"
 
-cd /home/wangz56/MIAE_training_dir/MIAE/experiment/mia_comp
+cd /home/wangz56/MIAE/experiment/mia_comp
 
 conda activate conda-zhiqi
 
@@ -25,7 +25,7 @@ for dataset in "${datasets[@]}"; do
   elif [ "$dataset" == "cifar100" ]; then
     num_epoch=100
   elif [ "$dataset" == "cinic10" ]; then
-    num_epoch=100
+    num_epoch=60
   fi
 
   # adjustment for wrn32_4

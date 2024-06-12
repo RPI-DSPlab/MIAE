@@ -1,6 +1,5 @@
 experiment_dir='/data/public/miae_experiment_aug'
 
-
 plot_dir='/data/public/miae_experiment_aug/graphs/auc'
 
 datasets=("cifar10" "cifar100")

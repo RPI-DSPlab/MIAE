@@ -55,8 +55,8 @@ for dataset in "${datasets[@]}"; do
             mkdir -p "$result_dir"
             prepare_dir="$prepare_path"
             echo "Running $dataset $arch $mia"
-#            target_model_save_path="$target_model_path/$dataset/$arch"
-            target_model_save_path="/data/public/comp_mia_data/miae_experiment_aug_more_target_data/shadow_target_model_and_data"
+            target_model_save_path="$target_model_path/$dataset/$arch"
+
             python3 obtain_pred.py \
             --dataset "$dataset"\
             --target_model "$arch"\

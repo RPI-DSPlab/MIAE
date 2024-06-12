@@ -103,6 +103,7 @@ class ShokriModelAccess(ModelAccess):
 
 class ShokriUtil(MIAUtils):
 
+
     @classmethod
     def split_dataset(cls, dataset: Dataset, num_datasets: int) -> list[Dataset]:
         """
@@ -118,8 +119,9 @@ class ShokriUtil(MIAUtils):
 
         subsets = torch.utils.data.random_split(dataset, subset_sizes)
 
-        # Return a list of dataset
+        # Return a list of datasets
         return subsets
+
 
 
 class ShokriAttack(MiAttack):
@@ -156,7 +158,7 @@ class ShokriAttack(MiAttack):
     def prepare(self, auxiliary_dataset):
         """
         Prepare the attack.
-        :param auxiliary_dataset: the auxiliary dataset (will be split into training sets and test set)
+        :param auxiliary_dataset: the auxiliary dataset (will be split into training sets )
         """
         super().prepare(auxiliary_dataset)
         if self.prepared:
@@ -169,10 +171,12 @@ class ShokriAttack(MiAttack):
         # set seed
         set_seed(self.auxiliary_info.seed)
 
+
         # create shadow datasets
         sub_shadow_dataset_list = ShokriUtil.split_dataset(auxiliary_dataset, self.auxiliary_info.num_shadow_models)
         # log/print the shadow dataset sizes
         ShokriUtil.log(self.auxiliary_info, f"Shadow dataset[0] size: {sub_shadow_dataset_list[0].__len__()}")
+
 
         # step 1: train shadow models
         if not os.path.exists(self.auxiliary_info.attack_dataset_path):
@@ -194,17 +198,16 @@ class ShokriAttack(MiAttack):
                 shadow_train_dataset, shadow_test_dataset = torch.utils.data.random_split(sub_shadow_dataset_list[i],
                                                                                           [train_len, test_len])
 
+
                 shadow_train_loader = DataLoader(shadow_train_dataset, batch_size=self.auxiliary_info.shadow_batch_size,
                                                  shuffle=True)
                 shadow_test_loader = DataLoader(shadow_test_dataset, batch_size=self.auxiliary_info.shadow_batch_size,
                                                 shuffle=False)
                 if os.path.exists(model_path):
-                    ShokriUtil.log(self.auxiliary_info,
-                                   f"Loading shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
+                    ShokriUtil.log(self.auxiliary_info, f"Loading shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
                     shadow_model_i.load_state_dict(torch.load(model_path))
                 else:
-                    ShokriUtil.log(self.auxiliary_info,
-                                   f"Training shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
+                    ShokriUtil.log(self.auxiliary_info, f"Training shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
                     shadow_model_i = ShokriUtil.train_shadow_model(shadow_model_i, shadow_train_loader,
                                                                    shadow_test_loader,
                                                                    self.auxiliary_info)
@@ -271,6 +274,7 @@ class ShokriAttack(MiAttack):
         labels = np.unique(self.attack_dataset.class_labels)
         # if attack model exists, then there's no need to retrain attack models
         if len(labels) == len(os.listdir(self.auxiliary_info.attack_model_path)):
+            print("Loading attack models...")
             ShokriUtil.log(self.auxiliary_info, "Loading attack models...")
             for i, label in enumerate(labels):
                 model = self.auxiliary_info.attack_model(self.auxiliary_info.num_classes)
@@ -307,7 +311,6 @@ class ShokriAttack(MiAttack):
         Infer the membership of the target data.
         """
         super().infer(target_data)
-        set_seed(self.auxiliary_info.seed)
         if not self.prepared:
             raise ValueError("The attack has not been prepared!")
 

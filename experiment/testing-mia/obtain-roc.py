@@ -19,9 +19,6 @@ from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
 from experiment import models
 
-# attacks that's not part of MIAE package
-from experiment.mia_comp.same_attack_different_signal import top_k_shokri_mia
-
 batch_size = 128
 targetset_ratio = 0.35  # percentage of training set to be used for training/test the target model
 train_test_ratio = 0.5  # percentage of training set to be used for training any model that uses a test set
@@ -231,17 +228,11 @@ def main():
         {'device': device, 'seed': seed, 'save_path': attack_dir + '/calibration', 'num_classes': 10, 'batch_size': batch_size,
          'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir + '/calibration'})
 
-    top_k_shokri_aux_info = top_k_shokri_mia.TopKShokriAuxiliaryInfo(
-        {'num_shadow_models': 10, 'device': device, 'seed': seed, 'save_path': attack_dir + '/top_k_shokri',
-         'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': attack_epochs,
-         'log_path': attack_dir + '/top_k_shokri', 'top_k': 3})
-
     losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model), untrained_target_model)
     merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model), untrained_target_model)
     lira_target_model_access = lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
     aug_target_model_access = aug_mia.AugModelAccess(deepcopy(target_model), untrained_target_model)
     shokri_target_model_access = shokri_mia.ShokriModelAccess(deepcopy(target_model), untrained_target_model)
-    top_k_shokri_target_model_access = top_k_shokri_mia.TopKShokriModelAccess(deepcopy(target_model), untrained_target_model)
     calibration_target_model_access = calibration_mia.CalibrationModelAccess(deepcopy(target_model), untrained_target_model)
 
     attacks = [
@@ -250,8 +241,7 @@ def main():
         # lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
         # aug_mia.augAttack(aug_target_model_access, aug_aux_info)
         # calibration_mia.CalibrationAttack(calibration_target_model_access, calibration_aux_info)
-        # shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info),
-        top_k_shokri_mia.TopKShokriAttack(top_k_shokri_target_model_access, top_k_shokri_aux_info)
+        shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info)
     ]
 
     # -- prepare the attacks
