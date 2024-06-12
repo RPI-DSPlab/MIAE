@@ -6,15 +6,17 @@ data_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_tar
 mkdir -p "$data_dir"
 
 
+#datasets=("cifar10" "cifar100" "cinic10")
 datasets=("cifar10" "cifar100")
-#datasets=("cifar10")
+
+
 archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
 
 prepare_path="/data/public/prepare_sd${seed}"
 
 target_model_path="$data_dir/target_models"
 
-cd /home/wangz56/MIAE_training_dir/MIAE/experiment/mia_comp
+cd /home/wangz56/MIAE/experiment/mia_comp
 
 conda activate conda-zhiqi
 

@@ -156,7 +156,8 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
 
     # save the target model
     torch.save(target_model.state_dict(),
-               os.path.join(args.target_model_path, "target_model_" + args.target_model + args.dataset + ".pkl"))
+               os.path.join(arg.target_model_path, "target_model_" + arg.target_model + arg.dataset + ".pkl"))
+    return target_model
 
 
 def get_target_model_access(args, target_model, untrained_target_model) -> mia_base.ModelAccess:
@@ -299,7 +300,6 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=512, help='batch size')
     parser.add_argument('--num_workers', type=int, default=2, help='number of workers')
     parser.add_argument('--device', type=str, default='cuda', help='device to train the model')
-
     args = parser.parse_args()
 
     # set seed
