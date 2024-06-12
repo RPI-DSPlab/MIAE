@@ -2,13 +2,12 @@ experiment_dir='/data/public/comp_mia_data/multiseed_convergence'
 
 plot_dir='/data/public/comp_mia_data/multiseed_convergence/graphs/multiseed_convergence'
 
-datasets=("cifar10" "cifar100")
-archs=("resnet56" "wrn32_4")
-#mias=("losstraj" "shokri" "yeom" "lira")
-mias=("losstraj" "shokri" "yeom")
+datasets=("cifar10")
+archs=("resnet56")
+mias=("losstraj" "shokri" "yeom" "lira" "aug" "calibration")
 fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
-seeds=(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
-#seeds=(0 1 2 3 4 5 6 7 8 9 10 11)
+#seeds=(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+seeds=(0 1 2 3 4 5)
 
 # prepare the list of mias and fprs as arguments
 mialist=""

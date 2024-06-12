@@ -1,164 +1,49 @@
-# This code implements "Membership Inference Attacks against Machine Learning Models" by Shokri et al.
-# https://arxiv.org/abs/1610.05820
-import copy
-import logging
-import os
-
+from miae.attacks.shokri_mia import *
 import numpy as np
-import torch
-from torch.utils.data import DataLoader, TensorDataset, Dataset, Subset
-from sklearn.metrics import roc_curve
-from tqdm import tqdm
-import torch.nn as nn
-import torch.nn.functional as F
-
-from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils, AttackTrainingSet
-from miae.utils.set_seed import set_seed
 
 
-class AttackMLP(torch.nn.Module):
-    # default model for the attack
-    def __init__(self, dim_in):
-        super(AttackMLP, self).__init__()
-        self.dim_in = dim_in
-        self.fc1 = nn.Linear(self.dim_in, 512)
-        self.fc2 = nn.Linear(512, 128)
-        self.fc3 = nn.Linear(128, 32)
-        self.fc4 = nn.Linear(32, 2)
-
-    def forward(self, x):
-        x = x.view(-1, self.dim_in)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = F.softmax(self.fc4(x), dim=1)
-        return x
-
-
-class ShokriAuxiliaryInfo(AuxiliaryInfo):
-    """
-    Implementation of the auxiliary information for the Shokri attack.
-    """
-
+class TopKShokriAuxiliaryInfo(ShokriAuxiliaryInfo):
     def __init__(self, config, attack_model=AttackMLP):
-        """
-        Initialize the auxiliary information with default config.
-        :param config: a dictionary containing the configuration for auxiliary information.
-        :param attack_model: the attack model architecture.
-        """
-        super().__init__(config)
-        # ---- initialize auxiliary information with default values ----
-        self.seed = config.get("seed", 0)
-        self.batch_size = config.get("batch_size", 128)
-        self.num_classes = config.get("num_classes", 10)
-        self.lr = config.get("lr", 0.001)
-        self.epochs = config.get("epochs", 100)
-        self.momentum = config.get("momentum", 0.9)
-        self.weight_decay = config.get("weight_decay", 0.0001)
-        # -- Shadow model parameters --
-        self.num_shadow_models = config.get("num_shadow_models", 10)
-        self.num_shadow_epochs = config.get("num_shadow_epochs", self.epochs)
-        self.shadow_batch_size = config.get("shadow_batch_size", self.batch_size)
-        self.shadow_train_ratio = config.get("shadow_train_ratio", 0.5)  # 0.5 for a balanced prior for membership
-
-        # -- attack model parameters --
-        self.attack_model = attack_model
-        self.num_attack_epochs = config.get("num_attack_epochs", self.epochs)
-        self.attack_batch_size = config.get("attack_batch_size", self.batch_size)
-        self.attack_lr = config.get("attack_lr", 0.01)
-        self.attack_train_ratio = config.get("attack_train_ratio", 1)
-        self.attack_epochs = config.get("attack_epochs", self.epochs)
-
-        # -- other parameters --
-        self.save_path = config.get("save_path", "shokri")
-        self.device = config.get("device", 'cuda' if torch.cuda.is_available() else 'cpu')
-        self.shadow_model_path = config.get("shadow_model_path", f"{self.save_path}/shadow_models")
-        self.attack_dataset_path = config.get("attack_dataset_path", f"{self.save_path}/attack_dataset")
-        self.attack_model_path = config.get("attack_model_path", f"{self.save_path}/attack_models")
-        self.cos_scheduler = config.get("cos_scheduler", True)  # use cosine annealing scheduler for shadow model
-
-        # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
+        super().__init__(config, attack_model)
+        # Initialize the top-k parameter
+        self.top_k = config.get("top_k", 3)
+        # rename their logger name
         self.log_path = config.get('log_path', None)
         if self.log_path is not None:
-            self.logger = logging.getLogger('shokri_logger')
+            self.logger = logging.getLogger('top_k_shokri_logger')
             self.logger.setLevel(logging.INFO)
-            fh = logging.FileHandler(self.log_path + '/shokri.log')
+            fh = logging.FileHandler(self.log_path + '/top_k_shokri.log')
             fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
             self.logger.addHandler(fh)
 
 
-class ShokriModelAccess(ModelAccess):
-    """
-    Implementation of model access for Shokri attack.
-    """
-
-    def __init__(self, model, untrained_model, access_type: ModelAccessType = ModelAccessType.BLACK_BOX):
-        """
-        Initialize model access with model and access type.
-        :param model: the target model.
-        :param access_type: the type of access to the target model.
-        """
-        super().__init__(model, untrained_model, access_type)
+TopKShokriModelAccess = ShokriModelAccess
 
 
-class ShokriUtil(MIAUtils):
-
+class TopKShokriUtil(ShokriUtil):
     @classmethod
-    def split_dataset(cls, dataset: Dataset, num_datasets: int) -> list[Dataset]:
+    def zero_mask_except_top_x(cls, data: np.ndarray, top: int) -> np.ndarray:
         """
-        Split the dataset into multiple datasets.
-        :param dataset: the dataset to be split.
-        :param num_datasets: the number of datasets to be split into.
-        :return: a list of datasets.
+        This method masks all elements to 0 in the input 2d array except the top 'n' elements in each entry.
         """
-        # Calculate the sizes of subsets
-        subset_sizes = [len(dataset) // num_datasets] * num_datasets
-        for i in range(len(dataset) % num_datasets):
-            subset_sizes[i] += 1
-
-        subsets = torch.utils.data.random_split(dataset, subset_sizes)
-
-        # Return a list of dataset
-        return subsets
+        mask = np.zeros_like(data)
+        no_mask_index = np.argpartition(data, -top, axis=1)[:, -top:]
+        rows = np.arange(data.shape[0])[:, None]
+        mask[rows, no_mask_index] = data[rows, no_mask_index]
+        return mask
 
 
-class ShokriAttack(MiAttack):
-    """
-    Implementation of the Shokri attack.
-    """
+class TopKShokriAttack(ShokriAttack):
+    def __init__(self, target_model_access: TopKShokriModelAccess, auxiliary_info: TopKShokriAuxiliaryInfo,
+                 target_data=None):
+        super().__init__(target_model_access, auxiliary_info, target_data)
+        self.topk = auxiliary_info.top_k
 
-    def __init__(self, target_model_access: ShokriModelAccess, auxiliary_info: ShokriAuxiliaryInfo, target_data=None):
+    def prepare(self, aux_dataset):
         """
-        Initialize the Shokri attack with model access and auxiliary information.
-        :param target_model_access: the model access to the target model.
-        :param auxiliary_info: the auxiliary information for the Shokri attack.
-        :param target_data: the target data for the Shokri attack.
+        Prepare the attack. Most part of the code is copied from the ShokriAttack class.
+        :param aux_dataset: the auxiliary dataset
         """
-        super().__init__(target_model_access, auxiliary_info)
-        self.attack_model_dict = None
-        self.attack_dataset = None
-        self.shadow_models = []
-        self.attack_model = None
-        self.shadow_train_loader = None
-        self.shadow_test_loader = None
-        self.attack_train_loader = None
-        self.attack_test_loader = None
-        self.auxiliary_info = auxiliary_info
-        self.target_model_access = target_model_access
-
-        # directories:
-        for dir in [self.auxiliary_info.shadow_model_path, self.auxiliary_info.attack_model_path]:
-            if not os.path.exists(dir):
-                os.makedirs(dir)
-
-        self.prepared = False  # this flag indicates whether the attack has been prepared
-
-    def prepare(self, auxiliary_dataset):
-        """
-        Prepare the attack.
-        :param auxiliary_dataset: the auxiliary dataset (will be split into training sets and test set)
-        """
-        super().prepare(auxiliary_dataset)
         if self.prepared:
             print("The attack has already prepared!")
             return
@@ -170,7 +55,7 @@ class ShokriAttack(MiAttack):
         set_seed(self.auxiliary_info.seed)
 
         # create shadow datasets
-        sub_shadow_dataset_list = ShokriUtil.split_dataset(auxiliary_dataset, self.auxiliary_info.num_shadow_models)
+        sub_shadow_dataset_list = ShokriUtil.split_dataset(aux_dataset, self.auxiliary_info.num_shadow_models)
         # log/print the shadow dataset sizes
         ShokriUtil.log(self.auxiliary_info, f"Shadow dataset[0] size: {sub_shadow_dataset_list[0].__len__()}")
 
@@ -235,11 +120,13 @@ class ShokriAttack(MiAttack):
                             (out_prediction_set_label, target.cpu().detach().numpy()))
 
             # step 2: create attack dataset for attack model training
+            # This part is different from the original ShokriAttack class
             in_prediction_set_membership = np.ones(len(in_prediction_set_pred))
             out_prediction_set_membership = np.zeros(len(out_prediction_set_pred))
 
             # combine in and out prediction sets
             prediction_set_pred = np.concatenate((in_prediction_set_pred, out_prediction_set_pred))
+            prediction_set_pred = TopKShokriUtil.zero_mask_except_top_x(prediction_set_pred, self.topk)
             prediction_set_label = np.concatenate((in_prediction_set_label, out_prediction_set_label))
             prediction_set_membership = np.concatenate((in_prediction_set_membership, out_prediction_set_membership))
 
@@ -255,7 +142,7 @@ class ShokriAttack(MiAttack):
                                                     prediction_set_membership)
             torch.save(self.attack_dataset, self.auxiliary_info.attack_dataset_path)
 
-        # step 3: train attack model
+            # step 3: train attack model
         self.attack_dataset = torch.load(self.auxiliary_info.attack_dataset_path)
         train_len = int(len(self.attack_dataset) * self.auxiliary_info.attack_train_ratio)
         test_len = len(self.attack_dataset) - train_len
@@ -304,10 +191,8 @@ class ShokriAttack(MiAttack):
 
     def infer(self, target_data) -> np.ndarray:
         """
-        Infer the membership of the target data.
+        Infer the membership of the target data. Most part of the code is copied from the ShokriAttack class.
         """
-        super().infer(target_data)
-        set_seed(self.auxiliary_info.seed)
         if not self.prepared:
             raise ValueError("The attack has not been prepared!")
 
@@ -315,8 +200,9 @@ class ShokriAttack(MiAttack):
         labels = np.unique(self.attack_dataset.class_labels)
         for label in labels:
             if label not in self.attack_model_dict:
-                model = self.auxiliary_info.attack_model(self.auxiliary_info.num_classes)
-                model.load_state_dict(torch.load(f"{self.auxiliary_info.attack_model_path}/attack_model_{label}.pt"))
+                model = self.auxiliary_info.attack_model(self.topk)
+                model.load_state_dict(
+                    torch.load(f"{self.auxiliary_info.attack_model_path}/attack_model_{label}.pt"))
                 model.to(self.auxiliary_info.device)
                 self.attack_model_dict[label] = model
 
@@ -325,11 +211,12 @@ class ShokriAttack(MiAttack):
         membership = []
 
         target_data_loader = DataLoader(target_data, batch_size=self.auxiliary_info.batch_size, shuffle=False)
-
-        for data, target in target_data_loader:
+        ShokriUtil.log(self.auxiliary_info, "Inferencing the membership of the target data...")
+        for data, target in tqdm(target_data_loader):
             data = data.to(self.auxiliary_info.device)
             output = self.target_model_access.model(data)
             output = output.cpu().detach().numpy()
+            output = TopKShokriUtil.zero_mask_except_top_x(np.array(output), self.topk)
             for i, label in enumerate(target):
                 label = label.item()
                 member_pred = self.attack_model_dict[label](torch.tensor(output[i]).to(self.auxiliary_info.device))
@@ -337,3 +224,4 @@ class ShokriAttack(MiAttack):
                 membership.append(member_pred.reshape(-1))
 
         return np.array(np.transpose(membership)[1])
+
