@@ -7,17 +7,18 @@ fi
 
 echo "obtain_pred.sh seed = $seed"
 
-data_dir="/data/public/comp_mia_data/multiseed_convergence/target"
+data_dir="/data/public/comp_mia_data/same_attack_different_distribution/target"
 
-preds_dir="/data/public/comp_mia_data/multiseed_convergence/preds_sd${seed}"
+preds_dir="/data/public/comp_mia_data/same_attack_different_distribution/preds_sd${seed}"
 mkdir -p "$preds_dir"
 
 
+
 #datasets=("cifar10" "cifar100" "cinic10")
-datasets=("cifar10" "cifar100")
+datasets=("cinic10")
 #archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
 archs=("resnet56" "wrn32_4")
-mias=("losstraj" "shokri" "yeom" "aug" lira)
+mias=("shokri" "yeom")
 
 prepare_path="/data/public/prepare_sd${seed}"
 
@@ -27,6 +28,8 @@ cd /home/wangz56/MIAE_training_dir/MIAE/experiment/mia_comp
 
 conda activate conda-zhiqi
 
+# print datasets we have
+echo "datasets: ${datasets[@]}"
 for dataset in "${datasets[@]}"; do
   # if assign different num_epoch for different dataset
   if [ "$dataset" == "cifar10" ]; then
@@ -34,7 +37,7 @@ for dataset in "${datasets[@]}"; do
   elif [ "$dataset" == "cifar100" ]; then
     num_epoch=150
   elif [ "$dataset" == "cinic10" ]; then
-    num_epoch=150
+    num_epoch=100
   fi
 
     for arch in "${archs[@]}"; do
@@ -70,7 +73,7 @@ for dataset in "${datasets[@]}"; do
             --attack_epochs "$num_epoch" \
             --target_epochs "$num_epoch" \
             --data_path "$data_dir" \
-            --device "cuda:1"
+            --device "cuda:0"
 
             rm -r "$prepare_path"
         done

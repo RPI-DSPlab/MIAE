@@ -380,7 +380,6 @@ def plot_venn_for_all_attacks(pred_or: List[Predictions], pred_and: List[Predict
     attacked_points_or = {pred.name: set() for pred in pred_or}
     attacked_points_and = {pred.name: set() for pred in pred_and}
 
-
     venn_sets_or = []
     venn_labels_or = [pred.name for pred in pred_or]
     for pred in pred_or:

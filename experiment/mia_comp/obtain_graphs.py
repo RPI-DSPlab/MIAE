@@ -12,17 +12,19 @@ import os
 import torch
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
-from typing import List, Dict, Optional
+from typing import List, Dict
 import numpy as np
 import pickle
 
 import sys
-
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
+
+import miae.eval_methods.sample_hardness
 import miae.eval_methods.prediction as prediction
 import miae.eval_methods.sample_hardness as SampleHardness
-import miae.visualization.venn_diagram as venn_diagram
+# import miae.visualization.venn_diagram as venn_diagram
 
+import miae.eval_methods.prediction
 import utils
 
 
