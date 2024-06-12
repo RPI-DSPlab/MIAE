@@ -31,7 +31,7 @@ for opt in "${processopt[@]}"; do
     optlist+="${opt} "
 done
 
-experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"
+experiment_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
 accuracy_dir="$experiment_dir/accuracy"
 mkdir -p "$accuracy_dir"
 

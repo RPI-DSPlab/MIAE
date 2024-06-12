@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from venn import venn
 from matplotlib_venn import venn3_unweighted, venn3, venn2_unweighted, venn2
 
-from miae.eval_methods.prediction import Predictions, union_pred, intersection_pred, pred_tp_intersection
+from miae.eval_methods.prediction import Predictions, union_pred, intersection_pred, find_common_tp_pred
 
 def find_pairwise_preds(pred_list: List[Predictions]) -> List[Tuple[Predictions, Predictions]]:
     """
@@ -187,12 +187,12 @@ def plot_venn_single(pred_list: List[Predictions], graph_title: str, save_path: 
     # Plotting unweighted Venn diagram
     plt.subplot(1, 2, 1, aspect='equal')
     venn3_unweighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
-    plt.title("Unweighted")
+    plt.title("Unweighted", fontsize=15)
 
     # Plotting weighted Venn diagram
     plt.subplot(1, 2, 2, aspect='equal')
     venn3(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
-    plt.title("Weighted")
+    plt.title("Weighted", fontsize=15)
 
     plt.suptitle(graph_title, fontweight='bold')
     plt.savefig(f"{save_path}.png")
@@ -217,12 +217,12 @@ def plot_venn_single_for_all_seeds(pred_list: List[Predictions], graph_title: st
     # Plotting unweighted Venn diagram
     ax1 = plt.subplot(gs[0, 0], aspect='equal')
     venn({label: set_ for label, set_ in zip(venn_labels, venn_sets)}, cmap="cool", fontsize=10, legend_loc="upper left", ax=ax1)
-    plt.title("Unweighted")
+    plt.title("Unweighted", fontsize=15)
 
     # Plotting weighted Venn diagram
     ax2 = plt.subplot(gs[0, 1], aspect='equal')
     venn({label: set_ for label, set_ in zip(venn_labels, venn_sets)}, cmap="viridis", fontsize=10, legend_loc="upper left", ax=ax2)
-    plt.title("Weighted")
+    plt.title("Weighted", fontsize=15)
 
     plt.suptitle(graph_title, fontweight='bold', fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
@@ -248,11 +248,11 @@ def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
         if weighted:
             venn2(subsets=(attacked_points_1, attacked_points_2), set_labels=(pred_1.name, pred_2.name),
                   set_colors=circle_colors)
-            plt.title(f"{suffix} (Weighted)")
+            plt.title(f"{suffix} (Weighted)", fontsize=15)
         else:
             venn2_unweighted(subsets=(attacked_points_1, attacked_points_2), set_labels=(pred_1.name, pred_2.name),
                              set_colors=circle_colors)
-            plt.title(f"{suffix} (Unweighted)")
+            plt.title(f"{suffix} (Unweighted)", fontsize=15)
 
         jaccard_sim = jaccard_similarity(pred_1, pred_2)
         return jaccard_sim
@@ -263,10 +263,10 @@ def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
 
         plt.figure(figsize=(14, 14))
 
-        union_jaccard_sim_unweighted = pairwise(pred_1_or, pred_2_or, 0, 0, False, "union")
-        _ = pairwise(pred_1_or, pred_2_or, 0, 1, True, "union")
-        intersection_jaccard_sim_unweighted = pairwise(pred_1_and, pred_2_and, 1, 0, False, "intersection")
-        _ = pairwise(pred_1_and, pred_2_and, 1, 1, True, "intersection")
+        union_jaccard_sim_unweighted = pairwise(pred_1_or, pred_2_or, 0, 0, False, "Union")
+        _ = pairwise(pred_1_or, pred_2_or, 0, 1, True, "Union")
+        intersection_jaccard_sim_unweighted = pairwise(pred_1_and, pred_2_and, 1, 0, False, "Intersection")
+        _ = pairwise(pred_1_and, pred_2_and, 1, 1, True, "Intersection")
 
         plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.05, hspace=0.3, wspace=0.3)
         plt.suptitle(
@@ -293,8 +293,7 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
         result_or = []
         result_and = []
         for attack, pred_obj_list in pred_dict.items():
-
-            common_tp_or, common_tp_and = pred_tp_intersection(pred_obj_list, fpr=target_fpr)
+            common_tp_or, common_tp_and = find_common_tp_pred(pred_obj_list, fpr=target_fpr)
             result_or.append(common_tp_or)
             result_and.append(common_tp_and)
 
@@ -306,13 +305,12 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
             adjusted_pred_list = []
             for pred in pred_obj_list:
                 adjusted_pred_arr = pred.adjust_fpr(target_fpr)
-                name = pred.name.rsplit('_', 1)[0]
-                adjusted_pred_obj = Predictions(adjusted_pred_arr, pred.ground_truth_arr, name)
+                adjusted_pred_obj = Predictions(adjusted_pred_arr, pred.ground_truth_arr, pred.name)
                 adjusted_pred_list.append(adjusted_pred_obj)
             adjusted_pred_dict[attack] = adjusted_pred_list
 
         for attack, adjusted_list in adjusted_pred_dict.items():
-            common_tp_or, common_tp_and = pred_tp_intersection(adjusted_list, fpr=target_fpr)
+            common_tp_or, common_tp_and = find_common_tp_pred(adjusted_list, fpr=target_fpr)
             result_or.append(common_tp_or)
             result_and.append(common_tp_and)
 
@@ -366,7 +364,7 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], t
             else:
                 plt.xlabel("Weighted")
 
-    plt.suptitle(title, fontweight='bold')
+    plt.suptitle(title, fontweight='bold', fontsize=15)
     plt.tight_layout()  # Adjust layout to prevent overlapping
     plt.savefig(f"{save_path}.png")
 

@@ -293,7 +293,7 @@ def multi_seed_ensemble(pred_list: List[Predictions], method, threshold: float =
     return Predictions(ensemble_pred, pred_list[0].ground_truth_arr, pred_name_ensemble)
 
 
-def pred_tp_intersection(pred_list: List[Predictions], fpr) -> Predictions:
+def find_common_tp_pred(pred_list: List[Predictions], fpr) -> Predictions:
     """
     Get the common true positive predictions across different seeds of a single attack
     this is used for the Venn diagram
@@ -313,8 +313,9 @@ def pred_tp_intersection(pred_list: List[Predictions], fpr) -> Predictions:
     common_tp_intersection = np.zeros_like(pred_list[0].pred_arr)
     common_tp_intersection[list(common_tp_intersection_indices)] = 1
 
-    pred_union = Predictions(common_tp_union, pred_list[0].ground_truth_arr, pred_list[0].name + "_union")
-    pred_intersection = Predictions(common_tp_intersection, pred_list[0].ground_truth_arr, pred_list[0].name + "_intersection")
+    name = pred_list[0].name.rsplit('_', 1)[0]
+    pred_union = Predictions(common_tp_union, pred_list[0].ground_truth_arr, name + "_union")
+    pred_intersection = Predictions(common_tp_intersection, pred_list[0].ground_truth_arr, name + "_intersection")
 
     return pred_union, pred_intersection
 

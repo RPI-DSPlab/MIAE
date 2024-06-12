@@ -46,11 +46,7 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
     for att in attack:
         pred_list = []
         for s in seeds:
-            # pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
-            if att != "shokri":
-                pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_top_k_shokri.npy"
-            else:
-                pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
+            pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
             pred_arr = utils.load_predictions(pred_path)
             attack_name = f"{att}_sd{s}"
             pred_obj = prediction.Predictions(pred_arr, attack_set_membership, attack_name)
@@ -82,7 +78,7 @@ def plot_venn(pred_list: List[prediction.Predictions], pred_list2: List[
 def eval_metrics(pred_list: List[prediction.Predictions], save_path: str, title: str, process: Optional[str]):
     """
     Calculate the evaluation metrics for the given list of Predictions.
-    :param pred_list: list of Predictions
+    :param pred_list: list of Predictions of all attacks
     :param save_path: path to save the metrics
     :return: dictionary of evaluation metrics
     """

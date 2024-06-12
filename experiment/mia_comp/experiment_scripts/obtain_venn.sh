@@ -11,7 +11,7 @@
 
 datasets=("cifar10")
 archs=("resnet56")
-mias=("shokri" "top_1_shokri" "top_3_shokri")
+mias=("losstraj" "shokri" "yeom" "lira" "aug" "calibration")
 categories=("threshold" "single_attack" "fpr")
 subcategories=("common_tp" "pairwise")
 seeds=(0 1 2 3 4 5)
@@ -34,8 +34,7 @@ for fpr in "${fprs[@]}"; do
 done
 
 
-experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"
-#experiment_dir="/home/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_3"
+experiment_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_3"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 
