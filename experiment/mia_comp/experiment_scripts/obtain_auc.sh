@@ -1,13 +1,13 @@
-experiment_dir='/data/public/miae_experiment_aug'
+experiment_dir='/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_1'
 
-plot_dir='/data/public/miae_experiment_aug/graphs/auc'
+plot_dir='/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_1/graphs/auc'
 
-datasets=("cifar10" "cifar100")
-archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+datasets=("cifar10")
+archs=("resnet56")
 #mias=("losstraj" "shokri" "yeom" "lira")
-mias=("losstraj" "shokri" "yeom")
-fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
-seeds=(0 1 2 3)
+mias=("losstraj" "yeom" "aug" "calibration" "lira")
+fprs=()
+seeds=(0 1 2 3 4 5)
 
 # prepare the list of mias and fprs as arguments
 mialist=""
@@ -31,23 +31,8 @@ for dataset in "${datasets[@]}"; do
 
         # convert fprlist to space-separated string
         fprlist=$(printf "%s " "${fprs[@]}")
-
-        # plot the graphs
-        graph_title="auc for ${dataset} ${arch} in log scale"
-        graph_path="${plot_dir}/${dataset}/${arch}/auc_log_scale"
-        python3 obtain_graphs.py --graph_type "auc"\
-                                  --dataset "${dataset}"\
-                                  --graph_title "${graph_title}"\
-                                  --data_path "${experiment_dir}"\
-                                  --graph_path "${graph_path}"\
-                                  --architecture "${arch}"\
-                                  --attacks ${mialist}\
-                                  --fpr ${fprlist}\
-                                  --seed ${seedlist}\
-                                  --log_scale "True"
-
         graph_title="auc for ${dataset} ${arch}"
-        graph_path="${plot_dir}/${dataset}/${arch}/auc_linear_scale"
+        graph_path="${plot_dir}/${dataset}/${arch}/auc"
         python3 obtain_graphs.py --graph_type "auc"\
                                   --dataset "${dataset}"\
                                   --graph_title "${graph_title}"\
@@ -55,7 +40,6 @@ for dataset in "${datasets[@]}"; do
                                   --graph_path "${graph_path}"\
                                   --architecture "${arch}"\
                                   --attacks ${mialist}\
-                                  --fpr ${fprlist}\
                                   --seed ${seedlist}\
                                   --log_scale "False"
     done
