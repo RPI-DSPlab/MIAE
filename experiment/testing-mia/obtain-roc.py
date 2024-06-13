@@ -257,6 +257,9 @@ def main():
     # -- prepare the attacks
     for attack in attacks:
         print("Preparing attack: ", attack.__class__.__name__)
+        # make directory for attack
+        if not os.path.exists(attack.auxiliary_info.save_path):
+            os.makedirs(attack.auxiliary_info.save_path)
         attack.prepare(aux_set)
 
     # -- STEP 3: attack the target dataset
