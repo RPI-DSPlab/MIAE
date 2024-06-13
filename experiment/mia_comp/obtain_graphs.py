@@ -12,7 +12,7 @@ import os
 import torch
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
-from typing import List, Dict
+from typing import List, Dict, Optional
 import numpy as np
 import pickle
 
@@ -22,7 +22,7 @@ sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 import miae.eval_methods.sample_hardness
 import miae.eval_methods.prediction as prediction
 import miae.eval_methods.sample_hardness as SampleHardness
-# import miae.visualization.venn_diagram as venn_diagram
+import miae.visualization.venn_diagram as venn_diagram
 
 import miae.eval_methods.prediction
 import utils
@@ -111,6 +111,7 @@ def eval_metrics(pred_list: List[prediction.Predictions], save_path: str, title:
         f.write(f"(5) Set Size Variance: {set_size_var:.4f}\n")
         f.write(f"(6) Entropy: {ent:.4f}\n")
         f.write("\n")
+
 
 def plot_auc(predictions: Dict[str, prediction.Predictions], graph_title: str, graph_path: str,
              fprs: List[float] = None):
@@ -435,8 +436,8 @@ if __name__ == '__main__':
                     graph_title = args.graph_title + f" FPR = {f}"
                     graph_path = args.graph_path + f"_{f}"
                     plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
-                    eval_metrics(pred_or_list, graph_path, graph_title, "union")
-                    eval_metrics(pred_and_list, graph_path, graph_title, "intersection")
+                    pairwise_jaccard_or = eval_metrics(pred_or_list, graph_path, graph_title, "union")
+                    pairwise_jaccard_and = eval_metrics(pred_and_list, graph_path, graph_title, "intersection")
             elif args.threshold != 0:
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=args.threshold,
                                                                                  target_fpr=None)
