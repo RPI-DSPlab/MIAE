@@ -228,38 +228,56 @@ def multi_seed_convergence(predictions: Dict[str, List[prediction.Predictions]],
     num_seed = 0
     fig, axes = plt.subplots(1, num_plots, figsize=(26, 5))
     fig.subplots_adjust(wspace=0.4)  # Adjust the spacing between subplots
+
+    # Define line styles and markers
+    line_styles = ['-', '--', '-.', ':', '-', '--']
+    markers = ['o', 's', 'D', '^', 'x', '<']
+    colors = ['b', 'r', 'g', 'm', 'c', 'k']
+
+    # Function to get line style, marker, and color
+    def get_style(idx):
+        return line_styles[idx % len(line_styles)], markers[idx % len(markers)], colors[idx % len(colors)]
+
     # Plotting the convergence of number of true positives
-    for attack, num_tp in num_tp_dict.items():
-        axes[0].plot(num_tp, label=attack)
+    for idx, (attack, num_tp) in enumerate(num_tp_dict.items()):
+        line_style, marker, color = get_style(idx)
+        axes[0].plot(num_tp, label=attack, linestyle=line_style, marker=marker, color=color, markerfacecolor='none')
         num_seed = len(num_tp)
-    axes[0].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    axes[0].set_xticks(np.arange(num_seed))
+    axes[0].set_xticklabels(np.arange(1, num_seed + 1))
     axes[0].set_xlabel("Number of seeds")
     axes[0].set_ylabel("Number of True Positives")
     axes[0].set_title("Number of True Positives Convergence")
     axes[0].legend()
 
     # Plotting the convergence of true positive rate
-    for attack, tpr in tpr_dict.items():
-        axes[1].plot(tpr, label=attack)
-    axes[1].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    for idx, (attack, tpr) in enumerate(tpr_dict.items()):
+        line_style, marker, color = get_style(idx)
+        axes[1].plot(tpr, label=attack, linestyle=line_style, marker=marker, color=color, markerfacecolor='none')
+    axes[1].set_xticks(np.arange(num_seed))
+    axes[1].set_xticklabels(np.arange(1, num_seed + 1))
     axes[1].set_xlabel("Number of seeds")
     axes[1].set_ylabel("True Positive Rate")
     axes[1].set_title("True Positive Rate Convergence")
     axes[1].legend()
 
     # Plotting the convergence of false positive rate
-    for attack, tpr in fpr_dict.items():
-        axes[2].plot(tpr, label=attack)
-    axes[2].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    for idx, (attack, fpr) in enumerate(fpr_dict.items()):
+        line_style, marker, color = get_style(idx)
+        axes[2].plot(fpr, label=attack, linestyle=line_style, marker=marker, color=color, markerfacecolor='none')
+    axes[2].set_xticks(np.arange(num_seed))
+    axes[2].set_xticklabels(np.arange(1, num_seed + 1))
     axes[2].set_xlabel("Number of seeds")
     axes[2].set_ylabel("False Positive Rate")
     axes[2].set_title("False Positive Rate Convergence")
     axes[2].legend()
 
     # Plotting the convergence of precision
-    for attack, precision in precision_dict.items():
-        axes[3].plot(precision, label=attack)
-    axes[3].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    for idx, (attack, precision) in enumerate(precision_dict.items()):
+        line_style, marker, color = get_style(idx)
+        axes[3].plot(precision, label=attack, linestyle=line_style, marker=marker, color=color, markerfacecolor='none')
+    axes[3].set_xticks(np.arange(num_seed))
+    axes[3].set_xticklabels(np.arange(1, num_seed + 1))
     axes[3].set_xlabel("Number of seeds")
     axes[3].set_ylabel("Precision")
     axes[3].set_title("Precision Convergence")
