@@ -48,4 +48,28 @@ def get_cifar100(aug: bool = True) -> ConcatDataset:
 
     return ConcatDataset([trainset, testset])
 
+def get_cinic10(aug: bool = True, root=None) -> ConcatDataset:
+    mean = [0.47889522, 0.47227842, 0.43047404]
+    std = [0.24205776, 0.23828046, 0.25874835]
+    regular_transform = T.Compose([T.ToTensor(),
+                                   T.Normalize(mean=mean, std=std)
+                                   ])
+
+    augmentation_transform = T.Compose([T.RandomHorizontalFlip(), T.RandomCrop(32, padding=4), T.transforms.ToTensor(),
+                                        T.Normalize(mean=mean, std=std)])
+
+    transform = augmentation_transform if aug else regular_transform
+
+    try:
+
+        trainset = ImageFolder(root='./data/public/CINIC10/CINIC10_60ksubset/cifar10_train_subset' if root is None else root,
+                               transform=transform)
+
+        testset = ImageFolder(root='/data/public/CINIC10/CINIC10_60ksubset/imagenet_test_subset' if root is None else root,
+                              transform=transform)
+
+    except FileNotFoundError:
+        print("Please download the Cinic-10 dataset using experiment/mia_comp/same_attack_different_info/process_CINIC10.ipynb")
+
+    return ConcatDataset([trainset, testset])
 
