@@ -11,7 +11,7 @@ import numpy as np
 from torch.utils.data import Dataset
 from typing import List
 
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..")))
 from miae.eval_methods.prediction import Predictions
 
 

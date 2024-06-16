@@ -12,7 +12,7 @@ import os
 import torch
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
-from typing import List, Dict
+from typing import List, Dict, Optional
 import numpy as np
 import pickle
 
@@ -22,7 +22,7 @@ sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 import miae.eval_methods.sample_hardness
 import miae.eval_methods.prediction as prediction
 import miae.eval_methods.sample_hardness as SampleHardness
-# import miae.visualization.venn_diagram as venn_diagram
+import miae.visualization.venn_diagram as venn_diagram
 
 import miae.eval_methods.prediction
 import utils
@@ -71,10 +71,47 @@ def plot_venn(pred_list: List[prediction.Predictions], pred_list2: List[
     if graph_goal == "common_tp":
         venn_diagram.plot_venn_for_all_attacks(pred_list, pred_list2, graph_title, graph_path)
     elif graph_goal == "single_attack":
-        venn_diagram.plot_venn_single(pred_list, graph_title, graph_path)
+        venn_diagram.plot_venn_single_for_all_seeds(pred_list, graph_title, graph_path)
     elif graph_goal == "pairwise":
-        paired_pred_list = venn_diagram.find_pairwise_preds(pred_list)
-        venn_diagram.plot_venn_pairwise(paired_pred_list, graph_title, graph_path)
+        paired_pred_list_or = venn_diagram.find_pairwise_preds(pred_list)
+        paired_pred_list_and = venn_diagram.find_pairwise_preds(pred_list2)
+        venn_diagram.plot_venn_pairwise(paired_pred_list_or, paired_pred_list_and, graph_title, graph_path)
+
+def eval_metrics(pred_list: List[prediction.Predictions], save_path: str, title: str, process: Optional[str]):
+    """
+    Calculate the evaluation metrics for the given list of Predictions.
+    :param pred_list: list of Predictions of all attacks
+    :param save_path: path to save the metrics
+    :return: dictionary of evaluation metrics
+    """
+    pairwise_jaccard = venn_diagram.pairwise_jaccard_similarity(pred_list)
+    overall_jaccard = venn_diagram.overall_jaccard_similarity(pred_list)
+    pairwise_overlap_coeff = venn_diagram.pairwise_overlap_coefficient(pred_list)
+    overlap_coeff = venn_diagram.overall_overlap_coefficient(pred_list)
+    set_size_var = venn_diagram.set_size_variance(pred_list)
+    ent = venn_diagram.entropy(pred_list)
+
+    with open(f"{save_path}.txt", "a") as f:
+        f.write("\n")
+        if process != "None":
+            f.write(f"{title} [processed using {process}]\n")
+        else:
+            f.write(f"{title}\n")
+
+        f.write("(1) Pairwise Jaccard Similarity\n")
+        for result in pairwise_jaccard:
+            pair = result[0]
+            f.write(f"    {pair[0].name} vs {pair[1].name}: {result[1]:.4f}\n")
+        f.write(f"(2) Average Jaccard Similarity: {overall_jaccard:.4f}\n")
+        f.write("(3) Pairwise Overlap Coefficient\n")
+        for result in pairwise_overlap_coeff:
+            pair = result[0]
+            f.write(f"    {pair[0].name} vs {pair[1].name}: {result[1]:.4f}\n")
+        f.write(f"(4) Average Jaccard Similarity: {overlap_coeff:.4f}\n")
+        f.write(f"(5) Set Size Variance: {set_size_var:.4f}\n")
+        f.write(f"(6) Entropy: {ent:.4f}\n")
+        f.write("\n")
+
 
 def plot_auc(predictions: Dict[str, prediction.Predictions], graph_title: str, graph_path: str,
              fprs: List[float] = None):
@@ -96,6 +133,7 @@ def plot_auc(predictions: Dict[str, prediction.Predictions], graph_title: str, g
         ground_truth = pred.ground_truth_arr if ground_truth is None else ground_truth
 
     prediction.plot_auc(prediction_list, attack_names, graph_title, fprs, graph_path)
+
 
 
 def plot_hardness_distribution(
@@ -228,38 +266,56 @@ def multi_seed_convergence(predictions: Dict[str, List[prediction.Predictions]],
     num_seed = 0
     fig, axes = plt.subplots(1, num_plots, figsize=(26, 5))
     fig.subplots_adjust(wspace=0.4)  # Adjust the spacing between subplots
+
+    # Define line styles and markers
+    line_styles = ['-', '--', '-.', ':', '-', '--']
+    markers = ['o', 's', 'D', '^', 'x', '<']
+    colors = ['b', 'r', 'g', 'm', 'c', 'k']
+
+    # Function to get line style, marker, and color
+    def get_style(idx):
+        return line_styles[idx % len(line_styles)], markers[idx % len(markers)], colors[idx % len(colors)]
+
     # Plotting the convergence of number of true positives
-    for attack, num_tp in num_tp_dict.items():
-        axes[0].plot(num_tp, label=attack)
+    for idx, (attack, num_tp) in enumerate(num_tp_dict.items()):
+        line_style, marker, color = get_style(idx)
+        axes[0].plot(num_tp, label=attack, linestyle=line_style, marker=marker, color=color, markerfacecolor='none')
         num_seed = len(num_tp)
-    axes[0].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    axes[0].set_xticks(np.arange(num_seed))
+    axes[0].set_xticklabels(np.arange(1, num_seed + 1))
     axes[0].set_xlabel("Number of seeds")
     axes[0].set_ylabel("Number of True Positives")
     axes[0].set_title("Number of True Positives Convergence")
     axes[0].legend()
 
     # Plotting the convergence of true positive rate
-    for attack, tpr in tpr_dict.items():
-        axes[1].plot(tpr, label=attack)
-    axes[1].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    for idx, (attack, tpr) in enumerate(tpr_dict.items()):
+        line_style, marker, color = get_style(idx)
+        axes[1].plot(tpr, label=attack, linestyle=line_style, marker=marker, color=color, markerfacecolor='none')
+    axes[1].set_xticks(np.arange(num_seed))
+    axes[1].set_xticklabels(np.arange(1, num_seed + 1))
     axes[1].set_xlabel("Number of seeds")
     axes[1].set_ylabel("True Positive Rate")
     axes[1].set_title("True Positive Rate Convergence")
     axes[1].legend()
 
     # Plotting the convergence of false positive rate
-    for attack, tpr in fpr_dict.items():
-        axes[2].plot(tpr, label=attack)
-    axes[2].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    for idx, (attack, fpr) in enumerate(fpr_dict.items()):
+        line_style, marker, color = get_style(idx)
+        axes[2].plot(fpr, label=attack, linestyle=line_style, marker=marker, color=color, markerfacecolor='none')
+    axes[2].set_xticks(np.arange(num_seed))
+    axes[2].set_xticklabels(np.arange(1, num_seed + 1))
     axes[2].set_xlabel("Number of seeds")
     axes[2].set_ylabel("False Positive Rate")
     axes[2].set_title("False Positive Rate Convergence")
     axes[2].legend()
 
     # Plotting the convergence of precision
-    for attack, precision in precision_dict.items():
-        axes[3].plot(precision, label=attack)
-    axes[3].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+    for idx, (attack, precision) in enumerate(precision_dict.items()):
+        line_style, marker, color = get_style(idx)
+        axes[3].plot(precision, label=attack, linestyle=line_style, marker=marker, color=color, markerfacecolor='none')
+    axes[3].set_xticks(np.arange(num_seed))
+    axes[3].set_xticklabels(np.arange(1, num_seed + 1))
     axes[3].set_xlabel("Number of seeds")
     axes[3].set_ylabel("Precision")
     axes[3].set_title("Precision Convergence")
@@ -380,10 +436,15 @@ if __name__ == '__main__':
     pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path, args.seed)
 
     # plot and save the graphs
-    if args.graph_type == "venn":
+    if args.graph_type == "venn" and len(args.seed) > 1:
         if args.graph_goal == "single_attack":
-            pred_list = pred_dict[args.single_attack_name][:3]
-            plot_venn(pred_list, [], args.graph_goal, args.graph_title, args.graph_path)
+            target_pred_list = pred_dict[args.single_attack_name]
+            for f in args.fpr:
+                adjusted_pred_list = venn_diagram.single_attack_process_for_venn(target_pred_list, f)
+                graph_title = args.graph_title + f" FPR = {f}"
+                graph_path = args.graph_path + f"_{f}"
+                plot_venn(adjusted_pred_list, [], args.graph_goal, graph_title, graph_path)
+                eval_metrics(adjusted_pred_list, graph_path, graph_title, "None")
         elif args.graph_goal == "common_tp":
             if args.threshold == 0:
                 fpr_list = [float(f) for f in args.fpr]
@@ -393,12 +454,16 @@ if __name__ == '__main__':
                     graph_title = args.graph_title + f" FPR = {f}"
                     graph_path = args.graph_path + f"_{f}"
                     plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
+                    pairwise_jaccard_or = eval_metrics(pred_or_list, graph_path, graph_title, "union")
+                    pairwise_jaccard_and = eval_metrics(pred_and_list, graph_path, graph_title, "intersection")
             elif args.threshold != 0:
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=args.threshold,
-                                                                                 target_fpr=0)
+                                                                                 target_fpr=None)
                 graph_title = args.graph_title + f" threshold = {args.threshold}"
                 graph_path = args.graph_path + f"_{args.threshold}"
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
+                eval_metrics(pred_or_list, graph_path, graph_title, "union")
+                eval_metrics(pred_and_list, graph_path, graph_title, "intersection")
         elif args.graph_goal == "pairwise":
             if args.threshold == 0:
                 fpr_list = [float(f) for f in args.fpr]
@@ -408,12 +473,54 @@ if __name__ == '__main__':
                     graph_title = args.graph_title + f" FPR = {f}"
                     graph_path = args.graph_path + f"_{f}"
                     plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
+                    eval_metrics(pred_or_list, graph_path, graph_title, "union")
+                    eval_metrics(pred_and_list, graph_path, graph_title, "intersection")
             elif args.threshold != 0:
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=args.threshold,
-                                                                                 target_fpr=0)
+                                                                                 target_fpr=None)
                 graph_title = args.graph_title + f" threshold = {args.threshold}"
                 graph_path = args.graph_path + f"_{args.threshold}"
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, graph_title, graph_path)
+                eval_metrics(pred_or_list, graph_path, graph_title, "union")
+                eval_metrics(pred_and_list, graph_path, graph_title, "intersection")
+        else:
+            raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
+
+    elif args.graph_type == "venn" and len(args.seed) == 1:
+        if args.graph_goal == "single_attack":
+            target_pred_list = pred_dict[args.single_attack_name]
+            adjusted_pred_list = [prediction.adjust_fpr(pred) for pred in target_pred_list][:3]
+            plot_venn(adjusted_pred_list, [], args.graph_goal, args.graph_title, args.graph_path)
+        elif args.graph_goal == "common_tp":
+            if args.threshold == 0:
+                fpr_list = [float(f) for f in args.fpr]
+                for f in fpr_list:
+                    pred_list = venn_diagram.single_seed_process_for_venn(pred_dict, threshold=0,
+                                                                                     target_fpr=f)
+                    graph_title = args.graph_title + f" FPR = {f}"
+                    graph_path = args.graph_path + f"_{f}"
+                    plot_venn(pred_list, [], args.graph_goal, graph_title, graph_path)
+            elif args.threshold != 0:
+                pred_list = venn_diagram.single_seed_process_for_venn(pred_dict, threshold=args.threshold,
+                                                                                 target_fpr=0)
+                graph_title = args.graph_title + f" threshold = {args.threshold}"
+                graph_path = args.graph_path + f"_{args.threshold}"
+                plot_venn(pred_list, [], args.graph_goal, graph_title, graph_path)
+        elif args.graph_goal == "pairwise":
+            if args.threshold == 0:
+                fpr_list = [float(f) for f in args.fpr]
+                for f in fpr_list:
+                    pred_list = venn_diagram.single_seed_process_for_venn(pred_dict, threshold=0,
+                                                                                     target_fpr=f)
+                    graph_title = args.graph_title + f" FPR = {f}"
+                    graph_path = args.graph_path + f"_{f}"
+                    plot_venn(pred_list, [], args.graph_goal, graph_title, graph_path)
+            elif args.threshold != 0:
+                pred_list = venn_diagram.single_seed_process_for_venn(pred_dict, threshold=args.threshold,
+                                                                                 target_fpr=0)
+                graph_title = args.graph_title + f" threshold = {args.threshold}"
+                graph_path = args.graph_path + f"_{args.threshold}"
+                plot_venn(pred_list, [], args.graph_goal, graph_title, graph_path)
         else:
             raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
 
