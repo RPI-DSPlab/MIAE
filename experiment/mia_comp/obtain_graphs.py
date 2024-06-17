@@ -29,10 +29,9 @@ import utils
 
 
 
-def load_and_create_predictions(attack: List[str], dataset: str, architecture: str, data_path: str, seeds: List[int] = None,
-                                ) -> Dict[str, List[prediction.Predictions]]:
+def load_and_create_predictions(attack: List[str], dataset: str, architecture: str, data_path: str, seeds: List[int] = None) -> Dict[str, List[prediction.Predictions]]:
     """
-    load the predictions of the attack of all seeds and create the Predictions objects
+    Load the predictions of the attack of all seeds and create the Predictions objects
     :param attack: List[str]: list of attack names
     :param dataset: str: dataset name
     :param architecture: str: target model architecture
@@ -40,7 +39,17 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
     :return: Dict[str, List[Predictions]]: dictionary with attack names as keys and corresponding Predictions objects list as values
     """
 
-    # load the target_dataset
+    # Mapping of old attack names to new attack names
+    attack_name_mapping = {
+        "losstraj": "Loss Trajectory Attack",
+        "shokri": "class-nn",
+        "yeom": "LIRA",
+        "lira": "Loss Trajectory Attack",
+        "aug": "augmentation attack",
+        "calibration": "difficulty calibration loss attack"
+    }
+
+    # Load the target_dataset
     target_dataset_path = f"{data_path}/target/{dataset}/"
     index_to_data, attack_set_membership = utils.load_target_dataset(target_dataset_path)
 
@@ -50,7 +59,8 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
         for s in seeds:
             pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
             pred_arr = utils.load_predictions(pred_path)
-            attack_name = f"{att}_sd{s}"
+            new_attack_name = attack_name_mapping.get(att, att)
+            attack_name = f"{new_attack_name}_sd{s}"
             pred_obj = prediction.Predictions(pred_arr, attack_set_membership, attack_name)
             pred_list.append(pred_obj)
         pred_dict[att] = pred_list
@@ -71,7 +81,7 @@ def plot_venn(pred_list: List[prediction.Predictions], pred_list2: List[
     if graph_goal == "common_tp":
         venn_diagram.plot_venn_for_all_attacks(pred_list, pred_list2, graph_title, graph_path)
     elif graph_goal == "single_attack":
-        venn_diagram.plot_venn_single_for_all_seeds(pred_list, graph_title, graph_path)
+        venn_diagram.plot_venn_single(pred_list, graph_title, graph_path)
     elif graph_goal == "pairwise":
         paired_pred_list_or = venn_diagram.find_pairwise_preds(pred_list)
         paired_pred_list_and = venn_diagram.find_pairwise_preds(pred_list2)
@@ -133,7 +143,6 @@ def plot_auc(predictions: Dict[str, prediction.Predictions], graph_title: str, g
         ground_truth = pred.ground_truth_arr if ground_truth is None else ground_truth
 
     prediction.plot_auc(prediction_list, attack_names, graph_title, fprs, graph_path)
-
 
 
 def plot_hardness_distribution(

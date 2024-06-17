@@ -1,6 +1,7 @@
 import os
 from typing import List, Dict, Tuple
 import numpy as np
+import csv
 
 def parse_file(file_path: str, all_jaccard: Dict[float, Dict[str, List[Tuple[Tuple[str, str], float]]]]):
     """
@@ -57,21 +58,21 @@ def calculate_avg_std(all_jaccard: Dict[float, Dict[str, List[Tuple[Tuple[str, s
 
             stat[fpr][process_opt] = []
             for pair, values in pair_values.items():
-                result = f"{np.mean(values):.4f} ± {np.std(values):.5f}%"
+                result = f"{round(np.mean(values), 3):.3f} ± {round(np.std(values), 3):.3f}"
                 stat[fpr][process_opt].append((pair, result))
 
 def save_statistics(stat: Dict[float, Dict[str, List[Tuple[Tuple[str, str], str]]]], save_dir: str):
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     for fpr, process_dict in stat.items():
-        file_name = f"fpr_{fpr}_jaccard.txt"
+        file_name = f"Jaccard_fpr_{fpr}.csv"
         save_path = os.path.join(save_dir, file_name)
-        with open(save_path, 'w') as file:
+        with open(save_path, 'w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["Process Option", "Pair 1", "Pair 2", "Value"])
             for process_opt, pairs in process_dict.items():
-                file.write(f"Process Option: {process_opt}\n")
                 for pair, value in pairs:
-                    file.write(f"{pair}: {value}\n")
-                file.write("\n")
+                    writer.writerow([process_opt, pair[0], pair[1], value])
 
 if __name__ == "__main__":
     target_fpr = [0.1, 0.3]
@@ -81,7 +82,8 @@ if __name__ == "__main__":
     base_dirs = [
         "/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_0/graphs/venn/fpr/common_tp",
         "/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_1/graphs/venn/fpr/common_tp",
-        "/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_2/graphs/venn/fpr/common_tp"
+        "/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_2/graphs/venn/fpr/common_tp",
+        "/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_3/graphs/venn/fpr/common_tp"
     ]
 
     for base_dir in base_dirs:
@@ -106,15 +108,15 @@ if __name__ == "__main__":
     #     print()
 
     calculate_avg_std(all_jaccard, stat)
-    # save_dir = "/data/public/comp_mia_data/repeat_exp_set/eval_stat"
-    # save_statistics(stat, save_dir)
+    save_dir = "/data/public/comp_mia_data/repeat_exp_set/eval_stat"
+    save_statistics(stat, save_dir)
 
-    # # Print the average and standard deviation of the Jaccard similarity values
-    # for fpr, process_dict in stat.items():
-    #     print(f"FPR: {fpr}")
-    #     for process_opt, jaccard_list in process_dict.items():
-    #         print(f"Process Option: {process_opt}")
-    #         for pair, result in jaccard_list:
-    #             print(f"{pair}: {result}")
-    #         print()
-    #     print()
+    # Print the average and standard deviation of the Jaccard similarity values
+    for fpr, process_dict in stat.items():
+        print(f"FPR: {fpr}")
+        for process_opt, jaccard_list in process_dict.items():
+            print(f"Process Option: {process_opt}")
+            for pair, result in jaccard_list:
+                print(f"{pair}: {result}")
+            print()
+        print()

@@ -1,21 +1,12 @@
 # This script generates Venn diagrams for the MIAE experiment
 
-# Get the datasets, architectures, MIAs and categories
-#datasets=("cifar10" "cifar100")
-#archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-#mias=("losstraj" "shokri" "yeom" "lira" "aug")
-#categories=("threshold" "single_attack" "fpr")
-#subcategories=("common_tp" "pairwise")
-#seeds=(0 1 2 3)
-#fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
-
 datasets=("cifar10")
 archs=("resnet56")
 mias=("losstraj" "shokri" "yeom" "lira" "aug" "calibration")
 categories=("threshold" "single_attack" "fpr")
 subcategories=("common_tp" "pairwise")
-seeds=(0 1 2 3 4 5)
-fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
+seeds=(0 1 2)
+fprs=(0.001 0.01 0 0.1 0.2 0.3 0.4 0.5 0.8)
 
 # Prepare the parameter lists for the experiment
 mialist=""
@@ -34,7 +25,7 @@ for fpr in "${fprs[@]}"; do
 done
 
 
-experiment_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_3"
+experiment_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_0"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 
@@ -46,7 +37,7 @@ else
     exit 1
 fi
 
-venn_dir="$graph_dir/venn"
+venn_dir="$graph_dir/venn_TN"
 #venn_dir="$graph_dir/venn3"
 mkdir -p "$venn_dir"
 if [ -d "$venn_dir" ]; then
