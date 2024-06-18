@@ -1,12 +1,12 @@
-from typing import List, Tuple, Dict, Optional
 
+import os
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from venn import venn
 from matplotlib_venn import venn3_unweighted, venn3, venn2_unweighted, venn2
-
+from typing import List, Tuple, Dict, Optional
 from miae.eval_methods.prediction import Predictions, union_pred, intersection_pred, find_common_tp_pred
 
 def find_pairwise_preds(pred_list: List[Predictions]) -> List[Tuple[Predictions, Predictions]]:
@@ -162,14 +162,12 @@ def single_attack_process_for_venn(pred_list: List[Predictions], target_fpr: flo
         raise ValueError("Target_fpr should be provided.")
     return result
 
-def plot_venn_single(pred_list: List[Predictions], graph_title: str, save_path: str):
+def plot_venn_single(pred_list: List[Predictions], save_path: str):
     """
     Plot Venn diagrams for a single attack with 3 different seeds including both unweighted and weighted Venn diagrams.
     :param pred_list: list of Predictions objects
-    :param graph_title: title of the graph
     :param save_path: path to save the graphs
     """
-    plt.figure(figsize=(14, 7))
     attacked_points = {pred.name: set() for pred in pred_list}
     for pred in pred_list:
         attacked_points[pred.name] = set(np.where((pred.predictions_to_labels() == pred.ground_truth_arr))[0].tolist())
@@ -179,17 +177,16 @@ def plot_venn_single(pred_list: List[Predictions], graph_title: str, save_path: 
     circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
 
     # Plotting unweighted Venn diagram
-    plt.subplot(1, 2, 1, aspect='equal')
+    plt.figure(figsize=(7, 7))
     venn3_unweighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
-    plt.title("Unweighted", fontsize=15)
+    plt.savefig(f"{save_path}_unweighted.pdf")
+    plt.close()
 
     # Plotting weighted Venn diagram
-    plt.subplot(1, 2, 2, aspect='equal')
+    plt.figure(figsize=(7, 7))
     venn3(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
-    plt.title("Weighted", fontsize=15)
-
-    plt.suptitle(graph_title, fontweight='bold')
-    plt.savefig(f"{save_path}.png")
+    plt.savefig(f"{save_path}_weighted.pdf")
+    plt.close()
 
 def plot_venn_single_for_all_seeds(pred_list: List[Predictions], graph_title: str, save_path: str):
     """
@@ -223,54 +220,48 @@ def plot_venn_single_for_all_seeds(pred_list: List[Predictions], graph_title: st
     plt.savefig(f"{save_path}.png")
 
 def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
-                       pred_pair_list_and: List[Tuple[Predictions, Predictions]], graph_title: str, save_path: str):
+                       pred_pair_list_and: List[Tuple[Predictions, Predictions]], save_path: str):
     """
     Plot Venn diagrams for each pair of predictions in the given lists including both unweighted and weighted Venn diagrams.
     :param pred_pair_list_or: list of tuples, each containing a pair of Predictions objects for union of seeds
     :param pred_pair_list_and: list of tuples, each containing a pair of Predictions objects for intersection of seeds
-    :param graph_title: title of the graph
     :param save_path: path to save the graphs
     """
     circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
 
-    def pairwise(pred_1, pred_2, row, col, weighted, suffix):
+    def pairwise(pred_1, pred_2, weighted, suffix, folder_path):
         attacked_points_1 = set(np.where((pred_1.pred_arr == 1) & (pred_1.ground_truth_arr == 1))[0])
         attacked_points_2 = set(np.where((pred_2.pred_arr == 1) & (pred_2.ground_truth_arr == 1))[0])
 
-        plt.subplot(2, 2, row * 2 + col + 1, aspect='equal')
+        plt.figure(figsize=(7, 7))
 
         if weighted:
             venn2(subsets=(attacked_points_1, attacked_points_2), set_labels=(pred_1.name, pred_2.name),
                   set_colors=circle_colors)
-            plt.title(f"{suffix} (Weighted)", fontsize=15)
+            plt.title(f"{suffix} (Weighted)", fontsize=15, fontweight='bold')
+            plt.savefig(os.path.join(folder_path, f"{suffix}_weighted.pdf"))
         else:
             venn2_unweighted(subsets=(attacked_points_1, attacked_points_2), set_labels=(pred_1.name, pred_2.name),
                              set_colors=circle_colors)
-            plt.title(f"{suffix} (Unweighted)", fontsize=15)
+            plt.title(f"{suffix} (Unweighted)", fontsize=15, fontweight='bold')
+            plt.savefig(os.path.join(folder_path, f"{suffix}_unweighted.pdf"))
 
-        jaccard_sim = jaccard_similarity(pred_1, pred_2)
-        return jaccard_sim
+        plt.close()
 
     for idx, (pair_or, pair_and) in enumerate(zip(pred_pair_list_or, pred_pair_list_and)):
         pred_1_or, pred_2_or = pair_or
         pred_1_and, pred_2_and = pair_and
+        name1 = pred_1_or.name.split('_')[0]
+        name2 = pred_2_or.name.split('_')[0]
 
-        plt.figure(figsize=(14, 14))
+        folder_name = f"{name1}_vs_{name2}"
+        folder_path = os.path.join(save_path, folder_name)
+        os.makedirs(folder_path, exist_ok=True)
 
-        union_jaccard_sim_unweighted = pairwise(pred_1_or, pred_2_or, 0, 0, False, "Union")
-        _ = pairwise(pred_1_or, pred_2_or, 0, 1, True, "Union")
-        intersection_jaccard_sim_unweighted = pairwise(pred_1_and, pred_2_and, 1, 0, False, "Intersection")
-        _ = pairwise(pred_1_and, pred_2_and, 1, 1, True, "Intersection")
-
-        plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.05, hspace=0.3, wspace=0.3)
-        plt.suptitle(
-            f"{graph_title}\nUnion Jaccard Similarity = {union_jaccard_sim_unweighted:.3f}"
-            f"\nIntersection Jaccard Similarity = {intersection_jaccard_sim_unweighted:.3f}",
-            fontweight='bold')
-
-        full_save_path = f"{save_path}_{pred_1_or.name}_vs_{pred_2_or.name}.png"
-        plt.savefig(full_save_path)
-        plt.close()
+        pairwise(pred_1_or, pred_2_or, False, "Union", folder_path)
+        pairwise(pred_1_or, pred_2_or, True, "Union", folder_path)
+        pairwise(pred_1_and, pred_2_and, False, "Intersection", folder_path)
+        pairwise(pred_1_and, pred_2_and, True, "Intersection", folder_path)
 
 def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Optional[float] = 0,
                           target_fpr: Optional[float] = None) -> List[Predictions]:

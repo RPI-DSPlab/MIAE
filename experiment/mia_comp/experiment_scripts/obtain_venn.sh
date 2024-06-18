@@ -3,8 +3,8 @@
 datasets=("cifar10")
 archs=("resnet56")
 mias=("losstraj" "shokri" "yeom" "lira" "aug" "calibration")
-categories=("threshold" "single_attack" "fpr")
-subcategories=("common_tp" "pairwise")
+categories=("fpr")
+subcategories=("pairwise")
 seeds=(0 1 2)
 fprs=(0.001 0.01 0 0.1 0.2 0.3 0.4 0.5 0.8)
 
@@ -37,8 +37,7 @@ else
     exit 1
 fi
 
-venn_dir="$graph_dir/venn_TN"
-#venn_dir="$graph_dir/venn3"
+venn_dir="$graph_dir/venn_pairwise"
 mkdir -p "$venn_dir"
 if [ -d "$venn_dir" ]; then
     echo "Successfully created directory '$venn_dir'."
@@ -62,7 +61,7 @@ cd /home/zhangc26/MIAE/experiment/mia_comp
 # Generate Venn diagrams for the MIAE experiment when the goal is common_tp
 for category in "${categories[@]}"; do
     # if categroy is threshold or fpr, echo the title
-    if [ "$category" == "threshold" ] || [ "$category" == "fpr" ]; then
+    if [ "$category" == "threshold" ]; then
         for dataset in "${datasets[@]}"; do
             for arch in "${archs[@]}"; do
                 for subcategory in "${subcategories[@]}"; do
@@ -80,27 +79,55 @@ for category in "${categories[@]}"; do
                         graph_title="$dataset, $arch, pairwise"
                     fi
 
-                    if [ "$category" == "threshold" ]; then
-                        threshold=0.5
-                        graph_title=${graph_title}
-                        graph_path="${plot_dir}/threshold"
-                    elif [ "$category" == "fpr" ]; then
-                        threshold=0
-                        graph_title=${graph_title}
-                        graph_path="${plot_dir}/fpr"
-                    fi
+                    threshold=0.5
+                    graph_path="${plot_dir}/threshold"
 
                     python obtain_graphs.py --dataset "$dataset" \
-                                                    --architecture "$arch" \
-                                                    --attacks ${mialist} \
-                                                    --data_path "$experiment_dir" \
-                                                    --threshold "$threshold" \
-                                                    --fpr ${fprlist}\
-                                                    --graph_type "venn" \
-                                                    --graph_goal "$graph_goal" \
-                                                    --graph_title "$graph_title" \
-                                                    --graph_path "$graph_path" \
-                                                    --seed ${seedlist}
+                                            --architecture "$arch" \
+                                            --attacks ${mialist} \
+                                            --data_path "$experiment_dir" \
+                                            --threshold "$threshold" \
+                                            --fpr ${fprlist} \
+                                            --graph_type "venn" \
+                                            --graph_goal "$graph_goal" \
+                                            --graph_title "$graph_title" \
+                                            --graph_path "$graph_path" \
+                                            --seed ${seedlist}
+                done
+            done
+        done
+    elif [ "$category" == "fpr" ]; then
+        for dataset in "${datasets[@]}"; do
+            for arch in "${archs[@]}"; do
+                for subcategory in "${subcategories[@]}"; do
+                    for fpr in ${fprlist}; do
+                        if [ "$subcategory" == "common_tp" ]; then
+                            plot_dir="$venn_dir/$category/common_tp/$dataset/$arch/fpr_${fpr}"
+                            graph_goal="common_tp"
+                            graph_title="Venn for $dataset, $arch, common_tp"
+                        elif [ "$subcategory" == "pairwise" ]; then
+                            plot_dir="$venn_dir/$category/pairwise/$dataset/$arch/fpr_${fpr}"
+                            rm -rf "$plot_dir"
+                            mkdir -p "$plot_dir"
+                            graph_goal="pairwise"
+                            graph_title="$dataset, $arch, pairwise"
+                        fi
+
+                        threshold=0
+                        graph_path="${plot_dir}"
+
+                        python obtain_graphs.py --dataset "$dataset" \
+                                                --architecture "$arch" \
+                                                --attacks ${mialist} \
+                                                --data_path "$experiment_dir" \
+                                                --threshold "$threshold" \
+                                                --FPR "$fpr" \
+                                                --graph_type "venn" \
+                                                --graph_goal "$graph_goal" \
+                                                --graph_title "$graph_title" \
+                                                --graph_path "$graph_path" \
+                                                --seed ${seedlist}
+                    done
                 done
             done
         done
@@ -108,25 +135,28 @@ for category in "${categories[@]}"; do
         for dataset in "${datasets[@]}"; do
             for arch in "${archs[@]}"; do
                 for mia in "${mias[@]}"; do
-                    plot_dir="$venn_dir/$category/$dataset/$arch/$mia"
-                    rm -rf "$plot_dir"
-                    mkdir -p "$plot_dir"
+                    for fpr in ${fprlist}; do
+                        plot_dir="$venn_dir/$category/$dataset/$arch/$mia/fpr_$fpr"
+                        rm -rf "$plot_dir"
+                        mkdir -p "$plot_dir"
 
-                    # run the experiment
-                    graph_title="$dataset, $arch, $mia"
-                    graph_path="${plot_dir}/venn_${mia}"
-                    python obtain_graphs.py --dataset "$dataset" \
-                                                    --architecture "$arch" \
-                                                    --attacks ${mialist} \
-                                                    --data_path "$experiment_dir" \
-                                                    --single_attack_name "$mia" \
-                                                    --threshold "0" \
-                                                    --fpr ${fprlist} \
-                                                    --graph_type "venn" \
-                                                    --graph_goal "single_attack" \
-                                                    --graph_title "$graph_title" \
-                                                    --graph_path "$graph_path" \
-                                                    --seed ${seedlist}
+                        # run the experiment
+                        graph_title="$dataset, $arch, $mia (FPR: $fpr)"
+                        graph_path="${plot_dir}/venn_${mia}"
+
+                        python obtain_graphs.py --dataset "$dataset" \
+                                                --architecture "$arch" \
+                                                --attacks ${mialist} \
+                                                --data_path "$experiment_dir" \
+                                                --single_attack_name "$mia" \
+                                                --threshold "0" \
+                                                --FPR $fpr \
+                                                --graph_type "venn" \
+                                                --graph_goal "single_attack" \
+                                                --graph_title "$graph_title" \
+                                                --graph_path "$graph_path" \
+                                                --seed ${seedlist}
+                    done
                 done
             done
         done
