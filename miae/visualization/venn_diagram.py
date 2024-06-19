@@ -354,7 +354,7 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], t
     plt.savefig(f"{save_path}.png")
 
 
-def plot_venn_for_all_attacks(pred_or: List[Predictions], pred_and: List[Predictions], title: str, save_path: str):
+def plot_venn_for_all_attacks(pred_or: List[Predictions], pred_and: List[Predictions], save_path: str):
     """
     Plot Venn diagrams for at most 5 attacks, supporting both unweighted and weighted diagrams.
     :param pred_or: list of Predictions for the 'pred_or' set
@@ -381,29 +381,24 @@ def plot_venn_for_all_attacks(pred_or: List[Predictions], pred_and: List[Predict
     jaccard_sim_or = overall_jaccard_similarity(pred_or)
     jaccard_sim_and = overall_jaccard_similarity(pred_and)
 
-    plt.figure(figsize=(20, 14))
-
-    gs = plt.GridSpec(1, 2, width_ratios=[1, 1])
     cmaps = ["cool", "viridis"]
-    for i, (venn_sets, venn_labels, venn_title, jaccard_sim, cmap) in enumerate(zip(
-            [venn_sets_or, venn_sets_and],
-            [venn_labels_or, venn_labels_and],
-            ["Union", "Intersection"],
-            [jaccard_sim_or, jaccard_sim_and],
-            cmaps
-    )):
+    venn_data = [
+        (venn_sets_or, venn_labels_or, "Union", jaccard_sim_or, cmaps[0], "union"),
+        (venn_sets_and, venn_labels_and, "Intersection", jaccard_sim_and, cmaps[1], "intersection")
+    ]
+
+    for venn_sets, venn_labels, venn_title, jaccard_sim, cmap, fname_suffix in venn_data:
         if all(len(s) == 0 for s in venn_sets):
             graph_info = '/'.join(save_path.split('/')[-5:])
             print(f"Skip plotting because all sets are empty. The current path is {graph_info}. "
                   f"We process the original data by finding {venn_title} of all seeds.")
             continue
 
-        ax = plt.subplot(gs[0, i], aspect='equal')
+        plt.figure(figsize=(10, 8))
+        ax = plt.subplot(111, aspect='equal')
         dataset_dict = {name: data for name, data in zip(venn_labels, venn_sets)}
-        venn(dataset_dict, fmt="{size}", cmap=cmap, fontsize=12, legend_loc="upper left", ax=ax)
-        plt.title(f"{venn_title} Unweighted \n Jaccard Similarity: {jaccard_sim:.3f}")
+        venn(dataset_dict, fmt="{size}", cmap=cmap, fontsize=10, legend_loc="upper left", ax=ax)
 
-
-    plt.suptitle(title, fontweight='bold', fontsize=16)
-    plt.tight_layout(rect=[0, 0., 1, 0.95])
-    plt.savefig(f"{save_path}.png")
+        plt.tight_layout(rect=[0, 0., 1, 0.95])
+        plt.savefig(os.path.join(save_path, f"{fname_suffix}.pdf"))
+        plt.close()

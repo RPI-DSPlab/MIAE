@@ -3,8 +3,8 @@
 datasets=("cifar10")
 archs=("resnet56")
 mias=("losstraj" "shokri" "yeom" "lira" "aug" "calibration")
-categories=("fpr")
-subcategories=("pairwise")
+categories=("threshold" "fpr" "single_attack")
+subcategories=("pairwise" "common_tp")
 seeds=(0 1 2)
 fprs=(0.001 0.01 0 0.1 0.2 0.3 0.4 0.5 0.8)
 
@@ -25,7 +25,7 @@ for fpr in "${fprs[@]}"; do
 done
 
 
-experiment_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_0"
+experiment_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_3"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 
@@ -37,7 +37,7 @@ else
     exit 1
 fi
 
-venn_dir="$graph_dir/venn_pairwise"
+venn_dir="$graph_dir/venn"
 mkdir -p "$venn_dir"
 if [ -d "$venn_dir" ]; then
     echo "Successfully created directory '$venn_dir'."
@@ -65,29 +65,30 @@ for category in "${categories[@]}"; do
         for dataset in "${datasets[@]}"; do
             for arch in "${archs[@]}"; do
                 for subcategory in "${subcategories[@]}"; do
+                    threshold=0.5
                     if [ "$subcategory" == "common_tp" ]; then
-                        plot_dir="$venn_dir/$category/common_tp/$dataset/$arch"
+                        plot_dir="$venn_dir/$category/common_tp/$dataset/$arch/threshold_${threshold}"
                         rm -rf "$plot_dir"
                         mkdir -p "$plot_dir"
                         graph_goal="common_tp"
                         graph_title="Venn for $dataset, $arch, common_tp"
                     elif [ "$subcategory" == "pairwise" ]; then
-                        plot_dir="$venn_dir/$category/pairwise/$dataset/$arch"
+                        plot_dir="$venn_dir/$category/pairwise/$dataset/$arch/threshold_${threshold}"
                         rm -rf "$plot_dir"
                         mkdir -p "$plot_dir"
                         graph_goal="pairwise"
                         graph_title="$dataset, $arch, pairwise"
                     fi
 
-                    threshold=0.5
-                    graph_path="${plot_dir}/threshold"
+
+                    graph_path="${plot_dir}"
 
                     python obtain_graphs.py --dataset "$dataset" \
                                             --architecture "$arch" \
                                             --attacks ${mialist} \
                                             --data_path "$experiment_dir" \
                                             --threshold "$threshold" \
-                                            --fpr ${fprlist} \
+                                            --FPR "0" \
                                             --graph_type "venn" \
                                             --graph_goal "$graph_goal" \
                                             --graph_title "$graph_title" \
@@ -103,6 +104,8 @@ for category in "${categories[@]}"; do
                     for fpr in ${fprlist}; do
                         if [ "$subcategory" == "common_tp" ]; then
                             plot_dir="$venn_dir/$category/common_tp/$dataset/$arch/fpr_${fpr}"
+                            rm -rf "$plot_dir"
+                            mkdir -p "$plot_dir"
                             graph_goal="common_tp"
                             graph_title="Venn for $dataset, $arch, common_tp"
                         elif [ "$subcategory" == "pairwise" ]; then
@@ -142,7 +145,7 @@ for category in "${categories[@]}"; do
 
                         # run the experiment
                         graph_title="$dataset, $arch, $mia (FPR: $fpr)"
-                        graph_path="${plot_dir}/venn_${mia}"
+                        graph_path="${plot_dir}"
 
                         python obtain_graphs.py --dataset "$dataset" \
                                                 --architecture "$arch" \
