@@ -40,6 +40,13 @@ class Predictions:
         self.ground_truth_arr = ground_truth_arr
         self.name = name
 
+    def update_name(self, new_name):
+        """
+        Update the name of the Predictions object.
+        :param new_name: new name of the Predictions object
+        """
+        self.name = new_name
+
     def predictions_to_labels(self, threshold: float = 0.5) -> np.ndarray:
         """
         Convert predictions to binary labels.

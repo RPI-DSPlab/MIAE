@@ -1,10 +1,12 @@
 # This script generates Venn diagrams for the MIAE experiment
 
-datasets=("cifar10")
+datasets=("cifar10" "cinic10")
 archs=("resnet56")
-mias=("losstraj" "shokri" "yeom" "lira" "aug" "calibration")
-categories=("threshold" "fpr" "single_attack")
-subcategories=("pairwise" "common_tp")
+#mias=("losstraj" "shokri" "yeom" "lira" "aug" "calibration")
+mias=("shokri")
+#categories=("threshold" "fpr" "single_attack" "dif_distribution")
+#subcategories=("pairwise" "common_tp")
+categories=("dif_distribution")
 seeds=(0 1 2)
 fprs=(0.001 0.01 0 0.1 0.2 0.3 0.4 0.5 0.8)
 
@@ -24,8 +26,12 @@ for fpr in "${fprs[@]}"; do
     fprlist+="${fpr} "
 done
 
+datasetlist=""
+for dataset in "${datasets[@]}"; do
+    datasetlist+="${dataset} "
+done
 
-experiment_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_3"
+experiment_dir="/data/public/comp_mia_data/same_attack_different_distribution"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 
@@ -160,6 +166,36 @@ for category in "${categories[@]}"; do
                                                 --graph_path "$graph_path" \
                                                 --seed ${seedlist}
                     done
+                done
+            done
+        done
+    elif [ "$category" == "dif_distribution" ]; then
+        for arch in "${archs[@]}"; do
+            for mia in "${mias[@]}"; do
+                for fpr in ${fprlist}; do
+                    plot_dir="$venn_dir/$category/$dataset/$arch/$mia/fpr_$fpr"
+                    rm -rf "$plot_dir"
+                    mkdir -p "$plot_dir"
+
+                    # run the experiment
+                    graph_title="$dataset, $arch, $mia (FPR: $fpr)"
+                    graph_path="${plot_dir}"
+
+                    python obtain_graphs.py --dataset "-" \
+                                            --architecture "$arch" \
+                                            --attacks ${mialist} \
+                                            --data_path "$experiment_dir" \
+                                            --single_attack_name "$mia" \
+                                            --threshold "0" \
+                                            --FPR $fpr \
+                                            --graph_type "venn" \
+                                            --graph_goal "dif_distribution" \
+                                            --graph_title "$graph_title" \
+                                            --graph_path "$graph_path" \
+                                            --seed ${seedlist} \
+                                            --dataset_list ${datasetlist}
+
+
                 done
             done
         done

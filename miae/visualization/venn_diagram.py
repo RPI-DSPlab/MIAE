@@ -174,17 +174,19 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
 
     venn_sets = tuple(attacked_points[pred.name] for pred in pred_list)
     venn_labels = [pred.name for pred in pred_list]
+    venn_unweighted = venn3_unweighted if len(pred_list) == 3 else venn2_unweighted
+    venn_weighted = venn3 if len(pred_list) == 3 else venn2
     circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
 
     # Plotting unweighted Venn diagram
     plt.figure(figsize=(7, 7))
-    venn3_unweighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
+    venn_unweighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
     plt.savefig(f"{save_path}_unweighted.pdf")
     plt.close()
 
     # Plotting weighted Venn diagram
     plt.figure(figsize=(7, 7))
-    venn3(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
+    venn_weighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
     plt.savefig(f"{save_path}_weighted.pdf")
     plt.close()
 
@@ -402,3 +404,12 @@ def plot_venn_for_all_attacks(pred_or: List[Predictions], pred_and: List[Predict
         plt.tight_layout(rect=[0, 0., 1, 0.95])
         plt.savefig(os.path.join(save_path, f"{fname_suffix}.pdf"))
         plt.close()
+
+
+def same_attack_dif_dataset(pred_or: List[Predictions], pred_and: List[Predictions], save_path: str):
+    """
+    Plot venn diagram for the same attack with different datasets.
+    :param pred_list_or: list of Predictions for the 'pred_or' set
+    :param pred_list_and: list of Predictions for the 'pred_and' set
+    :param save_path: path to save the graph
+    """
