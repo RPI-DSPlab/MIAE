@@ -65,13 +65,11 @@ def get_dataset(datset_name, aug, targetset_ratio, train_test_ratio, shuffle_see
         num_classes = 100
         input_size = 32
     elif datset_name == "cinic10":
+        dataset = datasets.get_cinic10(aug)
         num_classes = 10
         input_size = 32
     else:
         raise ValueError("Invalid dataset")
-
-    if datset_name == "cinic10":  # cinci10 requires manual loading
-        return None, None, None, num_classes, input_size
 
     # prepare the shadow set and target set
     target_len = int(len(dataset) * targetset_ratio)

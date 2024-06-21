@@ -62,14 +62,15 @@ def get_cinic10(aug: bool = True, root=None) -> ConcatDataset:
 
     try:
 
-        trainset = ImageFolder(root='./data/public/CINIC10/CINIC10_60ksubset/cifar10_train_subset' if root is None else root,
+        trainset = ImageFolder(root='/data/public/CINIC10/CINIC10_60ksubset/cifar10_train_subset' if root is None else root,
                                transform=transform)
 
         testset = ImageFolder(root='/data/public/CINIC10/CINIC10_60ksubset/imagenet_test_subset' if root is None else root,
                               transform=transform)
 
+
+        return ConcatDataset([trainset, testset])
     except FileNotFoundError:
         print("Please download the Cinic-10 dataset using experiment/mia_comp/same_attack_different_info/process_CINIC10.ipynb")
-
-    return ConcatDataset([trainset, testset])
+        return None
 
