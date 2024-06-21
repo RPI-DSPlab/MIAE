@@ -199,7 +199,7 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
              'log_path': args.result_path})
     if args.attack == "yeom":
         return yeom_mia.YeomAuxiliaryInfo(
-            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
+            {'device': device, 'shadow_seed_base': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
     if args.attack == "calibration":
         return calibration_mia.CalibrationAuxiliaryInfo(
@@ -211,18 +211,26 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
     if args.attack == "top_k_shokri":
         return top_k_shokri_mia.TopKShokriAuxiliaryInfo(
-            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
+            {'device': device, 'shadow_seed_base': 50*args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path,
              'top_k': 3})
-
     if args.attack == "lira":
         return lira_mia.LiraAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+    
+    if args.attack == "lira":
+        return lira_mia.LiraAuxiliaryInfo(
+            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
+            'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+
+
     if args.attack == "aug":
         return aug_mia.AugAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+    
+    
     else:
         raise ValueError("Invalid attack type")
 

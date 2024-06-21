@@ -11,10 +11,10 @@ from matplotlib import pyplot as plt
 
 # add miae to path
 import sys
-
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 from miae.utils.set_seed import set_seed
+from miae.attacks import losstraj_mia, merlin_mia, lira_mia, aug_mia, calibration_mia, shokri_mia, reference_mia
 from miae.attacks import losstraj_mia, merlin_mia, lira_mia, aug_mia, calibration_mia, shokri_mia, yeom_mia
 from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
@@ -154,17 +154,17 @@ def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data_to_attac
     predictions = []
     attacks_names = []
     for attack in attacks:
-        if not os.path.exists(os.path.join(attack_pred_save_dir, attack.__class__.__name__ + '_pred.npy')):
+        if not os.path.exists(os.path.join(attack_pred_save_dir, attack.__class__.__name__+'_pred.npy')):
             prediction = attack.infer(data_to_attack)
-            np.save(os.path.join(attack_pred_save_dir, attack.__class__.__name__ + '_pred.npy'), prediction)
+            np.save(os.path.join(attack_pred_save_dir, attack.__class__.__name__+'_pred.npy'), prediction)
         else:
-            prediction = np.load(os.path.join(attack_pred_save_dir, attack.__class__.__name__ + '_pred.npy'))
+            prediction = np.load(os.path.join(attack_pred_save_dir, attack.__class__.__name__+'_pred.npy'))
         predictions.append(prediction)
         attacks_names.append(attack.__class__.__name__)
 
     membership_list = [membership for _ in range(len(attacks))]
 
-    roc_auc.fig_fpr_tpr(predictions, membership_list, attacks_names, savedir)
+    roc_auc.fig_fpr_tpr(predictions, membership_list, attacks_names,savedir)
 
 
 def main():
@@ -181,11 +181,10 @@ def main():
 
     # initialize the dataset
     regular_transform = T.Compose([T.ToTensor(),
-                                   T.Normalize(mean=mean, std=std)
-                                   ])
+                                T.Normalize(mean=mean, std=std)
+                                ])
 
-    augmentation_transform = T.Compose([T.RandomHorizontalFlip(), T.RandomCrop(32, padding=4), T.transforms.ToTensor(),
-                                        T.Normalize(mean=mean, std=std)])
+    augmentation_transform = T.Compose([T.RandomHorizontalFlip(), T.RandomCrop(32, padding=4), T.transforms.ToTensor(), T.Normalize(mean=mean, std=std)])
 
     transform = augmentation_transform if aug else regular_transform
 
@@ -211,39 +210,32 @@ def main():
     # -- STEP 1: train target model
     target_model = models.create_resnet56()
     untrained_target_model = deepcopy(target_model)
-    print("Target model: ", target_model.__class__.__name__, " is being trained with ",
-          target_trainset.__class__.__name__, "len: ", len(target_trainset), " and ", target_testset.__class__.__name__,
-          "len: ", len(target_testset))
+    print("Target model: ", target_model.__class__.__name__, " is being trained with ", target_trainset.__class__.__name__, "len: ", len(target_trainset), " and ", target_testset.__class__.__name__, "len: ", len(target_testset))
     if not os.path.exists(os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pkl")):
         train_target_model(target_model, target_model_dir, device, target_trainset, target_testset)
     else:
-        target_model.load_state_dict(
-            torch.load(os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pkl")))
-
-    for attack_name in ["losstraj", "merlin", "lira", "aug", "shokri", "top_k_shokri", "calibration", "yeom"]:
-        if not os.path.exists(os.path.join(attack_dir, attack_name)):
-            os.makedirs(os.path.join(attack_dir, attack_name))
+        target_model.load_state_dict(torch.load(os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pkl")))
 
     # -- STEP 2: prepare the attacks
     losstraj_aux_info = losstraj_mia.LosstrajAuxiliaryInfo(
-        {'device': device, 'seed': seed, 'save_path': attack_dir + '/losstraj', 'num_classes': 10,
-         'batch_size': batch_size, 'lr': lr, 'distillation_epochs': attack_epochs})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/losstraj', 'num_classes': 10,
+             'batch_size': batch_size, 'lr': lr, 'distillation_epochs': attack_epochs})
     merlin_aux_info = merlin_mia.MerlinAuxiliaryInfo(
-        {'device': device, 'seed': seed, 'save_path': attack_dir + '/merlin', 'num_classes': 10,
-         'batch_size': batch_size})
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': batch_size})
     lira_aux_info = lira_mia.LiraAuxiliaryInfo(
-        {'device': device, 'seed': seed, 'save_path': attack_dir + '/lira', 'num_classes': 10, 'batch_size': batch_size,
-         'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir + '/lira'})
+            {'device': device, 'shadow_seed_base': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size,
+             'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/lira'})
+    reference_aux_info = reference_mia.ReferenceAuxiliaryInfo(
+            {'device': device, 'seed': 50*seed, 'save_path': attack_dir+'/reference', 'num_classes': 10, 'batch_size': batch_size,
+             'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/reference'})
     aug_aux_info = aug_mia.AugAuxiliaryInfo(
-        {'device': device, 'seed': seed, 'save_path': attack_dir + '/aug', 'num_classes': 10, 'batch_size': batch_size,
-         'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir + '/aug'})
+            {'device': device, 'shadow_seed_base': 50*seed, 'save_path': attack_dir+'/aug', 'num_classes': 10, 'batch_size': batch_size,
+             'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/aug'})
     shokri_aux_info = shokri_mia.ShokriAuxiliaryInfo(
-        {'num_shadow_models': 10, 'device': device, 'seed': seed, 'save_path': attack_dir + '/shokri',
-         'num_classes': 10, 'batch_size': batch_size,
+        {'num_shadow_models': 10, 'device': device, 'seed': seed, 'save_path': attack_dir + '/shokri', 'num_classes': 10, 'batch_size': batch_size,
          'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir + '/shokri'})
     calibration_aux_info = calibration_mia.CalibrationAuxiliaryInfo(
-        {'device': device, 'seed': seed, 'save_path': attack_dir + '/calibration', 'num_classes': 10,
-         'batch_size': batch_size,
+        {'device': device, 'seed': seed, 'save_path': attack_dir + '/calibration', 'num_classes': 10, 'batch_size': batch_size,
          'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir + '/calibration'})
 
     top_k_shokri_aux_info = top_k_shokri_mia.TopKShokriAuxiliaryInfo(
@@ -255,26 +247,31 @@ def main():
         {'device': device, 'seed': seed, 'save_path': attack_dir + '/yeom', 'num_classes': 10, 'batch_size': batch_size,
          'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir + '/yeom'})
 
+
     losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model), untrained_target_model)
     merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model), untrained_target_model)
     lira_target_model_access = lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
+    reference_target_model_access = reference_mia.ReferenceModelAccess(deepcopy(target_model), untrained_target_model)
     aug_target_model_access = aug_mia.AugModelAccess(deepcopy(target_model), untrained_target_model)
     shokri_target_model_access = shokri_mia.ShokriModelAccess(deepcopy(target_model), untrained_target_model)
     top_k_shokri_target_model_access = top_k_shokri_mia.TopKShokriModelAccess(deepcopy(target_model),
                                                                               untrained_target_model)
     calibration_target_model_access = calibration_mia.CalibrationModelAccess(deepcopy(target_model),
-                                                                             untrained_target_model)
+                                                                      untrained_target_model)
     yeom_target_model_access = yeom_mia.YeomModelAccess(deepcopy(target_model), untrained_target_model)
 
     attacks = [
         # losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
         # merlin_mia.MerlinAttack(merlin_target_model_access, merlin_aux_info),
-        # lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
+        lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
         # aug_mia.augAttack(aug_target_model_access, aug_aux_info)
         # calibration_mia.CalibrationAttack(calibration_target_model_access, calibration_aux_info)
         shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info),
         # top_k_shokri_mia.TopKShokriAttack(top_k_shokri_target_model_access, top_k_shokri_aux_info)
         # yeom_mia.YeomAttack(yeom_target_model_access, yeom_aux_info)
+        # shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info),
+        # top_k_shokri_mia.TopKShokriAttack(top_k_shokri_target_model_access, top_k_shokri_aux_info)
+        # reference_mia.ReferenceAttack(reference_target_model_access, reference_aux_info)
     ]
 
     # -- prepare the attacks
@@ -293,5 +290,10 @@ def main():
     obtain_roc_auc(attacks, savedir, dataset_to_attack, target_membership)
 
 
+
 if __name__ == "__main__":
     main()
+
+
+
+

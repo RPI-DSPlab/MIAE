@@ -5,7 +5,7 @@ import copy
 import logging
 import os
 import re
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import scipy
@@ -45,17 +45,27 @@ class LiraModelAccess(ModelAccess):
         device: the device (cpu or cuda) where the computations will take place.
         """
 
+        def mirror_augmentation(image):
+            """
+            Mirrors the image.
+            """
+            return torch.flip(image, [2])
+
+
         self.model.eval()
         all_logits = []
 
         with torch.no_grad():
             for images, _ in dataloader:
                 images = images.to(device)
-                outputs = self.model(images)
-                all_logits.append(outputs.unsqueeze(1).expand(-1, 2, -1))
+                outputs = self.model(images) # (batch_size, num_classes)
+                # augmentation
+                outputs_mirror = self.model(mirror_augmentation(images)) # (batch_size, num_classes)
+                all_logits.append(torch.stack([outputs, outputs_mirror], dim=1))
         all_logits = torch.cat(all_logits, dim=0)
         all_logits = all_logits.unsqueeze(1)
         return all_logits
+    
 
 
 
@@ -76,8 +86,7 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
         self.lr = config.get('lr', 0.1)
         self.momentum = config.get('momentum', 0.9)
         self.decay = config.get('decay', 0.9999)
-        self.target_seed_base = config.get('target_seed_base', 24)  # the seed begin number for target model
-        self.shadow_seed_base = config.get('shadow_seed_base', 100)  # the seed begin number for shadow model
+        self.shadow_seed_base = config.get('shadow_seed_base', 24)  # the seed begin number for shadow model
         self.epochs = config.get('epochs', 100)
         self.device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
         self.batch_size = config.get('shadow_batchsize', 128)
@@ -291,7 +300,7 @@ class LIRAUtil:
 
     @classmethod
     def lira_mia(cls, keep, scores, check_scores, in_size=100000, out_size=100000,
-                 fix_variance=False):
+                 fix_variance=True):
         """
         Implements the core logic of the LIRA membership inference attack.
 
@@ -342,21 +351,15 @@ class LIRAUtil:
 
     @classmethod
     def _generate_logits(cls, model, data_loader, device):
-        model.eval()
-        all_logits = []
-
-        with torch.no_grad():
-            for images, _ in data_loader:
-                images = images.to(device)
-                outputs = model(images)
-                all_logits.append(outputs.unsqueeze(1).expand(-1, 2, -1))
-        all_logits = torch.cat(all_logits, dim=0)
-        all_logits = all_logits.unsqueeze(1)
-        return all_logits
-
+        """
+        warpper function for get_signal_lira
+        """
+        model_access = LiraModelAccess(model, model)
+        return model_access.get_signal_lira(data_loader, device)
+    
     @classmethod
     def process_shadow_models(cls, info: LiraAuxiliaryInfo, auxiliary_dataset: Dataset, shadow_model_arch) \
-            -> (List[torch.Tensor], List[torch.Tensor]):
+            -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
         """
         Load and process the shadow models to generate the scores and kept indices.
 
