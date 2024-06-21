@@ -14,7 +14,7 @@ import sys
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 from miae.utils.set_seed import set_seed
-from miae.attacks import losstraj_mia, merlin_mia, lira_mia, aug_mia, calibration_mia, shokri_mia
+from miae.attacks import losstraj_mia, merlin_mia, lira_mia, aug_mia, calibration_mia, shokri_mia, reference_mia
 from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
 from experiment import models
@@ -219,10 +219,13 @@ def main():
     merlin_aux_info = merlin_mia.MerlinAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': batch_size})
     lira_aux_info = lira_mia.LiraAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size,
+            {'device': device, 'shadow_seed_base': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size,
              'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/lira'})
+    reference_aux_info = reference_mia.ReferenceAuxiliaryInfo(
+            {'device': device, 'seed': 50*seed, 'save_path': attack_dir+'/reference', 'num_classes': 10, 'batch_size': batch_size,
+             'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/reference'})
     aug_aux_info = aug_mia.AugAuxiliaryInfo(
-            {'device': device, 'seed': seed, 'save_path': attack_dir+'/aug', 'num_classes': 10, 'batch_size': batch_size,
+            {'device': device, 'shadow_seed_base': 50*seed, 'save_path': attack_dir+'/aug', 'num_classes': 10, 'batch_size': batch_size,
              'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/aug'})
     shokri_aux_info = shokri_mia.ShokriAuxiliaryInfo(
         {'num_shadow_models': 10, 'device': device, 'seed': seed, 'save_path': attack_dir + '/shokri', 'num_classes': 10, 'batch_size': batch_size,
@@ -236,9 +239,11 @@ def main():
          'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': attack_epochs,
          'log_path': attack_dir + '/top_k_shokri', 'top_k': 3})
 
+
     losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model), untrained_target_model)
     merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model), untrained_target_model)
     lira_target_model_access = lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
+    reference_target_model_access = reference_mia.ReferenceModelAccess(deepcopy(target_model), untrained_target_model)
     aug_target_model_access = aug_mia.AugModelAccess(deepcopy(target_model), untrained_target_model)
     shokri_target_model_access = shokri_mia.ShokriModelAccess(deepcopy(target_model), untrained_target_model)
     top_k_shokri_target_model_access = top_k_shokri_mia.TopKShokriModelAccess(deepcopy(target_model), untrained_target_model)
@@ -247,11 +252,12 @@ def main():
     attacks = [
         # losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
         # merlin_mia.MerlinAttack(merlin_target_model_access, merlin_aux_info),
-        # lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
+        lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
         # aug_mia.augAttack(aug_target_model_access, aug_aux_info)
         # calibration_mia.CalibrationAttack(calibration_target_model_access, calibration_aux_info)
         # shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info),
-        top_k_shokri_mia.TopKShokriAttack(top_k_shokri_target_model_access, top_k_shokri_aux_info)
+        # top_k_shokri_mia.TopKShokriAttack(top_k_shokri_target_model_access, top_k_shokri_aux_info)
+        # reference_mia.ReferenceAttack(reference_target_model_access, reference_aux_info)
     ]
 
     # -- prepare the attacks
