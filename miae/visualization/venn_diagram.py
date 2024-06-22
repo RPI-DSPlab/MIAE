@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from venn import venn
 from matplotlib_venn import venn3_unweighted, venn3, venn2_unweighted, venn2
 from typing import List, Tuple, Dict, Optional
-from miae.eval_methods.prediction import Predictions, union_pred, intersection_pred, find_common_tp_pred
+from miae.eval_methods.prediction import Predictions, union_pred, intersection_pred, find_common_tp_pred, find_common_tn_pred
 
 def find_pairwise_preds(pred_list: List[Predictions]) -> List[Tuple[Predictions, Predictions]]:
     """
@@ -266,7 +266,7 @@ def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
         pairwise(pred_1_and, pred_2_and, True, "Intersection", folder_path)
 
 def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Optional[float] = 0,
-                          target_fpr: Optional[float] = None) -> List[Predictions]:
+                          target_fpr: Optional[float] = None, option: str = "TPR") -> List[Predictions]:
     """
     Process the data for the Venn diagram: get the pred_list
     :param pred_dict: dictionary of Predictions from different attacks, key: attack name, value: list of Predictions of different seeds
@@ -280,9 +280,12 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
         result_or = []
         result_and = []
         for attack, pred_obj_list in pred_dict.items():
-            common_tp_or, common_tp_and = find_common_tp_pred(pred_obj_list, fpr=target_fpr)
-            result_or.append(common_tp_or)
-            result_and.append(common_tp_and)
+            if option == "TPR":
+                common_or, common_and = find_common_tp_pred(pred_obj_list, fpr=target_fpr)
+            elif option == "TNR":
+                common_or, common_and = find_common_tn_pred(pred_obj_list, fpr=target_fpr)
+            result_or.append(common_or)
+            result_and.append(common_and)
 
     elif target_fpr != None:
         adjusted_pred_dict = {}
@@ -297,9 +300,12 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
             adjusted_pred_dict[attack] = adjusted_pred_list
 
         for attack, adjusted_list in adjusted_pred_dict.items():
-            common_tp_or, common_tp_and = find_common_tp_pred(adjusted_list, fpr=target_fpr)
-            result_or.append(common_tp_or)
-            result_and.append(common_tp_and)
+            if option == "TPR":
+                common_or, common_and = find_common_tp_pred(adjusted_list, fpr=target_fpr)
+            elif option == "TNR":
+                common_or, common_and = find_common_tn_pred(pred_obj_list, fpr=target_fpr)
+            result_or.append(common_or)
+            result_and.append(common_and)
 
     else:
         raise ValueError("Either threshold or target_fpr should be provided.")

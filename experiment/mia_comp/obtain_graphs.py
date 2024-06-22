@@ -449,6 +449,7 @@ if __name__ == '__main__':
     parser.add_argument("--FPR", type=float, help="FPR for the comparison on venn diagram")
     parser.add_argument("--single_attack_name", type=str, help="Name of the single attack for the venn diagram")
     parser.add_argument("--dataset_list", type=str, nargs="+", help="all datasets to be compared")
+    parser.add_argument("--option", type=str, help="Option for the comparison on venn diagram, TPR or TNR")
 
     # for auc graph
     parser.add_argument("--fpr", type=float, nargs="+",
@@ -493,13 +494,13 @@ if __name__ == '__main__':
                                                     args.seed)
             if args.threshold == 0: # FPR
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=0,
-                                                                                 target_fpr=args.FPR)
+                                                                                 target_fpr=args.FPR, option=args.option)
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, args.graph_title, args.graph_path)
                 pairwise_jaccard_or = eval_metrics(pred_or_list, args.graph_path, args.graph_title, "union")
                 pairwise_jaccard_and = eval_metrics(pred_and_list, args.graph_path, args.graph_title, "intersection")
             elif args.threshold != 0: # Threshold
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=args.threshold,
-                                                                                 target_fpr=None)
+                                                                                 target_fpr=None, option=args.option)
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, args.graph_title, args.graph_path)
                 eval_metrics(pred_or_list, args.graph_path, args.graph_title, "union")
                 eval_metrics(pred_and_list, args.graph_path, args.graph_title, "intersection")
@@ -508,13 +509,13 @@ if __name__ == '__main__':
                                                     args.seed)
             if args.threshold == 0:
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=0,
-                                                                                 target_fpr=args.FPR)
+                                                                                 target_fpr=args.FPR, option=args.option)
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, args.graph_title, args.graph_path)
                 eval_metrics(pred_or_list, args.graph_path, args.graph_title, "union")
                 eval_metrics(pred_and_list, args.graph_path, args.graph_title, "intersection")
             elif args.threshold != 0:
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=args.threshold,
-                                                                                 target_fpr=None)
+                                                                                 target_fpr=None, option=args.option)
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, args.graph_title, args.graph_path)
                 eval_metrics(pred_or_list, args.graph_path, args.graph_title, "union")
                 eval_metrics(pred_and_list, args.graph_path, args.graph_title, "intersection")
@@ -527,10 +528,12 @@ if __name__ == '__main__':
 
     elif args.graph_type == "venn" and len(args.seed) == 1:
         if args.graph_goal == "single_attack":
+            pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR, args.seed)
             target_pred_list = pred_dict[args.single_attack_name]
             adjusted_pred_list = [prediction.adjust_fpr(pred) for pred in target_pred_list][:3]
             plot_venn(adjusted_pred_list, [], args.graph_goal, args.graph_title, args.graph_path)
         elif args.graph_goal == "common_tp":
+            pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR, args.seed)
             if args.threshold == 0:
                 fpr_list = [float(f) for f in args.fpr]
                 for f in fpr_list:
@@ -546,6 +549,8 @@ if __name__ == '__main__':
                 graph_path = args.graph_path + f"_{args.threshold}"
                 plot_venn(pred_list, [], args.graph_goal, graph_title, graph_path)
         elif args.graph_goal == "pairwise":
+            pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path,
+                                               args.FPR, args.seed)
             if args.threshold == 0:
                 fpr_list = [float(f) for f in args.fpr]
                 for f in fpr_list:
@@ -564,11 +569,15 @@ if __name__ == '__main__':
             raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
 
     elif args.graph_type == "auc":
+        pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR,
+                                           args.seed)
         for i, seed in enumerate(args.seed):
             pred_dict_seed = {k: v[i] for k, v in pred_dict.items()}
             plot_auc(pred_dict_seed, args.graph_title + f" sd{seed}", args.graph_path + f"_sd{seed}.png", args.fpr)
 
     elif args.graph_type == "hardness_distribution":
+        pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR,
+                                           args.seed)
         if args.external == 0:
             path_to_load = f"{args.hardness_path}/{args.dataset}/{args.architecture}/{args.hardness}/{args.hardness}_score.pkl"
         else:
@@ -579,6 +588,8 @@ if __name__ == '__main__':
         plot_hardness_distribution_unique(pred_dict, hardness, args.graph_title, args.graph_path, args.fpr)
 
     elif args.graph_type == "multi_seed_convergence_intersection":
+        pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR,
+                                           args.seed)
         for fpr in args.fpr:
             graph_title = args.graph_title + f" FPR = {fpr}"
             graph_path = args.graph_path
