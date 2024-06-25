@@ -1,0 +1,123 @@
+# This script generates UpSet diagrams for the MIAE experiment
+
+datasets=("cifar10")
+archs=("resnet56")
+mias=("losstraj" "shokri" "yeom" "lira" "aug" "calibration")
+categories=("threshold" "fpr")
+subcategories=("common_tp")
+option=("TPR" "TNR")
+seeds=(0 1 2)
+fprs=(0.001 0.01 0 0.1 0.2 0.3 0.4 0.5 0.8)
+
+# Prepare the parameter lists for the experiment
+mialist=""
+for mia in "${mias[@]}"; do
+    mialist+="${mia} "
+done
+
+seedlist=""
+for seed in "${seeds[@]}"; do
+    seedlist+="${seed} "
+done
+
+fprlist=""
+for fpr in "${fprs[@]}"; do
+    fprlist+="${fpr} "
+done
+
+
+experiment_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
+graph_dir="$experiment_dir/graphs"
+mkdir -p "$graph_dir"
+if [ -d "$graph_dir" ]; then
+    echo "Successfully created directory '$graph_dir'."
+else
+    echo "Error: Failed to create directory '$graph_dir'."
+    exit 1
+fi
+
+venn_dir="$graph_dir/venn"
+mkdir -p "$venn_dir"
+if [ -d "$venn_dir" ]; then
+    echo "Successfully created directory '$venn_dir'."
+else
+    echo "Error: Failed to create directory '$venn_dir'."
+    exit 1
+fi
+
+for category in "${categories[@]}"; do
+    mkdir -p "$venn_dir/$category"
+    if [ -d "$venn_dir/$category" ]; then
+        echo "Successfully created directory '$venn_dir/$category'."
+    else
+        echo "Error: Failed to create directory '$venn_dir/$category'."
+        exit 1
+    fi
+done
+
+cd /home/zhangc26/MIAE/experiment/mia_comp
+
+# Generate Venn diagrams for the MIAE experiment when the goal is common_tp
+for category in "${categories[@]}"; do
+    if [ "$category" == "threshold" ]; then
+        for dataset in "${datasets[@]}"; do
+            for arch in "${archs[@]}"; do
+                for subcategory in "${subcategories[@]}"; do
+                    for opt in "${option[@]}"; do
+                        threshold=0.5
+                        plot_dir="$venn_dir/$category/common_tp/$dataset/$arch/threshold_${threshold}"
+                        rm -rf "$plot_dir"
+                        mkdir -p "$plot_dir"
+                        graph_goal="common_tp"
+                        graph_title="Venn for $dataset, $arch, common_tp"
+                        graph_path="${plot_dir}"
+
+                        python obtain_graphs.py --dataset "$dataset" \
+                                                --architecture "$arch" \
+                                                --attacks ${mialist} \
+                                                --data_path "$experiment_dir" \
+                                                --threshold "$threshold" \
+                                                --FPR "0" \
+                                                --graph_type "upset" \
+                                                --graph_goal "$graph_goal" \
+                                                --graph_title "$graph_title" \
+                                                --graph_path "$graph_path" \
+                                                --seed ${seedlist} \
+                                                --opt ${opt}
+                    done
+                done
+            done
+        done
+    elif [ "$category" == "fpr" ]; then
+        for dataset in "${datasets[@]}"; do
+            for arch in "${archs[@]}"; do
+                for subcategory in "${subcategories[@]}"; do
+                    for opt in "${option[@]}"; do
+                        for fpr in ${fprlist}; do
+                            plot_dir="$venn_dir/$category/common_tp/$dataset/$arch/$opt/fpr_${fpr}"
+                            rm -rf "$plot_dir"
+                            mkdir -p "$plot_dir"
+                            graph_goal="common_tp"
+                            graph_title="Venn for $dataset, $arch, common_tp"
+                            threshold=0
+                            graph_path="${plot_dir}"
+
+                            python obtain_graphs.py --dataset "$dataset" \
+                                                    --architecture "$arch" \
+                                                    --attacks ${mialist} \
+                                                    --data_path "$experiment_dir" \
+                                                    --threshold "$threshold" \
+                                                    --FPR "$fpr" \
+                                                    --graph_type "upset" \
+                                                    --graph_goal "$graph_goal" \
+                                                    --graph_title "$graph_title" \
+                                                    --graph_path "$graph_path" \
+                                                    --seed ${seedlist} \
+                                                    --opt ${opt}
+                        done
+                    done
+                done
+            done
+        done
+    fi
+done

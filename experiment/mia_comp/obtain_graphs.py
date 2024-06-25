@@ -23,6 +23,7 @@ import miae.eval_methods.sample_hardness
 import miae.eval_methods.prediction as prediction
 import miae.eval_methods.sample_hardness as SampleHardness
 import miae.visualization.venn_diagram as venn_diagram
+import miae.visualization.upset_diagram as upset_diagram
 
 import miae.eval_methods.prediction
 import utils
@@ -52,7 +53,6 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
     # Load the target_dataset
     target_dataset_path = f"{data_path}/target/{dataset}/"
     index_to_data, attack_set_membership = utils.load_target_dataset(target_dataset_path)
-    print(f"current dataset is {dataset}: length of ground_truth_arr is {len(attack_set_membership)}")
 
     pred_dict = {}
     for att in attack:
@@ -60,7 +60,6 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
         for s in seeds:
             pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
             pred_arr = utils.load_predictions(pred_path)
-            print(f"current attack is {att} under {dataset} with seed {s}: length of pred_arr is {len(pred_arr)}")
             new_attack_name = name_mapping.get(att, att)
             attack_name = f"{new_attack_name}_{dataset}_{s}"
             pred_obj = prediction.Predictions(pred_arr, attack_set_membership, attack_name)
@@ -119,6 +118,7 @@ def plot_venn(pred_list: List[prediction.Predictions], pred_list2: List[predicti
         venn_diagram.plot_venn_pairwise(paired_pred_list_or, paired_pred_list_and, graph_path)
     elif graph_goal == "dif_distribution":
         venn_diagram.plot_venn_single(pred_list, graph_path)
+
 
 def eval_metrics(pred_list: List[prediction.Predictions], save_path: str, title: str, process: Optional[str]):
     """
@@ -567,6 +567,19 @@ if __name__ == '__main__':
                 plot_venn(pred_list, [], args.graph_goal, graph_title, graph_path)
         else:
             raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
+
+    elif args.graph_type == "upset":
+        if args.graph_goal == "common_tp":
+            pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path,
+                                                    args.seed)
+            if args.threshold != 0:
+                pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=args.threshold,
+                                                                                 target_fpr=None, option=args.option)
+                upset_diagram.plot_upset_for_all_attacks(pred_or_list, pred_and_list, args.graph_path)
+            elif args.threshold == 0:
+                pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=0,
+                                                                                 target_fpr=args.FPR, option=args.option)
+                upset_diagram.plot_upset_for_all_attacks(pred_or_list, pred_and_list, args.graph_path)
 
     elif args.graph_type == "auc":
         pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR,

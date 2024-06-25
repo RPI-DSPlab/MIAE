@@ -412,10 +412,3 @@ def plot_venn_for_all_attacks(pred_or: List[Predictions], pred_and: List[Predict
         plt.close()
 
 
-def same_attack_dif_dataset(pred_or: List[Predictions], pred_and: List[Predictions], save_path: str):
-    """
-    Plot venn diagram for the same attack with different datasets.
-    :param pred_list_or: list of Predictions for the 'pred_or' set
-    :param pred_list_and: list of Predictions for the 'pred_and' set
-    :param save_path: path to save the graph
-    """
