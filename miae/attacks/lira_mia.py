@@ -24,7 +24,7 @@ from miae.utils.set_seed import set_seed
 
 class LiraModelAccess(ModelAccess):
     """
-    Your implementation of ModelAccess for Lira.
+    Implementation of ModelAccess for Lira.
     """
 
     def __init__(self, model, untrained_model, access_type: ModelAccessType = ModelAccessType.BLACK_BOX):
@@ -34,39 +34,6 @@ class LiraModelAccess(ModelAccess):
         super().__init__(model, untrained_model, access_type)
         self.model = model
         self.model.eval()
-
-    def get_signal_lira(self, dataloader, device):
-        """
-        Generates logits for a dataloader given a model
-
-        Args:
-        model (torch.nn.Module): The PyTorch model to generate logits.
-        data: a data point
-        device: the device (cpu or cuda) where the computations will take place.
-        """
-
-        def mirror_augmentation(image):
-            """
-            Mirrors the image.
-            """
-            return torch.flip(image, [2])
-
-
-        self.model.eval()
-        all_logits = []
-
-        with torch.no_grad():
-            for images, _ in dataloader:
-                images = images.to(device)
-                outputs = self.model(images) # (batch_size, num_classes)
-                # augmentation
-                outputs_mirror = self.model(mirror_augmentation(images)) # (batch_size, num_classes)
-                all_logits.append(torch.stack([outputs, outputs_mirror], dim=1))
-        all_logits = torch.cat(all_logits, dim=0)
-        all_logits = all_logits.unsqueeze(1)
-        return all_logits
-    
-
 
 
 class LiraAuxiliaryInfo(AuxiliaryInfo):
@@ -97,6 +64,8 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
         # Auxiliary info for LIRA
         self.num_shadow_models = config.get('num_shadow_models', 20)
         self.shadow_path = config.get('shadow_path', f"{self.save_path}/weights/shadow/")
+        self.online = config.get('online', True)
+        self.fix_variance = config.get('fix_variance', True)
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
@@ -277,7 +246,8 @@ class LIRAUtil:
                 train_acc = 0
                 for epoch in tqdm(range(1, info.epochs + 1)):
                     # print the length of the train and test set
-                    loss, train_acc = LIRAUtil.train(curr_model, device, shadow_train_loader, optimizer, scheduler=scheduler)
+                    loss, train_acc = LIRAUtil.train(curr_model, device, shadow_train_loader, optimizer,
+                                                     scheduler=scheduler)
                     test_acc = LIRAUtil.test(curr_model, device, shadow_out_loader)
                     if (epoch % 20 == 0 or epoch == info.epochs) and info.log_path is not None:
                         info.lira_logger.info(
@@ -288,7 +258,8 @@ class LIRAUtil:
                     train_complete = True
                 else:
                     skip_index += 1
-                    info.lira_logger.info(f"model {expid} is too bad, skip this record") if info.log_path is not None else None
+                    info.lira_logger.info(
+                        f"model {expid} is too bad, skip this record") if info.log_path is not None else None
                     set_seed(expid + seed_base + skip_index)
 
             # save model
@@ -308,8 +279,8 @@ class LIRAUtil:
         keep (np.ndarray): An array indicating which samples to keep.
         scores (np.ndarray): An array containing the scores of the samples.
         check_scores (np.ndarray): An array containing the scores of the samples for target model.
-        in_size (int): The number of samples to keep from the input.
-        out_size (int): The number of samples to keep from the output.
+        in_size (int):
+        out_size (int):
         fix_variance (bool): If true, the variance is fixed.
         """
         dat_in = []
@@ -356,7 +327,7 @@ class LIRAUtil:
         """
         model_access = LiraModelAccess(model, model)
         return model_access.get_signal_lira(data_loader, device)
-    
+
     @classmethod
     def process_shadow_models(cls, info: LiraAuxiliaryInfo, auxiliary_dataset: Dataset, shadow_model_arch) \
             -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
@@ -376,7 +347,8 @@ class LIRAUtil:
 
         score_list = []
         keep_list = []
-        model_locations = sorted(os.listdir(info.shadow_path), key=lambda x: int(re.search(r'\d+', x).group())) # os.listdir(info.shadow_path)
+        model_locations = sorted(os.listdir(info.shadow_path),
+                                 key=lambda x: int(re.search(r'\d+', x).group()))  # os.listdir(info.shadow_path)
 
         for index, dir_name in enumerate(model_locations, start=1):
             seed_folder = os.path.join(info.shadow_path, dir_name)
@@ -494,6 +466,9 @@ class LiraAttack(MiAttack):
         for dir in [self.auxiliary_info.save_path, self.auxiliary_info.shadow_path, self.auxiliary_info.log_path]:
             if dir is not None:
                 os.makedirs(dir, exist_ok=True)
+
+        if self.auxiliary_info.online is False:
+            raise NotImplementedError("LIRA does not support offline training yet.")
         self.prepared = True
 
     def infer(self, dataset: torch.utils.data.Dataset) -> np.ndarray:
@@ -543,8 +518,7 @@ class LiraAttack(MiAttack):
         target_scores = torch.cat(target_scores, dim=0)
 
         predictions = LIRAUtil.lira_mia(np.array(self.shadow_keeps), np.array(self.shadow_scores),
-                                        np.array(target_scores))
+                                        np.array(target_scores), fix_variance=self.auxiliary_info.fix_variance)
 
         # return the predictions on the target data
         return -predictions[-len(dataset):]
-

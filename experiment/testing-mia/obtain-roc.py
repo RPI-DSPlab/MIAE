@@ -14,8 +14,8 @@ import sys
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 from miae.utils.set_seed import set_seed
-from miae.attacks import losstraj_mia, merlin_mia, lira_mia, aug_mia, calibration_mia, shokri_mia, reference_mia
-from miae.attacks import losstraj_mia, merlin_mia, lira_mia, aug_mia, calibration_mia, shokri_mia, yeom_mia
+from miae.attacks import (losstraj_mia, merlin_mia, lira_mia, aug_mia, calibration_mia, shokri_mia, yeom_mia,
+                          reference_mia, rmia_mia)
 from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
 from experiment import models
@@ -228,6 +228,9 @@ def main():
     reference_aux_info = reference_mia.ReferenceAuxiliaryInfo(
             {'device': device, 'seed': 50*seed, 'save_path': attack_dir+'/reference', 'num_classes': 10, 'batch_size': batch_size,
              'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/reference'})
+    rmia_aux_info = rmia_mia.RMIAAuxiliaryInfo(
+            {'device': device, 'seed': 50*seed, 'save_path': attack_dir+'/rmia', 'num_classes': 10, 'batch_size': batch_size,
+             'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/rmia', "num_shadow_models": 64})
     aug_aux_info = aug_mia.AugAuxiliaryInfo(
             {'device': device, 'shadow_seed_base': 50*seed, 'save_path': attack_dir+'/aug', 'num_classes': 10, 'batch_size': batch_size,
              'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/aug'})
@@ -259,19 +262,21 @@ def main():
     calibration_target_model_access = calibration_mia.CalibrationModelAccess(deepcopy(target_model),
                                                                       untrained_target_model)
     yeom_target_model_access = yeom_mia.YeomModelAccess(deepcopy(target_model), untrained_target_model)
+    rmia_target_model_access = rmia_mia.RMIAModelAccess(deepcopy(target_model), untrained_target_model)
 
     attacks = [
         # losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
         # merlin_mia.MerlinAttack(merlin_target_model_access, merlin_aux_info),
-        lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
+        # lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
         # aug_mia.augAttack(aug_target_model_access, aug_aux_info)
         # calibration_mia.CalibrationAttack(calibration_target_model_access, calibration_aux_info)
-        shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info),
+        # shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info),
         # top_k_shokri_mia.TopKShokriAttack(top_k_shokri_target_model_access, top_k_shokri_aux_info)
         # yeom_mia.YeomAttack(yeom_target_model_access, yeom_aux_info)
         # shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info),
         # top_k_shokri_mia.TopKShokriAttack(top_k_shokri_target_model_access, top_k_shokri_aux_info)
-        # reference_mia.ReferenceAttack(reference_target_model_access, reference_aux_info)
+        # reference_mia.ReferenceAttack(reference_target_model_access, reference_aux_info),
+        rmia_mia.RMIAAttack(rmia_target_model_access, rmia_aux_info)
     ]
 
     # -- prepare the attacks

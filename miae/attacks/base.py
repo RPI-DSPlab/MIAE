@@ -106,6 +106,68 @@ class ModelAccess(ABC):
         else:
             raise ValueError(f"Unknown access type: {self.access_type}")
 
+    def get_signal_lira(self, dataloader, device, augmentation='mirror'):
+        """
+        Generates logits for a dataloader given a model. Queries with augmentation is first
+        introduced by Choquette-Choo et al. in the paper "Label-Only Membership Inference Attacks".
+        Carlini et al. first brought the idea of queries with augmentation to likelihood
+        ratio attack in the paper "Membership Inference Attacks From First Principles". It's
+        then used for other attack such as Attack-R by Ye et al. and RMIA by Sajjad et al.
+
+        :param dataloader: the dataloader to generate logits for.
+        :param device: the device to use.
+        :param augmentation: the augmentation to use. Default is 'mirror'. It could also be
+        18 for the desired augmentations used for RMIA attack.
+
+        :return: the logits for the dataloader.
+        """
+
+        def mirror_augmentation(image):
+            """
+            Mirrors the image.
+            """
+            return torch.flip(image, [2])
+
+        def shift_augmentation(image, shift=1):
+            """
+            Applies shifting augmentation to the image.
+            """
+            padded_image = torch.nn.functional.pad(image, (shift, shift, shift, shift), mode='reflect')
+            shifts = []
+            for dx in range(0, 2 * shift + 1):
+                for dy in range(0, 2 * shift + 1):
+                    shifted = padded_image[:, :, dx:dx + 32, dy:dy + 32]
+                    shifts.append(shifted)
+            return shifts
+
+        self.model.eval()
+        all_logits = []
+
+        with torch.inference_mode():
+            for images, _ in dataloader:
+                images = images.to(device)
+                outputs = [self.model(images)]  # (batch_size, num_classes)
+
+                # Apply mirror augmentation
+                if augmentation == 'mirror' or augmentation == 2:
+                    mirror_images = mirror_augmentation(images)
+                    mirror_outputs = self.model(mirror_images)  # (batch_size, num_classes)
+                    outputs.append(mirror_outputs)
+
+                # Apply shift augmentations
+                elif augmentation == 18:
+                    shift_images = shift_augmentation(images)
+                    for shift_image in shift_images:
+                        shift_output = self.model(shift_image)  # (batch_size, num_classes)
+                        outputs.append(shift_output)
+
+                # Stack all outputs along a new dimension
+                all_logits.append(torch.stack(outputs, dim=1))
+
+        # Concatenate all logits from all batches
+        all_logits = torch.cat(all_logits, dim=0)
+        return all_logits
+
     def __call__(self, data):
         return self.get_signal(data)
 
