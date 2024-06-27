@@ -16,7 +16,7 @@ import torch
 from torch.utils.data import ConcatDataset, DataLoader, Subset, Dataset
 from tqdm import tqdm
 
-from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
+from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils
 from miae.utils.dataset_utils import get_xy_from_dataset
 
 from miae.attacks.lira_mia import LIRAUtil
@@ -87,6 +87,7 @@ class ReferenceAuxiliaryInfo(AuxiliaryInfo):
         # Auxiliary info for reference attack
         self.num_shadow_models = config.get('num_shadow_models', 29)  # paper default is 29
         self.shadow_path = config.get('shadow_path', f"{self.save_path}/weights/shadow/")
+        self.query_batch_size = config.get('query_batch_size', 512)
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
@@ -95,11 +96,11 @@ class ReferenceAuxiliaryInfo(AuxiliaryInfo):
             os.makedirs(self.log_path)
 
         if self.log_path is not None:
-            self.reference_logger = logging.getLogger('reference_logger')
-            self.reference_logger.setLevel(logging.INFO)
+            self.logger = logging.getLogger('reference_logger')
+            self.logger.setLevel(logging.INFO)
             fh = logging.FileHandler(self.log_path + '/reference.log')
             fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
-            self.reference_logger.addHandler(fh)
+            self.logger.addHandler(fh)
 
 
 def _split_data(fullset, expid, iteration_range):
@@ -110,7 +111,7 @@ def _split_data(fullset, expid, iteration_range):
     return np.where(keep)[0], np.where(~keep)[0]
 
 
-class ReferenceUtil:
+class ReferenceUtil(MIAUtils):
     """
     Attack-R shares most of the code with LIRA attack, so we only define methods unique to Attack-R here.
     """
@@ -178,13 +179,13 @@ class ReferenceUtil:
             seed_folder = os.path.join(info.shadow_path, dir_name)
             if os.path.isdir(seed_folder):
                 model_path = os.path.join(seed_folder, "shadow.pth")
-                print(f"load model [{index}/{len(model_locations)}]: {model_path}")
+                cls.log(info, f"load model [{index}/{len(model_locations)}]: {model_path}", print_flag=True)
                 model = LIRAUtil.load_model(shadow_model_arch, path=model_path).to(info.device)
                 losses, mean_acc = cls._calculate_losses(cls.get_signal(model,
                                                                         fullsetloader,
                                                                         info.device).cpu().numpy(),
                                                          fullset_targets)
-                print("Mean acc", mean_acc)
+                cls.log(info, f"mean acc: {mean_acc}", print_flag=True)
                 # Convert the numpy array to a PyTorch tensor and add a new dimension
                 losses = torch.unsqueeze(torch.from_numpy(losses), 0)
                 loss_list.append(losses)
@@ -194,7 +195,7 @@ class ReferenceUtil:
                     keep = torch.unsqueeze(torch.from_numpy(np.load(keep_path)), 0)
                     keep_list.append(keep)
             else:
-                print(f"model {index} at {model_path} does not exist, skip this record")
+                cls.log(info, f"model {index} at {model_path} does not exist, skip this record", print_flag=True)
 
         return loss_list, keep_list
 
@@ -216,7 +217,7 @@ class ReferenceUtil:
 
         loss_list = []
 
-        print(f"processing target model")
+        cls.log(info, f"processing target model", print_flag=True)
         target_model_access.to_device(info.device)
         losses, mean_acc = cls._calculate_losses(
             target_model_access.get_signal_reference(dataset_loader, info.device).cpu().numpy(), fullset_targets)
@@ -328,7 +329,6 @@ class ReferenceAttack(MiAttack):
 
         predictions = ReferenceUtil.reference_mia(self.shadow_losses, target_losses)
 
-        print(f"prediction shape: {(-predictions[-len(dataset):]).shape}")
 
         # return the predictions on the target data
         return -predictions[-len(dataset):]

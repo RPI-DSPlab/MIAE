@@ -143,30 +143,46 @@ class ModelAccess(ABC):
         self.model.eval()
         all_logits = []
 
+
         with torch.inference_mode():
             for images, _ in dataloader:
                 images = images.to(device)
-                outputs = [self.model(images)]  # (batch_size, num_classes)
+                outputs = []
+                if augmentation == 'none' or augmentation == 0:
+                    outputs = [self.model(images)]  # (batch_size, num_classes)
 
                 # Apply mirror augmentation
-                if augmentation == 'mirror' or augmentation == 2:
+                elif augmentation == 'mirror' or augmentation == 2:
                     mirror_images = mirror_augmentation(images)
+                    output = self.model(images)
                     mirror_outputs = self.model(mirror_images)  # (batch_size, num_classes)
-                    outputs.append(mirror_outputs)
+                    outputs = [output, mirror_outputs]
 
                 # Apply shift augmentations
                 elif augmentation == 18:
-                    shift_images = shift_augmentation(images)
+                    # Apply shift augmentations to the original image
+                    shift_images = shift_augmentation(images, shift=1)
                     for shift_image in shift_images:
-                        shift_output = self.model(shift_image)  # (batch_size, num_classes)
-                        outputs.append(shift_output)
+                        shift_outputs = self.model(shift_image)
+                        outputs.append(shift_outputs)
+
+                    # Apply shift augmentations to the mirrored image
+                    mirror_images = mirror_augmentation(images)
+                    shift_mirror_images = shift_augmentation(mirror_images, shift=1)
+                    for shift_mirror_image in shift_mirror_images:
+                        shift_mirror_outputs = self.model(shift_mirror_image)
+                        outputs.append(shift_mirror_outputs)
+                else:
+                    raise ValueError(f"Unknown augmentation type: {augmentation}")
 
                 # Stack all outputs along a new dimension
                 all_logits.append(torch.stack(outputs, dim=1))
 
         # Concatenate all logits from all batches
         all_logits = torch.cat(all_logits, dim=0)
+        all_logits = all_logits.unsqueeze(1)
         return all_logits
+    
 
     def __call__(self, data):
         return self.get_signal(data)
