@@ -128,7 +128,6 @@ class Predictions:
     def tpr_at_fpr(self, fpr: float) -> float:
         """
         Compute TPR at a specified FPR.
-
         :param fpr: FPR value
         :return: TPR value
         """
@@ -139,8 +138,22 @@ class Predictions:
         false_negative = torch.logical_and(pred_tensor == 0, ground_truth_tensor == 1).sum().item()
         total_positive = true_positive + false_negative
         tpr = true_positive / total_positive if total_positive > 0 else 0
-
         return tpr
+
+    def tnr_at_fpr(self, fpr: float) -> float:
+        """
+        Compute TNR at a specified FPR.
+        :param fpr: FPR value
+        :return: TNR value
+        """
+        adjusted_pred = self.adjust_fpr(fpr)
+        pred_tensor = torch.tensor(adjusted_pred)
+        ground_truth_tensor = torch.tensor(self.ground_truth_arr)
+        true_negative = torch.logical_and(pred_tensor == 0, ground_truth_tensor == 0).sum().item()
+        false_positive = torch.logical_and(pred_tensor == 1, ground_truth_tensor == 0).sum().item()
+        total_negative = true_negative + false_positive
+        tnr = true_negative / total_negative if total_negative > 0 else 0
+        return tnr
 
     def __len__(self):
         """
@@ -291,47 +304,6 @@ def find_common_tn_pred(pred_list: List[Predictions], fpr) -> Predictions:
     pred_intersection = Predictions(common_tn_intersection, pred_list[0].ground_truth_arr, name + "_tn_intersection")
 
     return pred_union, pred_intersection
-
-
-def _common_fp(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):
-    """
-    Find the union/intersection false positive samples among the predictions.
-    Note that this is used for both different attacks or the same attack with different seeds.
-
-    :param preds: list of Predictions
-    :param fpr: FPR values for adjusting the predictions
-    :param threshold: threshold for converting predictions to binary labels (only used when not using fpr)
-
-    :return: common false positive samples
-    """
-    if fpr is None:
-        FP = [np.where((pred.predictions_to_labels(threshold) == 1) & (pred.ground_truth_arr == 0))[0] for pred in preds]
-    else:
-        adjusted_preds = [pred.adjust_fpr(fpr) for pred in preds]
-        FP = [np.where((adjusted_preds[i] == 1) & (preds[i].ground_truth_arr == 0))[0] for i in range(len(preds))]
-    common_FP = set(FP[0])
-    if len(FP) < 2:
-        return common_FP
-    for i in range(1, len(FP)):
-        if set_op == "union":
-            common_FP = common_FP.union(set(FP[i]))
-        elif set_op == "intersection":
-            common_FP = common_FP.intersection(set(FP[i]))
-    return common_FP
-
-
-def union_fp(preds: List[Predictions], fpr=None):
-    """
-    Find the union false positive samples among the predictions, it's a wrapper for common_fp
-    """
-    return _common_fp(preds, fpr, set_op="union")
-
-
-def intersection_fp(preds: List[Predictions], fpr=None):
-    """
-    Find the intersection false positive samples among the predictions, it's a wrapper for common_fp
-    """
-    return _common_fp(preds, fpr, set_op="intersection")
 
 
 def _common_pred(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):

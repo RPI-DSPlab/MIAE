@@ -67,32 +67,41 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
         pred_dict[att] = pred_list
     return pred_dict
 
-def load_diff_distribution(attack: List[str], dataset: List[str], architecture: str, data_path: str, FPR: float, seeds: List[int] = None) -> Dict[str, List[prediction.Predictions]]:
+def load_diff_distribution(attack_list: List[str], dataset_list: List[str], architecture: str, data_path: str,
+                           FPR: float, seeds: List[int] = None, option: str = "TPR") -> Dict[str, List[prediction.Predictions]]:
     """
     Load the predictions of the attack of all seeds in different datasets and create the Predictions objects
     :param attack: List[str]: list of attack names
     :param dataset: List[str]: list of dataset names
     :param architecture: str: target model architecture
+    :param data_path: str: path to the original predictions and target dataset
+    :param FPR: float: false positive rate
     :param seeds: List[int]: list of random seeds
+    :param option: str: option for the comparison on venn diagram, TPR or TNR
     :return: Dict[str, Dict[str, List[Predictions]]]: [attack names, [Predictions objects under different datasets]]
     """
     # load the dataset into a nested dictionary: [dataset, [attack name, [Predictions objects]]]
     nested_dict = {}
-    for d in dataset:
-        nested_dict[d] = load_and_create_predictions(attack, d, architecture, data_path, seeds)
+    for dataset in dataset_list:
+        nested_dict[dataset] = load_and_create_predictions(attack_list, dataset, architecture, data_path, seeds)
 
+    # process the nested dictionary to get the final dictionary: [dataset, [attack name, [Predictions objects]]]
     processed_dict = {}
     for dataset, pred_dict in nested_dict.items():
         processed_dict[dataset] = {}
         for attack, pred_list in pred_dict.items():
-            pred_or, pred_and = prediction.find_common_tp_pred(pred_list, FPR)
+            if option == "TPR":
+                pred_or, pred_and = prediction.find_common_tp_pred(pred_list, FPR)
+            elif option == "TNR":
+                pred_or, pred_and = prediction.find_common_tn_pred(pred_list, FPR)
             pred_and.update_name(f"{attack}_{dataset}")
             processed_dict[dataset][attack] = pred_and
 
+    # process the processed_dict to get the final dictionary: [attack name, [Predictions objects under different datasets]]
     final_dict = {}
-    for attack in attack:
+    for attack in attack_list:
         final_dict[attack] = []
-        for dataset in dataset:
+        for dataset in dataset_list:
             final_dict[attack].append(processed_dict[dataset][attack])
 
     return final_dict
@@ -485,6 +494,7 @@ if __name__ == '__main__':
             target_pred_list = pred_dict[args.single_attack_name]
             new_attack_name = mia_name_mapping.get(args.single_attack_name, args.single_attack_name)
             adjusted_pred_list = venn_diagram.single_attack_process_for_venn(target_pred_list, args.FPR)
+
             graph_title = args.graph_title.replace(args.single_attack_name, new_attack_name)
             graph_path = args.graph_path
             plot_venn(adjusted_pred_list, [], args.graph_goal, graph_title, graph_path)
@@ -495,6 +505,10 @@ if __name__ == '__main__':
             if args.threshold == 0: # FPR
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=0,
                                                                                  target_fpr=args.FPR, option=args.option)
+                if args.option == "TNR":
+                    print(f"Current FPR is {args.FPR}")
+                    for pred in pred_and_list:
+                        print(f"Attack: {pred.name}, TNR: {pred.tnr_at_fpr(args.FPR)}")
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, args.graph_title, args.graph_path)
                 pairwise_jaccard_or = eval_metrics(pred_or_list, args.graph_path, args.graph_title, "union")
                 pairwise_jaccard_and = eval_metrics(pred_and_list, args.graph_path, args.graph_title, "intersection")
@@ -520,9 +534,9 @@ if __name__ == '__main__':
                 eval_metrics(pred_or_list, args.graph_path, args.graph_title, "union")
                 eval_metrics(pred_and_list, args.graph_path, args.graph_title, "intersection")
         elif args.graph_goal == "dif_distribution":
-            pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR, args.seed)
+            pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR, args.seed, args.option)
             for attack, pred_list in pred_dict.items():
-                plot_venn([], pred_list, args.graph_goal, args.graph_title, args.graph_path)
+                plot_venn(pred_list, [], args.graph_goal, args.graph_title, args.graph_path)
         else:
             raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
 
@@ -530,7 +544,7 @@ if __name__ == '__main__':
         if args.graph_goal == "single_attack":
             pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR, args.seed)
             target_pred_list = pred_dict[args.single_attack_name]
-            adjusted_pred_list = [prediction.adjust_fpr(pred) for pred in target_pred_list][:3]
+            adjusted_pred_list = [pred.adjust_fpr(args.FPR) for pred in target_pred_list][:3]
             plot_venn(adjusted_pred_list, [], args.graph_goal, args.graph_title, args.graph_path)
         elif args.graph_goal == "common_tp":
             pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR, args.seed)

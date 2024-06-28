@@ -1,13 +1,10 @@
 # This script generates Venn diagrams for the MIAE experiment
-
 datasets=("cifar10" "cinic10")
 archs=("resnet56")
-#mias=("losstraj" "shokri" "yeom" "lira" "aug" "calibration")
 mias=("shokri")
-#categories=("threshold" "fpr" "single_attack" "dif_distribution")
-#subcategories=("pairwise" "common_tp")
-categories=("dif_distribution")
-option=("TPR" "TNR")
+categories=("single_attack" "dif_distribution")
+subcategories=("pairwise" "common_tp")
+option=("TPR")
 seeds=(0 1 2)
 fprs=(0.001 0.01 0 0.1 0.2 0.3 0.4 0.5 0.8)
 
@@ -183,7 +180,7 @@ for category in "${categories[@]}"; do
             for mia in "${mias[@]}"; do
                 for opt in "${option[@]}"; do
                     for fpr in ${fprlist}; do
-                        plot_dir="$venn_dir/$category/$dataset/$arch/$opt/$mia/fpr_$fpr"
+                        plot_dir="$venn_dir/$category/$arch/$opt/$mia/fpr_$fpr"
                         rm -rf "$plot_dir"
                         mkdir -p "$plot_dir"
 
