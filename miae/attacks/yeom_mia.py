@@ -34,14 +34,7 @@ class YeomAuxiliaryInfo(AuxiliaryInfo):
         self.seed = config.get("seed", 0)
         self.batch_size = config.get("batch_size", 128)
         self.num_classes = config.get("num_classes", 10)
-        self.lr = config.get("lr", 0.001)
-        self.num_shadow_epochs = config.get("epochs", 100)
-        self.momentum = config.get("momentum", 0.9)
-        self.weight_decay = config.get("weight_decay", 0.0001)
         self.num_classes = config.get("num_classes", 10)
-        self.shadow_train_ratio = config.get("shadow_train_ratio", 0.8)
-        # note that since this shadow model is just used to obtain the loss threshold, so there is no need to
-        # have a balanced train and test partition
 
         # -- other parameters --
         self.save_path = config.get("save_path", "yeom")
@@ -74,7 +67,7 @@ class YeomModelAccess(ModelAccess):
 class YeomUtil(MIAUtils):
 
     @classmethod
-    def get_loss_n_accuracy(cls, model, data_loader, num_classes, aux_info: YeomAuxiliaryInfo):
+    def get_loss_n_accuracy(cls, model: YeomModelAccess, data_loader, num_classes, aux_info: YeomAuxiliaryInfo):
         """
         Returns loss/acc, and per-class loss/accuracy on supplied data loader
         model: model to evaluate
@@ -84,8 +77,6 @@ class YeomUtil(MIAUtils):
         """
 
         with torch.inference_mode():
-            # disable BN stats during inference
-            model.eval()
             total_loss, correctly_labeled_samples = 0, 0
             confusion_matrix = torch.zeros(num_classes, num_classes)
             per_class_loss = torch.zeros(num_classes, device=aux_info.device)
@@ -96,6 +87,7 @@ class YeomUtil(MIAUtils):
                 inputs, labels = inputs.to(device=aux_info.device, non_blocking=True), \
                     labels.to(device=aux_info.device, non_blocking=True)
 
+                model.to(aux_info.device)
                 outputs = model(inputs)
                 losses = criterion(outputs, labels)
                 # keep track of total loss
@@ -158,26 +150,12 @@ class YeomAttack(MiAttack):
         for path in [self.aux_info.save_path, self.aux_info.log_path]:
             if path is not None and not os.path.exists(path):
                 os.makedirs(path)
-        train_set_len = int(len(auxiliary_dataset) * self.aux_info.shadow_train_ratio)
-        test_set_len = len(auxiliary_dataset) - train_set_len
-        train_set, test_set = dataset_split(auxiliary_dataset, [train_set_len, test_set_len])
-
-        # train the shadow model
-        shadow_model = self.target_model_access.untrained_model
-        if os.path.exists(self.aux_info.save_path + '/shadow_model.pth'):
-            shadow_model = torch.load(self.aux_info.save_path + '/shadow_model.pth')
-        else:
-            trainloader = DataLoader(train_set, batch_size=self.aux_info.batch_size, shuffle=True, num_workers=2)
-            testloader = DataLoader(test_set, batch_size=self.aux_info.batch_size, shuffle=False, num_workers=2)
-
-            shadow_model = YeomUtil.train_shadow_model(shadow_model, trainloader, testloader, self.aux_info)
-            torch.save(shadow_model, self.aux_info.save_path + '/shadow_model.pth')
 
         # get the loss threshold
-        train_loader = DataLoader(train_set, batch_size=self.aux_info.batch_size, shuffle=False, num_workers=2)
-        (self.threshold, _), _ = YeomUtil.get_loss_n_accuracy(shadow_model, train_loader, self.aux_info.num_classes,
+        train_loader = DataLoader(auxiliary_dataset, batch_size=self.aux_info.batch_size, shuffle=False, num_workers=2)
+        (self.threshold, _), _ = YeomUtil.get_loss_n_accuracy(self.target_model_access, train_loader,
+                                                              self.aux_info.num_classes,
                                                               self.aux_info)
-
 
         self.prepared = True
 
@@ -195,7 +173,7 @@ class YeomAttack(MiAttack):
         self.target_model_access.to_device(self.aux_info.device)
         for data, _ in target_data_loader:
             data = data.to(self.aux_info.device)
-            with torch.no_grad():
+            with torch.inference_mode():
                 outputs = self.target_model_access.model(data)
                 losses = F.cross_entropy(outputs, torch.argmax(outputs, dim=1), reduction='none')
                 losses = losses.cpu().numpy()

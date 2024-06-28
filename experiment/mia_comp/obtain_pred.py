@@ -65,13 +65,11 @@ def get_dataset(datset_name, aug, targetset_ratio, train_test_ratio, shuffle_see
         num_classes = 100
         input_size = 32
     elif datset_name == "cinic10":
+        dataset = datasets.get_cinic10(aug)
         num_classes = 10
         input_size = 32
     else:
         raise ValueError("Invalid dataset")
-
-    if datset_name == "cinic10":  # cinci10 requires manual loading
-        return None, None, None, num_classes, input_size
 
     # prepare the shadow set and target set
     target_len = int(len(dataset) * targetset_ratio)
@@ -201,7 +199,7 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
              'log_path': args.result_path})
     if args.attack == "yeom":
         return yeom_mia.YeomAuxiliaryInfo(
-            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
+            {'device': device, 'shadow_seed_base': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
     if args.attack == "calibration":
         return calibration_mia.CalibrationAuxiliaryInfo(
@@ -213,18 +211,26 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
     if args.attack == "top_k_shokri":
         return top_k_shokri_mia.TopKShokriAuxiliaryInfo(
-            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
+            {'device': device, 'shadow_seed_base': 50*args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path,
              'top_k': 3})
-
     if args.attack == "lira":
         return lira_mia.LiraAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+    
+    if args.attack == "lira":
+        return lira_mia.LiraAuxiliaryInfo(
+            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
+            'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+
+
     if args.attack == "aug":
         return aug_mia.AugAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+    
+    
     else:
         raise ValueError("Invalid attack type")
 
