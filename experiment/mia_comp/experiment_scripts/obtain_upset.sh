@@ -2,7 +2,7 @@
 
 datasets=("cifar10")
 archs=("resnet56")
-mias=("losstraj" "shokri" "yeom" "lira" "aug" "calibration")
+mias=("losstraj" "shokri" "aug" "calibration")
 categories=("threshold" "fpr")
 subcategories=("common_tp")
 option=("TPR" "TNR")
@@ -26,7 +26,7 @@ for fpr in "${fprs[@]}"; do
 done
 
 
-experiment_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
+experiment_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_0"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 if [ -d "$graph_dir" ]; then
@@ -36,21 +36,21 @@ else
     exit 1
 fi
 
-venn_dir="$graph_dir/venn"
-mkdir -p "$venn_dir"
-if [ -d "$venn_dir" ]; then
-    echo "Successfully created directory '$venn_dir'."
+upset_dir="$graph_dir/upset"
+mkdir -p "$upset_dir"
+if [ -d "$upset_dir" ]; then
+    echo "Successfully created directory '$upset_dir'."
 else
-    echo "Error: Failed to create directory '$venn_dir'."
+    echo "Error: Failed to create directory '$upset_dir'."
     exit 1
 fi
 
 for category in "${categories[@]}"; do
-    mkdir -p "$venn_dir/$category"
-    if [ -d "$venn_dir/$category" ]; then
-        echo "Successfully created directory '$venn_dir/$category'."
+    mkdir -p "$upset_dir/$category"
+    if [ -d "$upset_dir/$category" ]; then
+        echo "Successfully created directory '$upset_dir/$category'."
     else
-        echo "Error: Failed to create directory '$venn_dir/$category'."
+        echo "Error: Failed to create directory '$upset_dir/$category'."
         exit 1
     fi
 done
@@ -65,7 +65,7 @@ for category in "${categories[@]}"; do
                 for subcategory in "${subcategories[@]}"; do
                     for opt in "${option[@]}"; do
                         threshold=0.5
-                        plot_dir="$venn_dir/$category/common_tp/$dataset/$arch/threshold_${threshold}"
+                        plot_dir="$upset_dir/$category/common_tp/$dataset/$arch/threshold_${threshold}"
                         rm -rf "$plot_dir"
                         mkdir -p "$plot_dir"
                         graph_goal="common_tp"
@@ -94,7 +94,7 @@ for category in "${categories[@]}"; do
                 for subcategory in "${subcategories[@]}"; do
                     for opt in "${option[@]}"; do
                         for fpr in ${fprlist}; do
-                            plot_dir="$venn_dir/$category/common_tp/$dataset/$arch/$opt/fpr_${fpr}"
+                            plot_dir="$upset_dir/$category/common_tp/$dataset/$arch/$opt/fpr_${fpr}"
                             rm -rf "$plot_dir"
                             mkdir -p "$plot_dir"
                             graph_goal="common_tp"

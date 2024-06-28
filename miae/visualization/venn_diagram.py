@@ -170,7 +170,7 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
     """
     attacked_points = {pred.name: set() for pred in pred_list}
     for pred in pred_list:
-        attacked_points[pred.name] = set(np.where((pred.predictions_to_labels() == pred.ground_truth_arr))[0].tolist())
+        attacked_points[pred.name] = set(np.where((pred.pred_arr == 1) & (pred.ground_truth_arr == 1))[0].tolist())
 
     venn_sets = tuple(attacked_points[pred.name] for pred in pred_list)
     venn_labels = [pred.name for pred in pred_list]
@@ -181,13 +181,18 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
     # Plotting unweighted Venn diagram
     plt.figure(figsize=(7, 7))
     venn_unweighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
-    plt.savefig(f"{save_path}_unweighted.pdf")
+
+    os.makedirs(save_path, exist_ok=True)
+    full_save_path = os.path.join(save_path, f"{save_path.split('/')[-1]}_unweighted.pdf")
+    plt.savefig(full_save_path)
     plt.close()
 
     # Plotting weighted Venn diagram
     plt.figure(figsize=(7, 7))
     venn_weighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
-    plt.savefig(f"{save_path}_weighted.pdf")
+    os.makedirs(save_path, exist_ok=True)
+    full_save_path = os.path.join(save_path, f"{save_path.split('/')[-1]}_weighted.pdf")
+    plt.savefig(full_save_path)
     plt.close()
 
 def plot_venn_single_for_all_seeds(pred_list: List[Predictions], graph_title: str, save_path: str):
@@ -303,7 +308,7 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
             if option == "TPR":
                 common_or, common_and = find_common_tp_pred(adjusted_list, fpr=target_fpr)
             elif option == "TNR":
-                common_or, common_and = find_common_tn_pred(pred_obj_list, fpr=target_fpr)
+                common_or, common_and = find_common_tn_pred(adjusted_list, fpr=target_fpr)
             result_or.append(common_or)
             result_and.append(common_and)
 
