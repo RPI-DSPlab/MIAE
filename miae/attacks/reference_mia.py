@@ -76,7 +76,7 @@ class ReferenceAuxiliaryInfo(AuxiliaryInfo):
         self.lr = config.get('lr', 0.1)
         self.momentum = config.get('momentum', 0.9)
         self.decay = config.get('decay', 0.9999)
-        self.shadow_seed_base = config.get('shadow_seed_base', 100)  # the seed begin number for shadow model
+        self.seed = config.get('seed', 24)
         self.epochs = config.get('epochs', 100)
         self.device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
         self.batch_size = config.get('shadow_batchsize', 128)
@@ -276,8 +276,6 @@ class ReferenceAttack(MiAttack):
         for dir in [self.auxiliary_info.save_path, self.auxiliary_info.shadow_path, self.auxiliary_info.log_path]:
             if dir is not None:
                 os.makedirs(dir, exist_ok=True)
-        if self.auxiliary_info.online is False:
-            raise NotImplementedError("Attack-R does not support offline training yet.")
         self.prepared = True
         
 

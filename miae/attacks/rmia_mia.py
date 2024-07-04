@@ -37,7 +37,7 @@ class RMIAModelAccess(ModelAccess):
         self.model = model
         self.model.eval()
 
-    def get_signal_rmia(self, dataloader, device):
+    def get_signal_rmia(self, dataloader, device, augmentation=18):
         """
         Get the signal of the model on the given dataset, a wrapper function
         to call the get_signal_lira function from from base class.
@@ -46,8 +46,8 @@ class RMIAModelAccess(ModelAccess):
         :param device: The device to run the model on.
         :return: The signal of the model on the dataset.
         """
-        
-        return self.get_signal_lira(dataloader, device, augmentation=18)
+
+        return self.get_signal_lira(dataloader, device, augmentation=augmentation)
 
 
 class RMIAAuxiliaryInfo(AuxiliaryInfo):
@@ -67,7 +67,7 @@ class RMIAAuxiliaryInfo(AuxiliaryInfo):
         self.lr = config.get('lr', 0.1)
         self.momentum = config.get('momentum', 0.9)
         self.decay = config.get('decay', 0.9999)
-        self.shadow_seed_base = config.get('shadow_seed_base', 100)  # the seed begin number for shadow model
+        self.seed = config.get('seed', 24)
         self.epochs = config.get('epochs', 100)
         self.device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
         self.batch_size = config.get('shadow_batchsize', 128)
@@ -82,11 +82,11 @@ class RMIAAuxiliaryInfo(AuxiliaryInfo):
         self.nb_augmentations = config.get('nb_augmentations', 18)
         self.gamma = config.get('gamma', 2.0)
         self.query_batch_size = config.get('query_batch_size', 128)
-        self.proportiontocut = config.get('proportiontocut', 0.0)  # proportion to cut for trim_mean
+        self.proportiontocut = config.get('proportiontocut', 0.2)  # proportion to cut for trim_mean
         self.taylor_n = config.get('taylor_n', 4)
         self.taylor_m = config.get('taylor_m', 0.6)
-        self.temperature = config.get('temperature', 2.0) # temperature for softmax
-        self.signal_metric = config.get('signal_metric', 'softmax') # softmax, taylor, soft-margin, taylor-soft-margin
+        self.temperature = config.get('temperature', 2.0)  # temperature for softmax
+        self.signal_metric = config.get('signal_metric', 'softmax')  # softmax, taylor, soft-margin, taylor-soft-margin
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
@@ -116,7 +116,7 @@ class RMIAUtil(MIAUtils):
     """
 
     @classmethod
-    def convert_signal(cls, all_logits: torch.tensor, all_true_labels: torch.tensor, 
+    def convert_signal(cls, all_logits: torch.tensor, all_true_labels: torch.tensor,
                        metric: str, temp: float, extra=None):
         """
         Convert the logits to signals based on the metric. Adapted from RMIA code base.
@@ -129,11 +129,13 @@ class RMIAUtil(MIAUtils):
 
         return: The converted signals.
         """
+
         def factorial(n):
             fact = 1
             for i in range(2, n + 1):
                 fact = fact * i
             return fact
+
         def get_taylor(logit_signals, n):
             power = logit_signals
             taylor = power + 1.0
@@ -141,7 +143,7 @@ class RMIAUtil(MIAUtils):
                 power = power * logit_signals
                 taylor = taylor + (power / factorial(i))
             return taylor
-        
+
         all_logits = all_logits.cpu()
         all_true_labels = all_true_labels.cpu()
 
@@ -182,7 +184,7 @@ class RMIAUtil(MIAUtils):
             taylor_logit_sum = taylor_logit_sum + soft_taylor_true_logit
             output_signals = torch.div(soft_taylor_true_logit, taylor_logit_sum)
         return torch.flatten(output_signals)
-    
+
     @classmethod
     def convert_signal_wrapper(cls, all_logits: torch.tensor, all_true_labels: torch.tensor, info: RMIAAuxiliaryInfo):
         """
@@ -199,38 +201,51 @@ class RMIAUtil(MIAUtils):
             if info.signal_metric == 'softmax':
                 return cls.convert_signal(all_logits, all_true_labels, info.signal_metric, temp)
             elif info.signal_metric == 'taylor':
-                return cls.convert_signal(all_logits, all_true_labels, info.signal_metric, temp, extra={"taylor_n": info.taylor_n})
+                return cls.convert_signal(all_logits, all_true_labels, info.signal_metric, temp,
+                                          extra={"taylor_n": info.taylor_n})
             elif info.signal_metric == 'soft-margin':
-                return cls.convert_signal(all_logits, all_true_labels, info.signal_metric, temp, extra={"taylor_m": info.taylor_m})
+                return cls.convert_signal(all_logits, all_true_labels, info.signal_metric, temp,
+                                          extra={"taylor_m": info.taylor_m})
             elif info.signal_metric == 'taylor-soft-margin':
-                return cls.convert_signal(all_logits, all_true_labels, info.signal_metric, temp, extra={"taylor_m": info.taylor_m, "taylor_n": info.taylor_n})
+                return cls.convert_signal(all_logits, all_true_labels, info.signal_metric, temp,
+                                          extra={"taylor_m": info.taylor_m, "taylor_n": info.taylor_n})
             else:
-                raise ValueError(f"Metric {info.signal_metric} is not supported, and it was not implemented in the RMIA paper.")
+                raise ValueError(
+                    f"Metric {info.signal_metric} is not supported, and it was not implemented in the RMIA paper.")
         else:
             logits_convert = []
             all_logits = all_logits.squeeze(1)
             for aug_index in range(all_logits.shape[1]):
                 if info.signal_metric == 'softmax':
-                    logits_convert.append(cls.convert_signal(all_logits[:, aug_index, :], all_true_labels, info.signal_metric, temp))
+                    logits_convert.append(
+                        cls.convert_signal(all_logits[:, aug_index, :], all_true_labels, info.signal_metric, temp))
                 elif info.signal_metric == 'taylor':
-                    logits_convert.append(cls.convert_signal(all_logits[:, aug_index, :], all_true_labels, info.signal_metric, temp, extra={"taylor_n": info.taylor_n}))
+                    logits_convert.append(
+                        cls.convert_signal(all_logits[:, aug_index, :], all_true_labels, info.signal_metric, temp,
+                                           extra={"taylor_n": info.taylor_n}))
                 elif info.signal_metric == 'soft-margin':
-                    logits_convert.append(cls.convert_signal(all_logits[:, aug_index, :], all_true_labels, info.signal_metric, temp, extra={"taylor_m": info.taylor_m}))
+                    logits_convert.append(
+                        cls.convert_signal(all_logits[:, aug_index, :], all_true_labels, info.signal_metric, temp,
+                                           extra={"taylor_m": info.taylor_m}))
                 elif info.signal_metric == 'taylor-soft-margin':
-                    logits_convert.append(cls.convert_signal(all_logits[:, aug_index, :], all_true_labels, info.signal_metric, temp, extra={"taylor_m": info.taylor_m, "taylor_n": info.taylor_n}))
+                    logits_convert.append(
+                        cls.convert_signal(all_logits[:, aug_index, :], all_true_labels, info.signal_metric, temp,
+                                           extra={"taylor_m": info.taylor_m, "taylor_n": info.taylor_n}))
                 else:
-                    raise ValueError(f"Metric {info.signal_metric} is not supported, and it was not implemented in the RMIA paper.")
+                    raise ValueError(
+                        f"Metric {info.signal_metric} is not supported, and it was not implemented in the RMIA paper.")
             # convert the list of tensors to a single tensor and restore its shape
             converted_signal = torch.stack(logits_convert, dim=1)
             return converted_signal
+
     @classmethod
-    def get_signal(cls, model, dataloader, device):
+    def get_signal(cls, model, dataloader, device, nb_aug):
         """
         wrapper to call get_signal_lira from ReferenceModelAccess.
         """
         model_access = RMIAModelAccess(model, model, ModelAccessType.BLACK_BOX)
         model_access.to_device(device)
-        return model_access.get_signal_rmia(dataloader, device)
+        return model_access.get_signal_rmia(dataloader, device, augmentation=nb_aug)
 
     @classmethod
     def process_shadow_models(cls, info: RMIAAuxiliaryInfo, auxiliary_dataset: Dataset, shadow_model_arch) \
@@ -259,8 +274,8 @@ class RMIAUtil(MIAUtils):
                 model_path = os.path.join(seed_folder, "shadow.pth")
                 cls.log(info, f"load model [{index}/{len(model_locations)}]: {model_path}", print_flag=False)
                 model = LIRAUtil.load_model(shadow_model_arch, path=model_path).to(info.device)
-                
-                raw_signal = cls.get_signal(model, fullsetloader, info.device)
+
+                raw_signal = cls.get_signal(model, fullsetloader, info.device, info.nb_augmentations)
                 # convert the raw signal to RMIA's required signal
                 targets = torch.tensor(fullset_targets)
                 converted_signal = cls.convert_signal_wrapper(raw_signal, targets, info)
@@ -287,7 +302,8 @@ class RMIAUtil(MIAUtils):
 
         :return: The list of losses(predictive probabilities)
         """
-        dataset_loader = torch.utils.data.DataLoader(dataset, batch_size=info.query_batch_size, shuffle=False, num_workers=8)
+        dataset_loader = torch.utils.data.DataLoader(dataset, batch_size=info.query_batch_size, shuffle=False,
+                                                     num_workers=8)
 
         _, fullset_targets = get_xy_from_dataset(dataset)
 
@@ -295,7 +311,7 @@ class RMIAUtil(MIAUtils):
 
         cls.log(info, f"processing target model", print_flag=True)
         target_model_access.to_device(info.device)
-        raw_signal = target_model_access.get_signal_lira(dataset_loader, info.device, augmentation=18)
+        raw_signal = target_model_access.get_signal_lira(dataset_loader, info.device, augmentation=info.nb_augmentations)
         # convert the raw signal to RMIA's required signal
         targets = torch.tensor(fullset_targets)
         converted_signal = cls.convert_signal_wrapper(raw_signal, targets, info)
@@ -338,7 +354,6 @@ class RMIAUtil(MIAUtils):
         in_signals = []
         out_signals = []
 
-
         for j in range(reference_signals.shape[1]):
             dat_in_j = reference_signals[reference_keep_matrix[:, j], j, :]
             dat_out_j = reference_signals[~reference_keep_matrix[:, j], j, :]
@@ -360,13 +375,13 @@ class RMIAUtil(MIAUtils):
         all_mean_z = trim_mean(ref_signals[:, population_indices, ], proportiontocut=aux_info.proportiontocut, axis=0)
 
         augmented_gammas = []
-        for k in range(0, aux_info.nb_augmentations):
+        for k in tqdm(range(0, aux_info.nb_augmentations), desc=f"Relative attack for each query..."):
             mean_x = all_mean_x[:, k]
             mean_z = all_mean_z[:, k]
             target_signal = target_signal.squeeze(dim=0)
 
-            prob_ratio_x = (target_signal[target_indices, k].ravel() / (mean_x))
-            prob_ratio_z_rev = 1 / (target_signal[population_indices, k].ravel() / (mean_z))
+            prob_ratio_x = (target_signal[target_indices, k].ravel() / mean_x)
+            prob_ratio_z_rev = 1 / (target_signal[population_indices, k].ravel() / mean_z)
 
             # shape nb_targets x nb_population
             score = torch.outer(prob_ratio_x, prob_ratio_z_rev)
@@ -375,8 +390,11 @@ class RMIAUtil(MIAUtils):
         augmented_test = cls.majority_voting_tensor(augmented_gammas, 0)
         del augmented_gammas
 
-        prediction = -np.array(augmented_test.mean(1).reshape(1, len(mean_x))).transpose()
+        prediction = -np.array(augmented_test.mean(1).reshape(1, len(mean_x)))
+        print(prediction.shape)
+        print(population_indices)
         return prediction
+
 
 class RMIAAttack(MiAttack):
     """
@@ -433,8 +451,8 @@ class RMIAAttack(MiAttack):
                 self.shadow_keeps = torch.from_numpy(np.load('shadow_keeps_rmia.npy'))
             else:
                 self.shadow_signals, self.shadow_keeps = RMIAUtil.process_shadow_models(self.auxiliary_info,
-                                                                                       shadow_target_concat_set,
-                                                                                       shadow_model)
+                                                                                        shadow_target_concat_set,
+                                                                                        shadow_model)
                 # Convert the list of tensors to a single tensor
                 self.shadow_signals = torch.cat(self.shadow_signals, dim=0)
                 self.shadow_keeps = torch.cat(self.shadow_keeps, dim=0)
@@ -444,24 +462,24 @@ class RMIAAttack(MiAttack):
                 np.save('shadow_keeps_rmia.npy', self.shadow_keeps)
         else:
             self.shadow_signals, self.shadow_keeps = RMIAUtil.process_shadow_models(self.auxiliary_info,
-                                                                                   shadow_target_concat_set,
-                                                                                   shadow_model)
+                                                                                    shadow_target_concat_set,
+                                                                                    shadow_model)
             # Convert the list of tensors to a single tensor
             self.shadow_signals = torch.cat(self.shadow_signals, dim=0)
             self.shadow_keeps = torch.cat(self.shadow_keeps, dim=0)
 
         # obtaining target_score, which is the prediction of the target model
-        target_signals = RMIAUtil.process_target_model(self.target_model_access, self.auxiliary_info, shadow_target_concat_set)
+        target_signals = RMIAUtil.process_target_model(self.target_model_access, self.auxiliary_info,
+                                                       shadow_target_concat_set)
         target_signals = torch.cat(target_signals, dim=0)
 
         # get the population indices
-        target_indices = np.concatenate([np.zeros(len(self.auxiliary_dataset)).astype(bool), np.ones(len(dataset)).astype(bool)])
+        target_indices = np.concatenate(
+            [np.zeros(len(self.auxiliary_dataset)).astype(bool), np.ones(len(dataset)).astype(bool)])
         population_indices = ~target_indices
         reference_keep_matrix = self.shadow_keeps.numpy()
         predictions = RMIAUtil.RMIA_mia(target_signals, target_indices, reference_keep_matrix, self.shadow_signals,
-                                         population_indices, self.auxiliary_info)
-
-
+                                        population_indices, self.auxiliary_info)
 
         # return the predictions on the target data
         return -predictions[-len(dataset):]

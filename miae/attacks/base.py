@@ -304,6 +304,26 @@ class MIAUtils:
 
 
     @classmethod
+    def generate_keeps_lira(cls, dataset_size: int, num_experiment: int, expid:int):
+        """
+        This function generates the keeps for lira and all lira-inspired attacks. It generates keeps
+        array to represent the index of datapoints is used for training for this experiment. This
+        function is crucial to guarantees that each sample is sampled for the sames times for `num_experiment`
+        times of model training. This function is adapted from lira's repo.
+
+        :param dataset_size: the size of the dataset to generate keep for
+        :param num_experiment: the number of experiments to generate keep for
+        :param expid: the experiment id
+        :return: the keeps array and the non-keep array
+        """
+
+        keep = np.random.uniform(0, 1, size=(num_experiment, dataset_size))
+        order = keep.argsort(0)
+        keep = order < int(0.5 * num_experiment)
+        keep = np.array(keep[expid], dtype=bool)
+        return np.where(keep), np.where(~keep)
+
+    @classmethod
     def train_shadow_model(cls, shadow_model, shadow_train_loader, shadow_test_loader, aux_info: AuxiliaryInfo) -> torch.nn.Module:
         """
         Train the shadow model. (for shokri, Yeom, Boundary)

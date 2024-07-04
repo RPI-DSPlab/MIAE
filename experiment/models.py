@@ -13,6 +13,8 @@ def get_model(model_name, num_classes, input_size):
         return create_resnet56(num_classes=num_classes, input_size=input_size)
     elif model_name == 'wrn32_4':
         return create_wideresnet32_4(num_classes=num_classes, input_size=input_size)
+    elif model_name == 'wrn28_2':
+        return create_wideresnet28_2(num_classes=num_classes, input_size=input_size)
     elif model_name == 'vgg16':
         return create_vgg16(num_classes=num_classes, input_size=input_size)
     elif model_name == 'mobilenet':
@@ -32,6 +34,13 @@ def create_resnet56(num_classes=10, input_size=32):
 def create_wideresnet32_4(num_classes=10, input_size=32):
     num_blocks = [5, 5, 5]
     widen_factor = 4
+    dropout_rate = 0.3
+    return WideResNet(num_blocks=num_blocks, widen_factor=widen_factor, num_classes=num_classes,
+                      dropout_rate=dropout_rate, input_size=input_size)
+
+def create_wideresnet28_2(num_classes=10, input_size=32):
+    num_blocks = [4, 4, 4]
+    widen_factor = 2
     dropout_rate = 0.3
     return WideResNet(num_blocks=num_blocks, widen_factor=widen_factor, num_classes=num_classes,
                       dropout_rate=dropout_rate, input_size=input_size)

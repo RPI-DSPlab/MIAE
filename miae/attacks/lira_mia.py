@@ -53,7 +53,7 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
         self.lr = config.get('lr', 0.1)
         self.momentum = config.get('momentum', 0.9)
         self.decay = config.get('decay', 0.9999)
-        self.shadow_seed_base = config.get('shadow_seed_base', 24)  # the seed begin number for shadow model
+        self.seed = config.get('seed', 24)
         self.epochs = config.get('epochs', 100)
         self.device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
         self.batch_size = config.get('shadow_batchsize', 128)
@@ -82,7 +82,8 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
             self.logger.addHandler(fh)
 
 
-def _split_data(fullset, expid, iteration_range):
+def _split_data(fullset, expid, iteration_range, seed):
+    np.random.seed(seed) # make sure the seed is set correct
     keep = np.random.uniform(0, 1, size=(iteration_range, len(fullset)))
     order = keep.argsort(0)
     keep = order < int(.5 * iteration_range)
@@ -191,8 +192,6 @@ class LIRAUtil(MIAUtils):
         """
         # init
         iteration_range = info.num_shadow_models
-        seed_base = info.shadow_seed_base
-        set_seed(seed_base)
         device = torch.device(info.device)
 
         if not os.path.exists(info.shadow_path):
@@ -203,7 +202,6 @@ class LIRAUtil(MIAUtils):
             cls.log(info, f"shadow models are already trained, skip the training", print_flag=True)
             return
 
-        skip_index = 0  # if a model is too bad, we skip that seed by increasing this index
 
         for expid in range(iteration_range):
             # Define the directory path
@@ -217,10 +215,8 @@ class LIRAUtil(MIAUtils):
             else:
                 cls._make_directory_if_not_exists(dir_path)
 
-            set_seed(expid + seed_base + skip_index)
-
             # split the data
-            shadow_train_indices, shadow_out_indices = _split_data(dataset, expid, iteration_range)
+            shadow_train_indices, shadow_out_indices = _split_data(dataset, expid, iteration_range, info.seed)
 
             # Create the data loaders for training and testing
             shadow_train_loader = DataLoader(Subset(dataset, shadow_train_indices), batch_size=info.batch_size,
@@ -238,25 +234,17 @@ class LIRAUtil(MIAUtils):
             cls.log(info, f"training shadow model #{expid} with "
                           f"train size: {len(shadow_train_indices)} and test size: {len(shadow_out_indices)}",
                     print_flag=True)
-            train_complete = False
 
-            while not train_complete:  # if the model is not learned well, retrain it
-                train_acc = 0
-                for epoch in tqdm(range(1, info.epochs + 1)):
-                    # print the length of the train and test set
-                    loss, train_acc = LIRAUtil.train(curr_model, device, shadow_train_loader, optimizer,
-                                                     scheduler=scheduler)
-                    test_acc = LIRAUtil.test(curr_model, device, shadow_out_loader)
-                    if (epoch % 20 == 0 or epoch == info.epochs):
-                        cls.log(info, f"Train Shadow Model #{expid}: {epoch}/{info.epochs}: TRAIN loss: {loss:.3f}, "
-                                        f"TRAIN acc: {train_acc * 100:.3f}%, TEST acc: {test_acc * 100:.3f}%, lr: {scheduler.get_last_lr()[0]: .4f}",
-                                print_flag=True)
-                if train_acc > 0.5:
-                    train_complete = True
-                else:
-                    skip_index += 1
-                    cls.log(info, f"model {expid} is too bad, skip this record", print_flag=True)
-                    set_seed(expid + seed_base + skip_index)
+            for epoch in tqdm(range(1, info.epochs + 1)):
+                # print the length of the train and test set
+                loss, train_acc = LIRAUtil.train(curr_model, device, shadow_train_loader, optimizer,
+                                                 scheduler=scheduler)
+                test_acc = LIRAUtil.test(curr_model, device, shadow_out_loader)
+                if (epoch % 20 == 0 or epoch == info.epochs):
+                    cls.log(info, f"Train Shadow Model #{expid}: {epoch}/{info.epochs}: TRAIN loss: {loss:.3f}, "
+                                    f"TRAIN acc: {train_acc * 100:.3f}%, TEST acc: {test_acc * 100:.3f}%, lr: {scheduler.get_last_lr()[0]: .4f}",
+                            print_flag=True)
+
 
             # save model
             LIRAUtil.save_model(curr_model, f"{dir_path}/shadow.pth")
@@ -322,7 +310,7 @@ class LIRAUtil(MIAUtils):
         warpper function for get_signal_lira
         """
         model_access = LiraModelAccess(model, model)
-        return model_access.get_signal_lira(data_loader, device)
+        return model_access.get_signal_lira(data_loader, device, 18)
 
     @classmethod
     def process_shadow_models(cls, info: LiraAuxiliaryInfo, auxiliary_dataset: Dataset, shadow_model_arch) \
@@ -392,7 +380,7 @@ class LIRAUtil(MIAUtils):
         cls.log(info, f"processing target model", print_flag=True)
         target_model_access.to_device(info.device)
         scores, mean_acc = cls._calculate_score(
-            target_model_access.get_signal_lira(dataset_loader, info.device).cpu().numpy(), fullset_targets)
+            target_model_access.get_signal_lira(dataset_loader, info.device, 18).cpu().numpy(), fullset_targets)
 
         # Convert the numpy array to a PyTorch tensor and add a new dimension
         scores = torch.unsqueeze(torch.from_numpy(scores), 0)
@@ -475,6 +463,8 @@ class LiraAttack(MiAttack):
         :return: The inferred membership status of the data point.
         """
         TEST = True  # if True, we save scores and keep to the file
+
+        set_seed(self.auxiliary_info.seed)
 
         shadow_model = self.target_model_access.get_untrained_model()
         # concatenate the target dataset and the auxiliary dataset
