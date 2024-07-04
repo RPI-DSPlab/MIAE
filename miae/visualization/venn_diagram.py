@@ -242,15 +242,15 @@ def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
 
         plt.figure(figsize=(7, 7))
 
+        name1 = pred_1.name.split('_')[0]
+        name2 = pred_2.name.split('_')[0]
         if weighted:
-            venn2(subsets=(attacked_points_1, attacked_points_2), set_labels=(pred_1.name, pred_2.name),
+            venn2(subsets=(attacked_points_1, attacked_points_2), set_labels=(name1, name2),
                   set_colors=circle_colors)
-            plt.title(f"{suffix} (Weighted)", fontsize=15, fontweight='bold')
             plt.savefig(os.path.join(folder_path, f"{suffix}_weighted.pdf"))
         else:
-            venn2_unweighted(subsets=(attacked_points_1, attacked_points_2), set_labels=(pred_1.name, pred_2.name),
+            venn2_unweighted(subsets=(attacked_points_1, attacked_points_2), set_labels=(name1, name2),
                              set_colors=circle_colors)
-            plt.title(f"{suffix} (Unweighted)", fontsize=15, fontweight='bold')
             plt.savefig(os.path.join(folder_path, f"{suffix}_unweighted.pdf"))
 
         plt.close()
@@ -379,13 +379,13 @@ def plot_venn_for_all_attacks(pred_or: List[Predictions], pred_and: List[Predict
     attacked_points_and = {pred.name: set() for pred in pred_and}
 
     venn_sets_or = []
-    venn_labels_or = [pred.name for pred in pred_or]
+    venn_labels_or = [pred.name.split('_')[0] for pred in pred_or]
     for pred in pred_or:
         attacked_points_or[pred.name] = set(np.where((pred.pred_arr == 1) & (pred.ground_truth_arr == 1))[0])
         venn_sets_or.append(attacked_points_or[pred.name])
 
     venn_sets_and = []
-    venn_labels_and = [pred.name for pred in pred_and]
+    venn_labels_and = [pred.name.split('_')[0] for pred in pred_and]
     for pred in pred_and:
         attacked_points_and[pred.name] = set(np.where((pred.pred_arr == 1) & (pred.ground_truth_arr == 1))[0])
         venn_sets_and.append(attacked_points_and[pred.name])

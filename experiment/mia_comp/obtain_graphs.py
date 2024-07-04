@@ -61,7 +61,11 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
             pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
             pred_arr = utils.load_predictions(pred_path)
             new_attack_name = name_mapping.get(att, att)
-            attack_name = f"{new_attack_name}_{dataset}_{s}"
+            # if dataset_path contains "distribution", set attack name to be "distribution"
+            if "distribution" in data_path:
+                attack_name = f"{new_attack_name}_{dataset}_{s}"
+            else:
+                attack_name = f"{new_attack_name}_{s}"
             pred_obj = prediction.Predictions(pred_arr, attack_set_membership, attack_name)
             pred_list.append(pred_obj)
         pred_dict[att] = pred_list
