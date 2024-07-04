@@ -233,8 +233,8 @@ def find_common_tp_pred(pred_list: List[Predictions], fpr) -> Predictions:
     common_tp_intersection[list(common_tp_intersection_indices)] = 1
 
     name = pred_list[0].name.rsplit('_', 1)[0]
-    pred_union = Predictions(common_tp_union, pred_list[0].ground_truth_arr, name + "_union")
-    pred_intersection = Predictions(common_tp_intersection, pred_list[0].ground_truth_arr, name + "_intersection")
+    pred_union = Predictions(common_tp_union, pred_list[0].ground_truth_arr, name + "_Coverage")
+    pred_intersection = Predictions(common_tp_intersection, pred_list[0].ground_truth_arr, name + "_Stability")
 
     return pred_union, pred_intersection
 
@@ -300,8 +300,8 @@ def find_common_tn_pred(pred_list: List[Predictions], fpr) -> Predictions:
     common_tn_intersection[list(common_tn_intersection_indices)] = 1
 
     name = pred_list[0].name.rsplit('_', 1)[0]
-    pred_union = Predictions(common_tn_union, pred_list[0].ground_truth_arr, name + "_tn_union")
-    pred_intersection = Predictions(common_tn_intersection, pred_list[0].ground_truth_arr, name + "_tn_intersection")
+    pred_union = Predictions(common_tn_union, pred_list[0].ground_truth_arr, name + "_tn_Coverage")
+    pred_intersection = Predictions(common_tn_intersection, pred_list[0].ground_truth_arr, name + "_tn_Stability")
 
     return pred_union, pred_intersection
 

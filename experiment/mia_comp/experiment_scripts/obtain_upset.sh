@@ -2,10 +2,10 @@
 
 datasets=("cifar10")
 archs=("resnet56")
-mias=("losstraj" "shokri" "aug" "calibration")
+mias=("losstraj" "shokri" "aug" "calibration" "lira" "yeom" "reference")
 categories=("threshold" "fpr")
 subcategories=("common_tp")
-option=("TPR" "TNR")
+option=("TPR")
 seeds=(0 1 2)
 fprs=(0.001 0.01 0 0.1 0.2 0.3 0.4 0.5 0.8)
 
@@ -26,7 +26,7 @@ for fpr in "${fprs[@]}"; do
 done
 
 
-experiment_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_0"
+experiment_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 if [ -d "$graph_dir" ]; then

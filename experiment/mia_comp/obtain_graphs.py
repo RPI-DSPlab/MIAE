@@ -544,48 +544,6 @@ if __name__ == '__main__':
         else:
             raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
 
-    elif args.graph_type == "venn" and len(args.seed) == 1:
-        if args.graph_goal == "single_attack":
-            pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR, args.seed)
-            target_pred_list = pred_dict[args.single_attack_name]
-            adjusted_pred_list = [pred.adjust_fpr(args.FPR) for pred in target_pred_list][:3]
-            plot_venn(adjusted_pred_list, [], args.graph_goal, args.graph_title, args.graph_path)
-        elif args.graph_goal == "common_tp":
-            pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR, args.seed)
-            if args.threshold == 0:
-                fpr_list = [float(f) for f in args.fpr]
-                for f in fpr_list:
-                    pred_list = venn_diagram.single_seed_process_for_venn(pred_dict, threshold=0,
-                                                                                     target_fpr=f)
-                    graph_title = args.graph_title + f" FPR = {f}"
-                    graph_path = args.graph_path + f"_{f}"
-                    plot_venn(pred_list, [], args.graph_goal, graph_title, graph_path)
-            elif args.threshold != 0:
-                pred_list = venn_diagram.single_seed_process_for_venn(pred_dict, threshold=args.threshold,
-                                                                                 target_fpr=0)
-                graph_title = args.graph_title + f" threshold = {args.threshold}"
-                graph_path = args.graph_path + f"_{args.threshold}"
-                plot_venn(pred_list, [], args.graph_goal, graph_title, graph_path)
-        elif args.graph_goal == "pairwise":
-            pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path,
-                                               args.FPR, args.seed)
-            if args.threshold == 0:
-                fpr_list = [float(f) for f in args.fpr]
-                for f in fpr_list:
-                    pred_list = venn_diagram.single_seed_process_for_venn(pred_dict, threshold=0,
-                                                                                     target_fpr=f)
-                    graph_title = args.graph_title
-                    graph_path = args.graph_path
-                    plot_venn(pred_list, [], args.graph_goal, graph_title, graph_path)
-            elif args.threshold != 0:
-                pred_list = venn_diagram.single_seed_process_for_venn(pred_dict, threshold=args.threshold,
-                                                                                 target_fpr=0)
-                graph_title = args.graph_title + f" threshold = {args.threshold}"
-                graph_path = args.graph_path + f"_{args.threshold}"
-                plot_venn(pred_list, [], args.graph_goal, graph_title, graph_path)
-        else:
-            raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
-
     elif args.graph_type == "upset":
         if args.graph_goal == "common_tp":
             pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path,
@@ -593,11 +551,13 @@ if __name__ == '__main__':
             if args.threshold != 0:
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=args.threshold,
                                                                                  target_fpr=None, option=args.option)
-                upset_diagram.plot_upset_for_all_attacks(pred_or_list, pred_and_list, args.graph_path)
+                df_or, df_and = upset_diagram.data_process_for_upset(pred_or_list, pred_and_list)
+                upset_diagram.plot_upset(df_or, df_and, args.graph_path)
             elif args.threshold == 0:
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=0,
                                                                                  target_fpr=args.FPR, option=args.option)
-                upset_diagram.plot_upset_for_all_attacks(pred_or_list, pred_and_list, args.graph_path)
+                df_or, df_and = upset_diagram.data_process_for_upset(pred_or_list, pred_and_list)
+                upset_diagram.plot_upset(df_or, df_and, args.graph_path)
 
     elif args.graph_type == "auc":
         pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR,
