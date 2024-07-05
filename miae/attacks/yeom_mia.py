@@ -42,6 +42,10 @@ class YeomAuxiliaryInfo(AuxiliaryInfo):
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
+
+        if self.log_path is not None and not os.path.exists(self.log_path):
+            os.makedirs(self.log_path)
+
         if self.log_path is not None:
             self.logger = logging.getLogger('yeom_logger')
             self.logger.setLevel(logging.INFO)

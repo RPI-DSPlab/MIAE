@@ -106,6 +106,84 @@ class ModelAccess(ABC):
         else:
             raise ValueError(f"Unknown access type: {self.access_type}")
 
+    def get_signal_lira(self, dataloader, device, augmentation='mirror'):
+        """
+        Generates logits for a dataloader given a model. Queries with augmentation is first
+        introduced by Choquette-Choo et al. in the paper "Label-Only Membership Inference Attacks".
+        Carlini et al. first brought the idea of queries with augmentation to likelihood
+        ratio attack in the paper "Membership Inference Attacks From First Principles". It's
+        then used for other attack such as Attack-R by Ye et al. and RMIA by Sajjad et al.
+
+        :param dataloader: the dataloader to generate logits for.
+        :param device: the device to use.
+        :param augmentation: the augmentation to use. Default is 'mirror'. It could also be
+        18 for the desired augmentations used for RMIA attack.
+
+        :return: the logits for the dataloader.
+        """
+
+        def mirror_augmentation(image):
+            """
+            Mirrors the image.
+            """
+            return torch.flip(image, [2])
+
+        def shift_augmentation(image, shift=1):
+            """
+            Applies shifting augmentation to the image.
+            """
+            padded_image = torch.nn.functional.pad(image, (shift, shift, shift, shift), mode='reflect')
+            shifts = []
+            for dx in range(0, 2 * shift + 1):
+                for dy in range(0, 2 * shift + 1):
+                    shifted = padded_image[:, :, dx:dx + 32, dy:dy + 32]
+                    shifts.append(shifted)
+            return shifts
+
+        self.model.eval()
+        all_logits = []
+
+
+        with torch.inference_mode():
+            for images, _ in dataloader:
+                images = images.to(device)
+                outputs = []
+                if augmentation == 'none' or augmentation == 0:
+                    outputs = [self.model(images)]  # (batch_size, num_classes)
+
+                # Apply mirror augmentation
+                elif augmentation == 'mirror' or augmentation == 2:
+                    mirror_images = mirror_augmentation(images)
+                    output = self.model(images)
+                    mirror_outputs = self.model(mirror_images)  # (batch_size, num_classes)
+                    outputs = [output, mirror_outputs]
+
+                # Apply shift augmentations
+                elif augmentation == 18:
+                    # Apply shift augmentations to the original image
+                    shift_images = shift_augmentation(images, shift=1)
+                    for shift_image in shift_images:
+                        shift_outputs = self.model(shift_image)
+                        outputs.append(shift_outputs)
+
+                    # Apply shift augmentations to the mirrored image
+                    mirror_images = mirror_augmentation(images)
+                    shift_mirror_images = shift_augmentation(mirror_images, shift=1)
+                    for shift_mirror_image in shift_mirror_images:
+                        shift_mirror_outputs = self.model(shift_mirror_image)
+                        outputs.append(shift_mirror_outputs)
+                else:
+                    raise ValueError(f"Unknown augmentation type: {augmentation}")
+
+                # Stack all outputs along a new dimension
+                all_logits.append(torch.stack(outputs, dim=1))
+
+        # Concatenate all logits from all batches
+        all_logits = torch.cat(all_logits, dim=0)
+        all_logits = all_logits.unsqueeze(1)
+        return all_logits
+    
+
     def __call__(self, data):
         return self.get_signal(data)
 
@@ -224,6 +302,26 @@ class MIAUtils:
         if print_flag:
             print(msg)
 
+
+    @classmethod
+    def generate_keeps_lira(cls, dataset_size: int, num_experiment: int, expid:int):
+        """
+        This function generates the keeps for lira and all lira-inspired attacks. It generates keeps
+        array to represent the index of datapoints is used for training for this experiment. This
+        function is crucial to guarantees that each sample is sampled for the sames times for `num_experiment`
+        times of model training. This function is adapted from lira's repo.
+
+        :param dataset_size: the size of the dataset to generate keep for
+        :param num_experiment: the number of experiments to generate keep for
+        :param expid: the experiment id
+        :return: the keeps array and the non-keep array
+        """
+
+        keep = np.random.uniform(0, 1, size=(num_experiment, dataset_size))
+        order = keep.argsort(0)
+        keep = order < int(0.5 * num_experiment)
+        keep = np.array(keep[expid], dtype=bool)
+        return np.where(keep), np.where(~keep)
 
     @classmethod
     def train_shadow_model(cls, shadow_model, shadow_train_loader, shadow_test_loader, aux_info: AuxiliaryInfo) -> torch.nn.Module:
