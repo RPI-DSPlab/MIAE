@@ -47,12 +47,14 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
         "yeom": "LOSS",
         "lira": "LIRA",
         "aug": "aug",
-        "calibration": "calibrated-loss"
+        "calibration": "calibrated-loss",
+        "reference": "reference"
     }
 
     # Load the target_dataset
     target_dataset_path = f"{data_path}/target/{dataset}/"
     index_to_data, attack_set_membership = utils.load_target_dataset(target_dataset_path)
+
 
     pred_dict = {}
     for att in attack:
@@ -69,6 +71,14 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
             pred_obj = prediction.Predictions(pred_arr, attack_set_membership, attack_name)
             pred_list.append(pred_obj)
         pred_dict[att] = pred_list
+
+    # Add ground_truth pred
+    ground_pred_list = []
+    for s in seeds:
+        ground_pred = prediction.Predictions(attack_set_membership, attack_set_membership, f"ground_truth_{s}")
+        ground_pred_list.append(ground_pred)
+    pred_dict["ground_truth"] = ground_pred_list
+
     return pred_dict
 
 def load_diff_distribution(attack_list: List[str], dataset_list: List[str], architecture: str, data_path: str,
@@ -509,10 +519,6 @@ if __name__ == '__main__':
             if args.threshold == 0: # FPR
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=0,
                                                                                  target_fpr=args.FPR, option=args.option)
-                if args.option == "TNR":
-                    print(f"Current FPR is {args.FPR}")
-                    for pred in pred_and_list:
-                        print(f"Attack: {pred.name}, TNR: {pred.tnr_at_fpr(args.FPR)}")
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, args.graph_title, args.graph_path)
                 pairwise_jaccard_or = eval_metrics(pred_or_list, args.graph_path, args.graph_title, "union")
                 pairwise_jaccard_and = eval_metrics(pred_and_list, args.graph_path, args.graph_title, "intersection")
@@ -523,15 +529,18 @@ if __name__ == '__main__':
                 eval_metrics(pred_or_list, args.graph_path, args.graph_title, "union")
                 eval_metrics(pred_and_list, args.graph_path, args.graph_title, "intersection")
         elif args.graph_goal == "pairwise":
+            print(f"PAIRWISE")
             pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path,
                                                     args.seed)
             if args.threshold == 0:
+                print("FPR = ", args.FPR)
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=0,
                                                                                  target_fpr=args.FPR, option=args.option)
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, args.graph_title, args.graph_path)
                 eval_metrics(pred_or_list, args.graph_path, args.graph_title, "union")
                 eval_metrics(pred_and_list, args.graph_path, args.graph_title, "intersection")
             elif args.threshold != 0:
+                print(f"The threshold is {args.threshold}")
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=args.threshold,
                                                                                  target_fpr=None, option=args.option)
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, args.graph_title, args.graph_path)

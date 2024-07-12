@@ -309,6 +309,7 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
                 common_or, common_and = find_common_tp_pred(adjusted_list, fpr=target_fpr)
             elif option == "TNR":
                 common_or, common_and = find_common_tn_pred(adjusted_list, fpr=target_fpr)
+
             result_or.append(common_or)
             result_and.append(common_and)
 
