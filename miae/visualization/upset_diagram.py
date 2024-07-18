@@ -23,12 +23,6 @@ def data_process_for_upset(pred_or: List[Predictions], pred_and: List[Prediction
     for pred in pred_and:
         attacked_points_and[pred.name] = set(np.where((pred.pred_arr == 1) & (pred.ground_truth_arr == 1))[0])
 
-    for attack, points in attacked_points_or.items():
-        print(f"Attack: {attack}, Number of attacked points: {len(points)}")
-
-    for attack, points in attacked_points_and.items():
-        print(f"Attack: {attack}, Number of attacked points: {len(points)}")
-
     df_or = from_contents(attacked_points_or)
     df_or = df_or.fillna(False)
 

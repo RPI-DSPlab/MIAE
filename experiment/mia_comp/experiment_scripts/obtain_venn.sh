@@ -1,20 +1,26 @@
 # This script generates Venn diagrams for the MIAE experiment
-datasets=("cifar10")
-archs=("resnet56")
-mias=("shokri" "yeom" "lira" "calibration" "losstraj" "aug" "reference")
-categories=("single_attack" "threshold" "fpr")
-subcategories=("pairwise")
+#datasets=("cifar10")
+#archs=("resnet56")
+#mias=("shokri" "yeom" "lira" "calibration" "losstraj" "aug" "reference")
+#categories=("single_attack" "threshold" "fpr")
+#subcategories=("pairwise")
 
 # For different distributions
 #datasets=("cifar10" "cinic10")
 #archs=("resnet56")
-#mias=("shokri")
-#categories=("dif_distribution")
+#mias=("shokri" "yeom")
+#categories=("dif_distribution" "pairwise" "single_attack")
+
+# For same attack different signal
+datasets=("cifar10")
+archs=("resnet56")
+mias=("shokri" "top_1_shokri" "top_3_shokri")
+categories=("single_attack" "threshold" "fpr")
+subcategories=("pairwise" "common_tp")
 
 option=("TPR")
 seeds=(0 1 2)
-#fprs=(0.001 0.01 0 0.1 0.2 0.3 0.4 0.5 0.8)
-fprs=(0.1)
+fprs=(0.001 0.01 0 0.1 0.2 0.3 0.4 0.5 0.8)
 
 # Prepare the parameter lists for the experiment
 mialist=""
@@ -38,7 +44,7 @@ for dataset in "${datasets[@]}"; do
 done
 
 
-experiment_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_2"
+experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"
 
 # For different distributions
 #experiment_dir="/data/public/comp_mia_data/same_attack_different_distribution"

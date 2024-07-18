@@ -47,7 +47,7 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
         "yeom": "LOSS",
         "lira": "LIRA",
         "aug": "aug",
-        "calibration": "calibrated-loss",
+        "calibration": "loss-cali",
         "reference": "reference"
     }
 
@@ -60,10 +60,13 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
     for att in attack:
         pred_list = []
         for s in seeds:
-            pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att}.npy"
+            if "top" in att:
+                att_npy = f"top_k_shokri"
+            else:
+                att_npy = att
+            pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att_npy}.npy"
             pred_arr = utils.load_predictions(pred_path)
             new_attack_name = name_mapping.get(att, att)
-            # if dataset_path contains "distribution", set attack name to be "distribution"
             if "distribution" in data_path:
                 attack_name = f"{new_attack_name}_{dataset}_{s}"
             else:
@@ -73,11 +76,11 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
         pred_dict[att] = pred_list
 
     # Add ground_truth pred
-    ground_pred_list = []
-    for s in seeds:
-        ground_pred = prediction.Predictions(attack_set_membership, attack_set_membership, f"ground_truth_{s}")
-        ground_pred_list.append(ground_pred)
-    pred_dict["ground_truth"] = ground_pred_list
+    # ground_pred_list = []
+    # for s in seeds:
+    #     ground_pred = prediction.Predictions(attack_set_membership, attack_set_membership, f"ground_truth_{s}")
+    #     ground_pred_list.append(ground_pred)
+    # pred_dict["ground_truth"] = ground_pred_list
 
     return pred_dict
 
@@ -529,18 +532,15 @@ if __name__ == '__main__':
                 eval_metrics(pred_or_list, args.graph_path, args.graph_title, "union")
                 eval_metrics(pred_and_list, args.graph_path, args.graph_title, "intersection")
         elif args.graph_goal == "pairwise":
-            print(f"PAIRWISE")
             pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path,
                                                     args.seed)
             if args.threshold == 0:
-                print("FPR = ", args.FPR)
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=0,
                                                                                  target_fpr=args.FPR, option=args.option)
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, args.graph_title, args.graph_path)
                 eval_metrics(pred_or_list, args.graph_path, args.graph_title, "union")
                 eval_metrics(pred_and_list, args.graph_path, args.graph_title, "intersection")
             elif args.threshold != 0:
-                print(f"The threshold is {args.threshold}")
                 pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=args.threshold,
                                                                                  target_fpr=None, option=args.option)
                 plot_venn(pred_or_list, pred_and_list, args.graph_goal, args.graph_title, args.graph_path)

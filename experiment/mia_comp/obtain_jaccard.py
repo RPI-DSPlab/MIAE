@@ -41,6 +41,7 @@ def parse_file(file_path: str, all_jaccard: Dict[float, Dict[str, List[Tuple[Tup
         line = line.strip()
         if 'processed using' in line:
             process_opt = line.split()[-1].replace(']', '').lower()
+            process_opt = "Coverage" if process_opt == "union" else "Stability"
             if current_fpr in all_jaccard and process_opt not in all_jaccard[current_fpr]:
                 all_jaccard[current_fpr][process_opt] = []
 
@@ -122,12 +123,6 @@ def plot_similarity_matrix(dir_path: str, fpr_list: List[float], process_opt_lis
             plt.figure(figsize=(10, 8))
             sns.heatmap(matrix, annot=True, cmap='YlGnBu', linewidths=0.5, linecolor='gray', cbar=True, vmin=0, vmax=1)
 
-            # Add labels and title
-            process_option = "Coverage" if process_option == "union" else "Stability"
-            plt.title(f'Agreement between Attacks ({process_option}) with FPR {fpr}', fontsize=16, pad=20)
-            plt.xlabel('Attack', fontsize=14, labelpad=15)
-            plt.ylabel('Attack', fontsize=14, labelpad=15)
-
             # Save the plot
             save_path = os.path.join(dir_path, f'fpr_{fpr}/Jaccard_fpr_{fpr}_{process_option}.pdf')
             plt.savefig(save_path)
@@ -159,4 +154,4 @@ if __name__ == "__main__":
 
     calculate_avg_std(all_jaccard, stat)
     save_statistics(stat, args.plot_dir)
-    plot_similarity_matrix(args.plot_dir, target_fpr, ['union', 'intersection'])
+    plot_similarity_matrix(args.plot_dir, target_fpr, ['Coverage', 'Stability'])
