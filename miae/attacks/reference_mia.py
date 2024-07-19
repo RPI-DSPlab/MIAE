@@ -244,7 +244,7 @@ class ReferenceUtil(MIAUtils):
         check_losses = np.transpose(check_losses, (2, 1, 0))
         prediction = 1 - scipy.stats.norm.cdf(np.log(np.exp(-check_losses) / (1 - np.exp(-check_losses))),
                                               mean_reference, std_reference + 1e-30)
-        return np.array(prediction).reshape(-1, 1)
+        return np.array(prediction).reshape(-1, 1).squeeze()
 
 
 class ReferenceAttack(MiAttack):

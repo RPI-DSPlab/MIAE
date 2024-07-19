@@ -211,6 +211,7 @@ class LIRAUtil(MIAUtils):
             # Check if the directory exists and create
             if os.path.exists(dir_path):
                 if os.path.exists(dir_path + "/shadow.pth") and os.path.exists(dir_path + "/keep.npy"):
+                    cls.log(info, f"shadow model {expid} already exists at {dir_path}, skip training", print_flag=True)
                     continue
             else:
                 cls._make_directory_if_not_exists(dir_path)

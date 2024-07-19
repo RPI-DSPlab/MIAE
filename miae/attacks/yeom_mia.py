@@ -81,7 +81,7 @@ class YeomUtil(MIAUtils):
         """
 
         with torch.inference_mode():
-            total_loss, correctly_labeled_samples = 0, 0
+            total_loss, correctly_labeled_samples, num_sample = 0, 0, 0
             confusion_matrix = torch.zeros(num_classes, num_classes)
             per_class_loss = torch.zeros(num_classes, device=aux_info.device)
             per_class_ctr = torch.zeros(num_classes, device=aux_info.device)
@@ -90,12 +90,12 @@ class YeomUtil(MIAUtils):
             for _, (inputs, labels) in enumerate(data_loader):
                 inputs, labels = inputs.to(device=aux_info.device, non_blocking=True), \
                     labels.to(device=aux_info.device, non_blocking=True)
-
                 model.to(aux_info.device)
                 outputs = model(inputs)
                 losses = criterion(outputs, labels)
                 # keep track of total loss
                 total_loss += losses.sum()
+                num_sample += len(labels)
                 # get num of correctly predicted inputs in the current batch
                 _, pred_labels = torch.max(outputs, 1)
                 pred_labels = pred_labels.view(-1)
@@ -110,8 +110,8 @@ class YeomUtil(MIAUtils):
                     per_class_loss[i] += losses[filt].sum()
                     per_class_ctr[i] += filt.sum()
 
-            loss = total_loss / len(data_loader.dataset)
-            loss = int(loss.cpu().item())
+            loss = total_loss / num_sample
+            loss = loss.cpu().item()
             accuracy = correctly_labeled_samples / len(data_loader.dataset)
             per_class_accuracy = confusion_matrix.diag() / confusion_matrix.sum(1)
             per_class_loss = per_class_loss / per_class_ctr
@@ -161,6 +161,8 @@ class YeomAttack(MiAttack):
                                                               self.aux_info.num_classes,
                                                               self.aux_info)
 
+        YeomUtil.log(self.aux_info, f"Loss threshold: {self.threshold}", print_flag=True)
+
         self.prepared = True
 
     def infer(self, target_data) -> np.ndarray:
@@ -182,6 +184,10 @@ class YeomAttack(MiAttack):
                 losses = F.cross_entropy(outputs, torch.argmax(outputs, dim=1), reduction='none')
                 losses = losses.cpu().numpy()
                 losses_threshold_diff += (losses - self.threshold).tolist()
+        # mean and var of losses_threshold_diff
+        mean = np.mean(losses_threshold_diff)
+        var = np.var(losses_threshold_diff)
+        YeomUtil.log(self.aux_info, f"Mean of losses_threshold_diff: {mean}", print_flag=True)
 
         # for the purpose of obtaining the prediction as a score, we couldn't just use the boolean value of the
         # losses_threshold_diff, but we need to normalize the value to [0, 1]
