@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 from venn import venn
 from matplotlib_venn import venn3_unweighted, venn3, venn2_unweighted, venn2
 from typing import List, Tuple, Dict, Optional
-from miae.eval_methods.prediction import Predictions, union_pred, intersection_pred, find_common_tp_pred, find_common_tn_pred
+from miae.eval_methods.prediction import Predictions, find_common_tp_pred, find_common_tn_pred
+
 
 def find_pairwise_preds(pred_list: List[Predictions]) -> List[Tuple[Predictions, Predictions]]:
     """
@@ -162,6 +163,7 @@ def single_attack_process_for_venn(pred_list: List[Predictions], target_fpr: flo
         raise ValueError("Target_fpr should be provided.")
     return result
 
+
 def plot_venn_single(pred_list: List[Predictions], save_path: str):
     """
     Plot Venn diagrams for a single attack with 3 different seeds including both unweighted and weighted Venn diagrams.
@@ -176,23 +178,64 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
     venn_labels = [pred.name for pred in pred_list]
     venn_unweighted = venn3_unweighted if len(pred_list) == 3 else venn2_unweighted
     venn_weighted = venn3 if len(pred_list) == 3 else venn2
-    circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
+
+    # Color mapping
+    plt.style.use('seaborn-v0_8-paper')
+    mia_color_mapping = {
+        "losstraj": '#1f77b4', "Class-NN": '#ff7f0e', "LOSS": '#2ca02c',
+        "LIRA": '#d62728', "aug": '#9467bd', "loss-cali": '#8c564b',
+        "reference": '#e377c2'
+    }
+    default_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
+    circle_colors = [mia_color_mapping.get(pred.name, default_colors[i % len(default_colors)]) for i, pred in
+                     enumerate(pred_list)]
 
     # Plotting unweighted Venn diagram
-    plt.figure(figsize=(7, 7))
-    venn_unweighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
+    plt.figure(figsize=(6, 6))
+    ax = plt.gca()
+    ax.axis('off')
+    venn = venn_unweighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors[:len(pred_list)])
 
+    # Adjust text positions and sizes
+    for text in venn.set_labels:
+        text.set_fontsize(16)
+        text.set_fontweight('bold')
+
+    for text in venn.subset_labels:
+        if text is not None:
+            text.set_fontsize(14)
+
+    plt.tight_layout()
     os.makedirs(save_path, exist_ok=True)
-    full_save_path = os.path.join(save_path, f"{save_path.split('/')[-1]}_unweighted.pdf")
-    plt.savefig(full_save_path)
+    fpr = save_path.split('/')[-1].split('_')[-1]
+    att = save_path.split('/')[-2]
+    file_name = f"venn_{att}_{fpr}_unweighted.pdf"
+    full_save_path = os.path.join(save_path, file_name)
+    plt.savefig(full_save_path, bbox_inches='tight', pad_inches=0.1)
     plt.close()
 
     # Plotting weighted Venn diagram
-    plt.figure(figsize=(7, 7))
-    venn_weighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
+    plt.figure(figsize=(6, 6))
+    ax = plt.gca()
+    ax.axis('off')
+    venn = venn_weighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors[:len(pred_list)])
+
+    # Adjust text positions and sizes
+    for text in venn.set_labels:
+        text.set_fontsize(16)
+        text.set_fontweight('bold')
+
+    for text in venn.subset_labels:
+        if text is not None:
+            text.set_fontsize(14)
+
+    plt.tight_layout()
     os.makedirs(save_path, exist_ok=True)
-    full_save_path = os.path.join(save_path, f"{save_path.split('/')[-1]}_weighted.pdf")
-    plt.savefig(full_save_path)
+    fpr = save_path.split('/')[-1].split('_')[-1]
+    att = save_path.split('/')[-2]
+    file_name = f"venn_{att}_{fpr}_weighted.pdf"
+    full_save_path = os.path.join(save_path, file_name)
+    plt.savefig(full_save_path, bbox_inches='tight', pad_inches=0.1)
     plt.close()
 
 def plot_venn_single_for_all_seeds(pred_list: List[Predictions], graph_title: str, save_path: str):
@@ -226,6 +269,7 @@ def plot_venn_single_for_all_seeds(pred_list: List[Predictions], graph_title: st
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.savefig(f"{save_path}.png")
 
+
 def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
                        pred_pair_list_and: List[Tuple[Predictions, Predictions]], save_path: str):
     """
@@ -234,25 +278,47 @@ def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
     :param pred_pair_list_and: list of tuples, each containing a pair of Predictions objects for intersection of seeds
     :param save_path: path to save the graphs
     """
-    circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
+    plt.style.use('seaborn-v0_8-paper')
+    mia_color_mapping = {
+        "losstraj": '#1f77b4', "Class-NN": '#ff7f0e', "LOSS": '#2ca02c',
+        "LIRA": '#d62728', "aug": '#9467bd', "loss-cali": '#8c564b',
+        "reference": '#e377c2'
+    }
+    default_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
 
     def pairwise(pred_1, pred_2, weighted, suffix, folder_path):
         attacked_points_1 = set(np.where((pred_1.pred_arr == 1) & (pred_1.ground_truth_arr == 1))[0])
         attacked_points_2 = set(np.where((pred_2.pred_arr == 1) & (pred_2.ground_truth_arr == 1))[0])
 
-        plt.figure(figsize=(7, 7))
+        plt.figure(figsize=(6, 6))
+        ax = plt.gca()
+        ax.axis('off')
 
         name1 = pred_1.name.split('_')[0]
         name2 = pred_2.name.split('_')[0]
-        if weighted:
-            venn2(subsets=(attacked_points_1, attacked_points_2), set_labels=(name1, name2),
-                  set_colors=circle_colors)
-            plt.savefig(os.path.join(folder_path, f"{suffix}_weighted.pdf"))
-        else:
-            venn2_unweighted(subsets=(attacked_points_1, attacked_points_2), set_labels=(name1, name2),
-                             set_colors=circle_colors)
-            plt.savefig(os.path.join(folder_path, f"{suffix}_unweighted.pdf"))
+        circle_colors = [mia_color_mapping[name1], mia_color_mapping[name2]]
 
+        if weighted:
+            venn = venn2(subsets=(attacked_points_1, attacked_points_2), set_labels=(name1, name2),
+                         set_colors=circle_colors)
+        else:
+            venn = venn2_unweighted(subsets=(attacked_points_1, attacked_points_2), set_labels=(name1, name2),
+                                    set_colors=circle_colors)
+
+        # Adjust text positions and sizes
+        for text in venn.set_labels:
+            text.set_fontsize(16)
+            text.set_fontweight('bold')
+        for text in venn.subset_labels:
+            if text is not None:
+                text.set_fontsize(16)
+
+        plt.tight_layout()
+        attacks = folder_path.split('/')[-1]
+        fpr = folder_path.split('/')[-2].replace('_', '')
+        full_name = f"{attacks}_{fpr}_venn_{suffix}_{'weighted' if weighted else 'unweighted'}.pdf"
+        full_save_path = os.path.join(folder_path, full_name)
+        plt.savefig(full_save_path, bbox_inches='tight', pad_inches=0.1)
         plt.close()
 
     for idx, (pair_or, pair_and) in enumerate(zip(pred_pair_list_or, pred_pair_list_and)):
@@ -260,7 +326,6 @@ def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
         pred_1_and, pred_2_and = pair_and
         name1 = pred_1_or.name.split('_')[0]
         name2 = pred_2_or.name.split('_')[0]
-
         folder_name = f"{name1}_vs_{name2}"
         folder_path = os.path.join(save_path, folder_name)
         os.makedirs(folder_path, exist_ok=True)
@@ -269,6 +334,7 @@ def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
         pairwise(pred_1_or, pred_2_or, True, "Union", folder_path)
         pairwise(pred_1_and, pred_2_and, False, "Intersection", folder_path)
         pairwise(pred_1_and, pred_2_and, True, "Intersection", folder_path)
+
 
 def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Optional[float] = 0,
                           target_fpr: Optional[float] = None, option: str = "TPR") -> List[Predictions]:

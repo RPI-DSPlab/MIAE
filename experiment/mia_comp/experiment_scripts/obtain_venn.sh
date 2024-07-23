@@ -9,18 +9,25 @@
 #datasets=("cifar10" "cinic10")
 #archs=("resnet56")
 #mias=("shokri" "yeom")
-#categories=("dif_distribution" "pairwise" "single_attack")
+#categories=("dif_distribution")
 
 # For same attack different signal
+#datasets=("cifar10")
+#archs=("resnet56")
+#mias=("shokri" "top_1_shokri" "top_3_shokri")
+#categories=("single_attack" "threshold" "fpr")
+#subcategories=("pairwise" "common_tp")
+
 datasets=("cifar10")
 archs=("resnet56")
-mias=("shokri" "top_1_shokri" "top_3_shokri")
-categories=("single_attack" "threshold" "fpr")
-subcategories=("pairwise" "common_tp")
+mias=("shokri" "yeom" "lira" "calibration" "losstraj" "aug" "reference")
+categories=("fpr" )
+subcategories=("pairwise")
 
 option=("TPR")
 seeds=(0 1 2)
-fprs=(0.001 0.01 0 0.1 0.2 0.3 0.4 0.5 0.8)
+#fprs=(0.001 0.01 0 0.1 0.2 0.3 0.4 0.5 0.8)
+fprs=(0.1)
 
 # Prepare the parameter lists for the experiment
 mialist=""
@@ -44,7 +51,7 @@ for dataset in "${datasets[@]}"; do
 done
 
 
-experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"
+experiment_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
 
 # For different distributions
 #experiment_dir="/data/public/comp_mia_data/same_attack_different_distribution"
