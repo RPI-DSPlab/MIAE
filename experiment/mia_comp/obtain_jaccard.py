@@ -121,11 +121,22 @@ def plot_similarity_matrix(dir_path: str, fpr_list: List[float], process_opt_lis
 
             # Plotting the heatmap
             plt.figure(figsize=(10, 8))
-            sns.heatmap(matrix, annot=True, cmap='YlGnBu', linewidths=0.5, linecolor='gray', cbar=True, vmin=0, vmax=1)
+            sns.heatmap(
+                matrix, annot=True, cmap='YlGnBu', linewidths=0.5, linecolor='gray', cbar=True, vmin=0, vmax=1,
+                annot_kws={"size": 15, "weight": "bold"},  # Adjust annotation font size and weight
+                fmt=".2f"
+            )
+
+            # Adjusting the font size and weight for labels
+            plt.xticks(fontsize=12, weight='bold')
+            plt.yticks(fontsize=12, weight='bold')
+
+            # Reducing white space around the heatmap
+            plt.subplots_adjust(left=0.2, right=0.95, top=0.95, bottom=0.15)
 
             # Save the plot
             save_path = os.path.join(dir_path, f'fpr_{fpr}/Jaccard_fpr_{fpr}_{process_option}.pdf')
-            plt.savefig(save_path)
+            plt.savefig(save_path, bbox_inches='tight')  # Save with tight bounding box to reduce white space
             plt.close()
 
 

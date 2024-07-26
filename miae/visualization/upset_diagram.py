@@ -50,14 +50,14 @@ def plot_upset(df_or: pd.DataFrame, df_and: pd.DataFrame, save_path: str):
     os.makedirs(save_path, exist_ok=True)
 
     plt.figure(figsize=(10, 8))
-    UpSet(df_or, sort_by='cardinality', show_counts=True).plot()
+    UpSet(df_or, sort_by='cardinality', show_counts=True, max_subset_rank=15).plot()
     union_save_path = os.path.join(save_path, "upset_union.pdf")
     plt.savefig(union_save_path)
     plt.close()
 
     # Plotting UpSet plot
     plt.figure(figsize=(10, 8))
-    UpSet(df_and, sort_by='cardinality', show_counts=True).plot()
+    UpSet(df_and, sort_by='cardinality', show_counts=True, max_subset_rank=15).plot()
     intersection_save_path = os.path.join(save_path, "upset_intersection.pdf")
     plt.savefig(intersection_save_path)
     plt.close()

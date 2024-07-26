@@ -8,15 +8,16 @@
 # For same attack different signals
 datasets=("cifar10")
 archs=("resnet56")
-mias=("shokri" "yeom")
+mias=("shokri" "top_1_shokri" "top_3_shokri")
 categories=("threshold" "fpr")
 subcategories=("common_tp")
 
-# For different distributions
+## For different distributions
 #datasets=("cifar10" "cinic10")
 #archs=("resnet56")
 #mias=("shokri" "yeom")
-#categories=("dif_distribution" "pairwise" "single_attack")
+#categories=("threshold" "fpr")
+#subcategories=("common_tp")
 
 option=("TPR")
 seeds=(0 1 2)
@@ -39,7 +40,7 @@ for fpr in "${fprs[@]}"; do
 done
 
 
-experiment_dir="/data/public/comp_mia_data/same_attack_different_distribution"
+experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 if [ -d "$graph_dir" ]; then
