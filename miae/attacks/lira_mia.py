@@ -463,7 +463,7 @@ class LiraAttack(MiAttack):
         :param dataset: The target data points to be inferred.
         :return: The inferred membership status of the data point.
         """
-        TEST = True  # if True, we save scores and keep to the file
+        TEST = False  # if True, we save scores and keep to the file
 
         set_seed(self.auxiliary_info.seed)
 

@@ -23,7 +23,7 @@ import sys
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 from miae.utils.set_seed import set_seed
-from miae.attacks import losstraj_mia, shokri_mia, lira_mia, yeom_mia, aug_mia, calibration_mia
+from miae.attacks import losstraj_mia, shokri_mia, lira_mia, yeom_mia, aug_mia, calibration_mia, reference_mia
 from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
 from experiment import models
@@ -176,6 +176,8 @@ def get_target_model_access(args, target_model, untrained_target_model) -> mia_b
         return top_k_shokri_mia.TopKShokriModelAccess(deepcopy(target_model), untrained_target_model)
     if args.attack == "lira":
         return lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
+    if args.attack == "reference":
+        return reference_mia.ReferenceModelAccess(deepcopy(target_model), untrained_target_model)
     if args.attack == "aug":
         return aug_mia.AugModelAccess(deepcopy(target_model), untrained_target_model)
     if args.attack == "calibration":
@@ -216,14 +218,15 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
              'top_k': 3})
     if args.attack == "lira":
         return lira_mia.LiraAuxiliaryInfo(
-            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
-             'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
-    
-    if args.attack == "lira":
-        return lira_mia.LiraAuxiliaryInfo(
-            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
-            'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+            {'device': device, 'shadow_seed_base': args.seed*50, 'save_path': args.preparation_path, 'num_classes': num_classes,
+            'batch_size': args.batch_size, 'lr': 0.1, "num_shadow_models": 20, 'epochs': args.attack_epochs, 'log_path': args.result_path,
+             'shadow_path': args.lira_shadow_path})
 
+    if args.attack == "reference":
+        return reference_mia.ReferenceAuxiliaryInfo(
+            {'device': device, 'shadow_seed_base': args.seed*50, 'save_path': args.preparation_path, 'num_classes': num_classes,
+            'batch_size': args.batch_size, 'lr': 0.1, "num_shadow_models": 20, 'epochs': args.attack_epochs, 'log_path': args.result_path,
+             'shadow_path': args.lira_shadow_path})
 
     if args.attack == "aug":
         return aug_mia.AugAuxiliaryInfo(
@@ -256,6 +259,8 @@ def get_attack(args, aux_info: mia_base.AuxiliaryInfo, target_model_access: mia_
         return top_k_shokri_mia.TopKShokriAttack(target_model_access, aux_info)
     if args.attack == "lira":
         return lira_mia.LiraAttack(target_model_access, aux_info)
+    if args.attack == "reference":
+        return reference_mia.ReferenceAttack(target_model_access, aux_info)
     if args.attack == "aug":
         return aug_mia.AugAttack(target_model_access, aux_info)
     else:
@@ -282,7 +287,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_target_model', type=bool, default=False, help='whether to train the target model')
 
     # mandatory arguments
-    parser.add_argument('--attack', type=str, default=None, help='MIA type: [losstraj, yeom, shokri ,lira, aug, calibration, top_k_shokri]')
+    parser.add_argument('--attack', type=str, default=None, help='MIA type: [losstraj, yeom, shokri ,lira, aug, calibration, top_k_shokri, reference]')
     parser.add_argument('--target_model', type=str, default=None,
                         help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet]')
     parser.add_argument('--dataset', type=str, default=None, help='dataset: [cifar10, cifar100, cinic10]')
@@ -290,6 +295,9 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', type=str, default=None, help='path to the dataset')
     parser.add_argument('--target_model_path', type=str, default=str(os.getcwd()), help='path to the target model')
     parser.add_argument('--preparation_path', type=str, default=str(os.getcwd()), help='path to the preparation file')
+    parser.add_argument('--lira_shadow_path', type=str, default=str(os.getcwd()), help='path to the shadow model ('
+                                                                                       'only for lira and lira-based '
+                                                                                       'attacks)')
     parser.add_argument('--target_set_ratio', type=float, default=0.5,
                         help='the ratio of the data used for target model training over the whole dataset')
     parser.add_argument('--train_test_ratio', type=float, default=0.5, help='train test ratio for target and MIA')
@@ -336,7 +344,6 @@ if __name__ == '__main__':
         # concat the target trainset and testset and then attack
         dataset_to_attack = ConcatDataset([target_trainset, target_testset])
         target_membership = np.concatenate([np.ones(len(target_trainset)), np.zeros(len(target_testset))])
-
         # Save the index - data mapping
         index_to_data = {}
         for i in range(len(dataset_to_attack)):
@@ -389,6 +396,7 @@ if __name__ == '__main__':
 
     # obtain the prediction
     pred = attack.infer(dataset_to_attack)
+    print(pred.shape)
     np.save(os.path.join(args.result_path, "pred_" + args.attack + ".npy"), pred)
 
     # print the accuracy

@@ -17,7 +17,7 @@ if $1 != "train_shadow" && $1 != "train_ensemble" && $1 != "run_ensemble" && $1 
     exit 1
 fi
 
-mias=("losstraj" "shokri" "yeom" "aug" "lira" "calibration")
+mias=("losstraj" "shokri" "yeom" "aug" "lira" "calibration" "reference")
 arch="resnet56"
 dataset="cifar10"
 seeds=(0 1 2 3 4 5)
@@ -30,7 +30,7 @@ for mia in "${mias[@]}"; do
     mialist+="${mia} "
 done
 num_epoch=100
-ensemble_method=("avg" "stacking" "learning_based_cnn_pretrained")
+ensemble_method=("avg" "pairwise_max")
 
 preds_path="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
 
@@ -52,12 +52,11 @@ if [ "$mode" == "train_shadow" ]; then
     --target_epochs "$num_epoch" \
     --aux_set_path "$data_dir" \
     --shadow_save_path "$shadow_target_dir" \
-    --target_model_path "$shadow_target_dir" \
     --device "cuda:1" \
     --seed 0
 elif [ "$mode" == "train_ensemble" ]; then
     for method in "${ensemble_method[@]}"; do
-      echo "ENSEMBLE: Training ensemble model"
+      echo "ENSEMBLE: Training ensemble model for method $method"
       python3 ensemble.py \
       --mode "train_ensemble" \
       --target_model $arch \
@@ -65,6 +64,7 @@ elif [ "$mode" == "train_ensemble" ]; then
       --preds_path $preds_path \
       --ensemble_seeds $seedlist \
       --attacks $mialist \
+      --shadow_save_path "$shadow_target_dir" \
       --ensemble_save_path "${preds_path}/ensemble_file_save/${dataset}" \
       --shadow_target_data_path "$shadow_target_dir/${dataset}" \
       --ensemble_method $method
@@ -82,6 +82,7 @@ elif [ "$mode" == "run_ensemble" ]; then
         --attacks $mialist \
         --ensemble_save_path "${preds_path}/ensemble_file_save" \
         --shadow_target_data_path "$shadow_target_dir" \
+        --target_model_path "${preds_path}/target/target_models/${dataset}/${arch}" \
         --ensemble_method $method \
         --target_data_path ${preds_path}/target/${dataset} \
         --ensemble_result_path "${preds_path}/ensemble_result"
@@ -96,6 +97,7 @@ elif [ "$mode" == "evaluation" ]; then
       --preds_path $preds_path \
       --ensemble_seeds $seedlist \
       --attacks $mialist \
+      --target_model_path "${preds_path}/target/target_models/${dataset}/${arch}" \
       --ensemble_save_path "${preds_path}/ensemble_file_save" \
       --target_data_path ${preds_path}/target/${dataset} \
       --ensemble_result_path "${preds_path}/ensemble_result"
