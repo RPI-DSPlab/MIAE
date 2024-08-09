@@ -41,7 +41,16 @@ class Predictions:
         self.ground_truth_arr = ground_truth_arr
         self.name = name
 
-    def predictions_to_labels(self, threshold: float = 0.5) -> np.ndarray:
+    def is_hard(self):
+        """
+        return true if the predictions are hard labels
+        """
+        for i in self.pred_arr:
+            if i not in [0.0, 1.0, 0, 1]:
+                return False
+        return True
+
+    def predictions_to_labels(self, threshold: float = 0.5, normalization=False) -> np.ndarray:
         """
         Convert predictions to binary labels.
 
@@ -49,8 +58,8 @@ class Predictions:
         :param threshold: threshold for converting predictions to binary labels
         :return: binary labels as a numpy array
         """
-        pred_norm = pred_normalization(self.pred_arr)
-        labels = (pred_norm > threshold).astype(int)
+        pred = pred_normalization(self.pred_arr) if normalization else self.pred_arr
+        labels = (pred > threshold).astype(int)
         return labels
 
     def accuracy(self, threshold=0.5) -> float:
@@ -76,6 +85,8 @@ class Predictions:
         """
         Compute the false positive rate (FPR) of the predictions.
         """
+        if not self.is_hard:
+            raise ValueError("The predictions are not hard labels.")
         pred_tensor = torch.tensor(self.pred_arr)
         ground_truth_tensor = torch.tensor(self.ground_truth_arr)
         false_positive = torch.logical_and(pred_tensor == 1, ground_truth_tensor == 0).sum().item()
@@ -88,6 +99,8 @@ class Predictions:
         """
         Compute the true positive rate (TPR) of the predictions.
         """
+        if not self.is_hard:
+            raise ValueError("The predictions are not hard labels.")
         pred_tensor = torch.tensor(self.pred_arr)
         ground_truth_tensor = torch.tensor(self.ground_truth_arr)
         true_positive = torch.logical_and(pred_tensor == 1, ground_truth_tensor == 1).sum().item()
@@ -102,6 +115,10 @@ class Predictions:
         :param target_fpr: target FPR
         :return: adjusted predictions as a numpy array
         """
+
+        if self.is_hard:
+            raise ValueError("The predictions are already hard label (0, 1), fpr is already determined.")
+
         fpr, tpr, thresholds = roc_curve(self.ground_truth_arr, self.pred_arr)
 
         # Find the threshold closest to the target FPR
@@ -149,6 +166,14 @@ class Predictions:
         Save the prediction to a file.
         """
         np.save(os.path.join(path, file_name), self.pred_arr)
+
+
+    def roc_curve(self):
+        """
+        Compute the ROC curve of the predictions with sklearn roc_curve.
+        """
+        fpr, tpr, threshold = roc_curve(self.ground_truth_arr, self.pred_arr)
+        return fpr, tpr, threshold
 
 
 def _common_tp(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):
@@ -466,7 +491,7 @@ def plot_auc(pred_list: List[List[Predictions]] | List[Predictions],
         pred_as_arr = prediction.pred_arr
         def sweep(score: np.ndarray, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float, float]:
             """
-            Compute a Receiver Operating Characteristic (ROC) curve.
+             Compute roc curve, auc, and accuracy.
 
             Args:
                 score (np.ndarray): The predicted scores.

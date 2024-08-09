@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, Subset
 from tqdm import tqdm
+import pickle
 
 from miae.attacks.attack_classifier import *
 
@@ -283,6 +284,22 @@ class MiAttack(ABC):
         :return: the inferred membership of the data.
         """
         pass
+
+    def save(self, path: str):
+        """
+        Save the attack as a pickle file.
+        """
+        with open(path, 'wb') as f:
+            pickle.dump(self, f)
+
+
+    @staticmethod
+    def load(path: str) -> 'MiAttack':
+        """
+        Load the attack from a pickle file.
+        """
+        with open(path, 'rb') as f:
+            return pickle.load(f)
 
 class MIAUtils:
     """

@@ -24,7 +24,7 @@ import torch
 from matplotlib import pyplot as plt
 from torch import nn
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
-from typing import List, Dict
+from typing import List, Dict, Tuple
 import numpy as np
 
 import miae.eval_methods.sample_hardness
@@ -238,6 +238,50 @@ def mia_learning_based_ensemble_prepare(aux_set, base_preds: List[prediction.Pre
     return meta_model
 
 
+def obtain_shadow_roc(preds_on_shadow_target: List[prediction.Predictions], gt: np.array) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """
+    for each attack, calculate the FPR thresholds and their corresponding FPRs and TPRs
+
+    preds_on_shadow_target: list of predictions on shadow-target model
+    gt: ground truth labels
+
+    """
+    ret_list = []
+    for pred in preds_on_shadow_target:
+        ret_list.append(prediction.roc_curve(gt, pred.pred_arr))
+    return ret_list
+
+
+
+def align_threshold_by_fpr(fpr_thresholds: List[Tuple[np.ndarray, np.ndarray]],
+                           target_fprs: list[float]) -> List[Dict[float, float]]:
+    """
+    Process fpr_thresholds pairs for multiple attacks. For each attack, find fpr that's closest to each target_fpr and
+    save the corresponding threshold. Hence we are aligning the thresholds for different attack that would lead to the
+    same fpr.
+
+    fpr_thresholds: list of fpr-threshold pair. One pair for each attack.
+    target_fprs: list of fpr values to align to.
+
+    return: list of dictionary. Each dictionary contains the threshold for that attack at each target fpr.
+    """
+
+
+    ret_list = []
+    for fpr_arr, threshold_arr in fpr_thresholds: # for each attack
+        thresholds = [] # threshold for each attack at the target fpr
+        for target_fpr in target_fprs:
+            if len(fpr_arr[fpr_arr <= target_fpr]) == 0:
+                thresholds.append(np.inf)  # no threshold can achieve the target fpr
+            else:
+                idx = np.argmin(abs(fpr_arr - target_fpr))
+                thresholds.append(threshold_arr[idx])
+
+        ret_list.append(dict(zip(target_fprs, thresholds)))
+    return ret_list
+    
+
+
 def pairwise_max(base_preds: List[prediction.Predictions]) -> dict:
     """
     This function ensembles every 2 predictions by taking the maximum of the two predictions
@@ -277,6 +321,7 @@ def read_pred(preds_path: str, extend_name: str, sd: int, dataset: str, model: s
 
     pred_file = os.path.join(preds_path, f"preds_sd{sd}{extend_name}", dataset, model, attack, f"pred_{attack}.npy")
     pred = np.load(pred_file)
+    pred = (pred - np.min(pred)) / (np.max(pred) - np.min(pred))
     return prediction.Predictions(pred, gt, name=f"{dataset}_{model}_{attack}")
 
 
@@ -339,14 +384,19 @@ def prepare_ensemble(preds_on_shadow_target: List[prediction.Predictions], gt, e
     """
     if ensemble_method == "avg":
         print("NO need to prepare for avg")
-    elif ensemble_method == "pairwise_max":
-        print("NO need to prepare for pairwise_max")
     elif ensemble_method == "stacking":
         meta_model = mia_ensemble_stacking_prepare(preds_on_shadow_target, gt, shadow_target_logits, device)
         torch.save(meta_model, save_path + "/stacking_meta_model.pth")
     elif ensemble_method == "learning_based_cnn_pretrained":
         meta_model = mia_learning_based_ensemble_prepare(aux_set, preds_on_shadow_target, gt, device=device)
         torch.save(meta_model, save_path + "/learning_based_meta_model.pth")
+    elif ensemble_method == "pairwise_max":
+        rocs = obtain_shadow_roc(preds_on_shadow_target, gt)
+        threshold_fpr_list = [tuple([x[0], x[2]]) for x in rocs]
+        shadow_attack_thresholds = align_threshold_by_fpr(threshold_fpr_list, [0.01, 0.05, 0.1])
+        with open(save_path + "/shadow_attack_threshold_fpr.pkl", "wb") as f:
+            pickle.dump(shadow_attack_thresholds, f)
+        print(f"shadow_attack_thresholds is saved at {save_path}/shadow_attack_threshold_fpr.pkl")
     else:
         raise ValueError("Invalid ensemble method")
 
@@ -441,6 +491,7 @@ def multi_seed_avg(pred_list: List[List[prediction.Predictions]]) -> List[predic
     return avg_preds
 
 
+
 # --------------------- scripts for each mode of this file  -------------------------
 
 
@@ -467,7 +518,7 @@ if __name__ == "__main__":
                         help='Save path for the predictions (both shadow preds and base preds)')
     parser.add_argument("--ensemble_seeds", type=int, nargs="+", help="Random seed")
     parser.add_argument("--attacks", type=str, nargs="+", default=None,
-                        help='MIA type: [losstraj, yeom, shokri, aug, lira, calibration]')
+                        help='MIA type: [losstraj, yeom, shokri, aug, lira, calibration, reference]')
     parser.add_argument("--ensemble_save_path", type=str, help="Path to save the ensemble files (ie: meta model)")
     parser.add_argument('--shadow_target_data_path', type=str,
                         help='Save path for shadow target data, ground truth, etc')
@@ -500,6 +551,9 @@ if __name__ == "__main__":
             input_size = 32
         elif args.dataset == "cifar100":
             num_classes = 100
+            input_size = 32
+        if args.dataset == "cinic10":
+            num_classes = 10
             input_size = 32
         else:
             raise ValueError("Invalid dataset")
@@ -560,7 +614,7 @@ if __name__ == "__main__":
                          shadow_target_logits, args.device)
 
         # prepare the ensemble (multi-seed)
-        preds_on_shadow_target_list = multi_seed_avg(shadow_target_preds)
+        preds_on_shadow_target_list_multiseed_avg = multi_seed_avg(shadow_target_preds)
         save_path = os.path.join(args.ensemble_save_path, "multi_seed")
         if not os.path.exists(save_path):
             os.makedirs(save_path)
@@ -570,8 +624,9 @@ if __name__ == "__main__":
         shadow_target_model.load_state_dict(
             torch.load(os.path.join(args.shadow_save_path, "target_model_resnet56cifar10.pkl")))
         shadow_target_model.to(args.device)
-        prepare_ensemble(preds_on_shadow_target_list, membership, args.ensemble_method, save_path, aux_set,
-                         shadow_target_logits, args.device)
+        if not args.ensemble_method in ["pairwise_max"]:
+            prepare_ensemble(preds_on_shadow_target_list_multiseed_avg, membership, args.ensemble_method, save_path, aux_set,
+                             shadow_target_logits, args.device)
 
     elif args.mode == "run_ensemble":
         # read the predictions
@@ -601,6 +656,7 @@ if __name__ == "__main__":
         run_ensemble(base_preds_list, dataset_to_attack, args.ensemble_method, ensemble_result_path,
                      target_model_logits, args.ensemble_save_path + f"/{args.dataset}" + "/single_seed", args.device)
 
+
         # run the ensemble (multi seed)
         base_preds_list = multi_seed_avg(base_preds)
         ensemble_result_path_multi = os.path.join(args.ensemble_result_path, "multi_seed")
@@ -611,8 +667,9 @@ if __name__ == "__main__":
             torch.load(os.path.join(args.target_model_path, "target_model_resnet56cifar10.pkl")))
         target_model.to(args.device)
         target_model_logits = obtain_logits(target_model, dataset_to_attack, args.device)
-        run_ensemble(base_preds_list, dataset_to_attack, args.ensemble_method, ensemble_result_path_multi,
-                     target_model_logits, args.ensemble_save_path + f"/{args.dataset}" + "/multi_seed", args.device)
+        if not args.ensemble_method in ["pairwise_max"]:
+            run_ensemble(base_preds_list, dataset_to_attack, args.ensemble_method, ensemble_result_path_multi,
+                         target_model_logits, args.ensemble_save_path + f"/{args.dataset}" + "/multi_seed", args.device)
 
 
     elif args.mode == "evaluation":
@@ -654,9 +711,7 @@ if __name__ == "__main__":
         preds_list = base_preds_list + ensemble_preds_single_seed + ensemble_preds_multi_seed
 
         # auc
-        prediction.plot_auc(base_preds_list, args.attacks, f"{args.dataset} {args.target_model} base attack ROC",
-                            save_path=args.ensemble_result_path + '/base_attack_roc.png')
-        prediction.plot_auc(preds_list, name_list, f"{args.dataset} {args.target_model} ensemble ROC",
+        prediction.plot_auc(preds_list, name_list, f"{args.dataset} {args.target_model} ensemble AUC",
                             save_path=args.ensemble_result_path + '/ensemble_roc.png')
 
         # printing some stats
