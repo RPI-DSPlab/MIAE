@@ -321,7 +321,6 @@ def read_pred(preds_path: str, extend_name: str, sd: int, dataset: str, model: s
 
     pred_file = os.path.join(preds_path, f"preds_sd{sd}{extend_name}", dataset, model, attack, f"pred_{attack}.npy")
     pred = np.load(pred_file)
-    pred = (pred - np.min(pred)) / (np.max(pred) - np.min(pred))
     return prediction.Predictions(pred, gt, name=f"{dataset}_{model}_{attack}")
 
 

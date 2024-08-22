@@ -37,6 +37,8 @@ class Predictions:
         :param ground_truth_arr: ground truth as a numpy array
         :param name: name of the attack
         """
+        if type(pred_arr) != np.ndarray or type(ground_truth_arr) != np.ndarray:
+            raise ValueError("The predictions and ground truth should be numpy arrays.")
         self.pred_arr = pred_arr
         self.ground_truth_arr = ground_truth_arr
         self.name = name
@@ -70,7 +72,10 @@ class Predictions:
         :param threshold: threshold for converting predictions to binary labels
         :return: accuracy of the predictions
         """
-        return np.mean(self.predictions_to_labels(threshold) == self.ground_truth_arr)
+        if not self.is_hard():
+            return np.mean(self.predictions_to_labels(threshold) == self.ground_truth_arr)
+        else:
+            return np.mean(self.pred_arr == self.ground_truth_arr)
 
     def balanced_attack_accuracy(self) -> float:
         """
@@ -85,7 +90,7 @@ class Predictions:
         """
         Compute the false positive rate (FPR) of the predictions.
         """
-        if not self.is_hard:
+        if not self.is_hard():
             raise ValueError("The predictions are not hard labels.")
         pred_tensor = torch.tensor(self.pred_arr)
         ground_truth_tensor = torch.tensor(self.ground_truth_arr)
@@ -99,7 +104,7 @@ class Predictions:
         """
         Compute the true positive rate (TPR) of the predictions.
         """
-        if not self.is_hard:
+        if not self.is_hard():
             raise ValueError("The predictions are not hard labels.")
         pred_tensor = torch.tensor(self.pred_arr)
         ground_truth_tensor = torch.tensor(self.ground_truth_arr)
@@ -116,7 +121,7 @@ class Predictions:
         :return: adjusted predictions as a numpy array
         """
 
-        if self.is_hard:
+        if self.is_hard():
             raise ValueError("The predictions are already hard label (0, 1), fpr is already determined.")
 
         fpr, tpr, thresholds = roc_curve(self.ground_truth_arr, self.pred_arr)
@@ -174,6 +179,19 @@ class Predictions:
         """
         fpr, tpr, threshold = roc_curve(self.ground_truth_arr, self.pred_arr)
         return fpr, tpr, threshold
+    
+    def confusion_matrix_precision(self):
+        """
+        Compute the precision under the confusion matrix.Precision = TP / (TP + FP)
+        """
+        if not self.is_hard():
+            raise ValueError("Precision metric requires hard label predictions")
+
+        TP = np.sum((self.predictions_to_labels() == 1) & (self.ground_truth_arr == 1))
+        FP = np.sum((self.predictions_to_labels() == 1) & (self.ground_truth_arr == 0))
+        if (TP + FP) == 0:
+            print(f"prediction {self.name} has no positive samples")
+        return TP / (TP + FP)
 
 
 def _common_tp(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):
