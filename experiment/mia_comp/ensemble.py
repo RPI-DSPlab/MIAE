@@ -36,7 +36,7 @@ from miae.utils import dataset_utils
 from experiment import models
 from experiment.models import get_model
 from obtain_pred import train_target_model
-from utils import load_target_dataset
+from utils import load_target_dataset, read_pred, read_preds
 
 
 # --------------------- functions and classes for ensemble -------------------------
@@ -305,50 +305,6 @@ def pairwise_max(base_preds: List[prediction.Predictions]) -> dict:
 
 # --------------------- helping functions -----------------------------------------
 
-def read_pred(preds_path: str, extend_name: str, sd: int, dataset: str, model: str,
-              attack: str, gt: np.ndarray) -> prediction.Predictions:
-    """
-    Read the prediction file and return them, the format of prediction follows: f"preds_sd{seed}{extend_name}"
-
-    :param preds_path: the path to the predictions folders
-    :param extend_name: the extension of the name of the file (what goes after preds_sd{seed})
-    :param sd: seed to obtain the predictions
-    :param dataset: the dataset used for the predictions
-    :param model: the model used for the predictions
-    :param attack: the attack used for the predictions
-    :param gt: ground true of the membership prediction
-    """
-
-    pred_file = os.path.join(preds_path, f"preds_sd{sd}{extend_name}", dataset, model, attack, f"pred_{attack}.npy")
-    pred = np.load(pred_file)
-    return prediction.Predictions(pred, gt, name=f"{dataset}_{model}_{attack}")
-
-
-def read_preds(preds_path: str, extend_name: str, sds: List[int], dataset: str, model: str,
-               attacks: List[str], gt: np.ndarray) -> List[List[prediction.Predictions]]:
-    """
-    wrapper function to read multiple predictions
-    file directory is organized as: seed -> dataset -> model -> attack -> preds_{attack}.pkl
-
-    :param preds_path: the path to the predictions folders
-    :param extend_name: the extension of the name of the file (what goes after preds_sd{seed})
-    :param sds: list of seed to obtain the predictions
-    :param dataset: dataset used for the predictions
-    :param model: model used for the predictions
-    :param attacks: list of attack used for the predictions
-    :param gt: ground true of the membership prediction
-
-    :return: List of predictions
-    """
-
-    ret_list = []
-    for sd in sds:
-        list_x = []
-        for attack in attacks:
-            list_x.append(read_pred(preds_path, extend_name, sd, dataset, model, attack, gt))
-        ret_list.append(list_x)
-
-    return ret_list
 
 
 def obtain_logits(model, data, device):
