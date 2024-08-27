@@ -3,8 +3,8 @@ import os
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 from venn import venn
+import matplotlib.pyplot as plt
 from matplotlib_venn import venn3_unweighted, venn3, venn2_unweighted, venn2
 from typing import List, Tuple, Dict, Optional
 from miae.eval_methods.prediction import Predictions, find_common_tp_pred, find_common_tn_pred
@@ -179,6 +179,11 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
     venn_unweighted = venn3_unweighted if len(pred_list) == 3 else venn2_unweighted
     venn_weighted = venn3 if len(pred_list) == 3 else venn2
 
+    # get total number of attacked points
+    total = 0
+    for pred in attacked_points.values():
+        total += len(pred)
+
     # Color mapping
     plt.style.use('seaborn-v0_8-paper')
     mia_color_mapping = {
@@ -194,7 +199,8 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
     plt.figure(figsize=(6, 6))
     ax = plt.gca()
     ax.axis('off')
-    venn = venn_unweighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors[:len(pred_list)])
+    venn = venn_unweighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors[:len(pred_list)],
+                           subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x/total):.1%}" + ")")
 
     # Adjust text positions and sizes
     for text in venn.set_labels:
@@ -218,7 +224,8 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
     plt.figure(figsize=(6, 6))
     ax = plt.gca()
     ax.axis('off')
-    venn = venn_weighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors[:len(pred_list)])
+    venn = venn_weighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors[:len(pred_list)],
+                         subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x/total):.1%}" + ")")
 
     # Adjust text positions and sizes
     for text in venn.set_labels:
@@ -384,54 +391,88 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
 
     return result_or, result_and
 
-def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], title: str, save_path: str):
+def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], save_path: str, signal: bool = False):
     """
     plot venn diagrams based on the goal including both unweighted and weighted venn diagrams for at most 3 attacks.
     :param pred_or: list of Predictions for the 'pred_or' set
     :param pred_and: list of Predictions for the 'pred_and' set
     :param title: title of the graph
     :param save_path: path to save the graph
+    :param signal: whether the signal is included in the attack
     """
     attacked_points_or = {pred.name: set() for pred in pred_or}
     attacked_points_and = {pred.name: set() for pred in pred_and}
-    plt.figure(figsize=(16, 14))
 
     venn_sets_or = []
-    venn_labels_or = [pred.name for pred in pred_or]
+    if signal:
+        venn_labels_or = [pred.name.rsplit('_', 1)[0] for pred in pred_or]
+    else:
+        venn_labels_or = [pred.name.split('_')[0] for pred in pred_or]
     for pred in pred_or:
         attacked_points_or[pred.name] = set(np.where((pred.pred_arr == 1) & (pred.ground_truth_arr == 1))[0])
         venn_sets_or.append(attacked_points_or[pred.name])
 
     venn_sets_and = []
-    venn_labels_and = [pred.name for pred in pred_and]
+    if signal:
+        venn_labels_and = [pred.name.rsplit('_', 1)[0] for pred in pred_and]
+    else:
+        venn_labels_and = [pred.name.split('_')[0] for pred in pred_and]
     for pred in pred_and:
         attacked_points_and[pred.name] = set(np.where((pred.pred_arr == 1) & (pred.ground_truth_arr == 1))[0])
         venn_sets_and.append(attacked_points_and[pred.name])
 
-    gs = plt.GridSpec(2, 2, width_ratios=[1, 1], height_ratios=[1, 1])
-    for i, (venn_sets, venn_labels, venn_title) in enumerate([(venn_sets_or, venn_labels_or, "Union"),
-                                                              (venn_sets_and, venn_labels_and, "Intersection")]):
-        for j, (venn_function, title_suffix) in enumerate(
-                [(venn3_unweighted if len(pred_or) == 3 else venn2_unweighted, "Unweighted"),
-                 (venn3 if len(pred_or) == 3 else venn2, "Weighted")]):
-            ax = plt.subplot(gs[i, j], aspect='equal')
-            circle_colors = ['red', 'blue', 'green', 'purple', 'orange']
-            venn_function(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors)
-            plt.title(f"{venn_title} \n {title_suffix}")
+    total_or = 0
+    for pred in attacked_points_or.values():
+        total_or += len(pred)
 
-            if i == 0:
-                plt.ylabel("Union")
-            else:
-                plt.ylabel("Intersection")
+    # plot venn diagram for the or set
+    plt.figure(figsize=(10, 8))
+    ax = plt.gca()
+    ax.axis('off')
 
-            if j == 0:
-                plt.xlabel("Unweighted")
-            else:
-                plt.xlabel("Weighted")
+    # color mapping
+    plt.style.use('seaborn-v0_8-paper')
+    default_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
+    venn_or = venn3(subsets=venn_sets_or, set_labels=venn_labels_or, set_colors=default_colors,
+                    subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x/total_or):.1%}" + ")")
+    for text in venn_or.set_labels:
+        if text:
+            text.set_fontsize(23)
+            text.set_fontweight('bold')
+    for text in venn_or.subset_labels:
+        if text:
+            text.set_fontsize(16)
+            text.set_fontweight('bold')
 
-    plt.suptitle(title, fontweight='bold', fontsize=15)
-    plt.tight_layout()  # Adjust layout to prevent overlapping
-    plt.savefig(f"{save_path}.png")
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, "union.pdf"))
+    plt.close()
+
+    total_and = 0
+    for pred in attacked_points_and.values():
+        total_and += len(pred)
+
+    # plot venn diagram for the and set
+    plt.figure(figsize=(10, 8))
+    ax = plt.gca()
+    ax.axis('off')
+
+    plt.style.use('seaborn-v0_8-paper')
+    default_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
+    venn_and = venn3(subsets=venn_sets_and, set_labels=venn_labels_and, set_colors=default_colors,
+                     subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x/total_and):.1%}" + ")")
+    for text in venn_and.set_labels:
+        if text:
+            text.set_fontsize(23)
+            text.set_fontweight('bold')
+    for text in venn_and.subset_labels:
+        if text:
+            text.set_fontsize(16)
+            text.set_fontweight('bold')
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, "intersection.pdf"))
+    plt.close()
 
 
 def plot_venn_for_all_attacks(pred_or: List[Predictions], pred_and: List[Predictions], save_path: str):
@@ -439,7 +480,6 @@ def plot_venn_for_all_attacks(pred_or: List[Predictions], pred_and: List[Predict
     Plot Venn diagrams for at most 5 attacks, supporting both unweighted and weighted diagrams.
     :param pred_or: list of Predictions for the 'pred_or' set
     :param pred_and: list of Predictions for the 'pred_and' set
-    :param title: title of the graph
     :param save_path: path to save the graph
     """
     attacked_points_or = {pred.name: set() for pred in pred_or}
@@ -461,13 +501,16 @@ def plot_venn_for_all_attacks(pred_or: List[Predictions], pred_and: List[Predict
     jaccard_sim_or = overall_jaccard_similarity(pred_or)
     jaccard_sim_and = overall_jaccard_similarity(pred_and)
 
-    cmaps = ["cool", "viridis"]
+    # color mapping
+    plt.style.use('seaborn-v0_8-paper')
+    default_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
+
     venn_data = [
-        (venn_sets_or, venn_labels_or, "Union", jaccard_sim_or, cmaps[0], "union"),
-        (venn_sets_and, venn_labels_and, "Intersection", jaccard_sim_and, cmaps[1], "intersection")
+        (venn_sets_or, venn_labels_or, "Union", jaccard_sim_or, default_colors, "union"),
+        (venn_sets_and, venn_labels_and, "Intersection", jaccard_sim_and, default_colors, "intersection")
     ]
 
-    for venn_sets, venn_labels, venn_title, jaccard_sim, cmap, fname_suffix in venn_data:
+    for venn_sets, venn_labels, venn_title, jaccard_sim, default_colors, fname_suffix in venn_data:
         if all(len(s) == 0 for s in venn_sets):
             graph_info = '/'.join(save_path.split('/')[-5:])
             print(f"Skip plotting because all sets are empty. The current path is {graph_info}. "
@@ -477,10 +520,11 @@ def plot_venn_for_all_attacks(pred_or: List[Predictions], pred_and: List[Predict
         plt.figure(figsize=(10, 8))
         ax = plt.subplot(111, aspect='equal')
         dataset_dict = {name: data for name, data in zip(venn_labels, venn_sets)}
-        venn(dataset_dict, fmt="{size}", cmap=cmap, fontsize=10, legend_loc="upper left", ax=ax)
+        venn(dataset_dict, fmt="{size}", cmap=default_colors, fontsize=20, alpha=0.5, legend_loc=None, ax=ax)
+        plt.legend(venn_labels, loc='lower left', bbox_to_anchor=(0.75, 0.25), fontsize=16)
 
-        plt.tight_layout(rect=[0, 0., 1, 0.95])
-        plt.savefig(os.path.join(save_path, f"{fname_suffix}.pdf"))
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_path, f"{fname_suffix}.pdf"), bbox_inches='tight')
         plt.close()
 
 

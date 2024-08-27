@@ -1,9 +1,10 @@
-# This script generates Venn diagrams for the MIAE experiment
-#datasets=("cifar10")
-#archs=("resnet56")
-#mias=("shokri" "yeom" "lira" "calibration" "losstraj" "aug" "reference")
-#categories=("single_attack" "threshold" "fpr")
-#subcategories=("pairwise")
+## This script generates Venn diagrams for the MIAE experiment
+datasets=("cifar10")
+archs=("resnet56")
+mias=("lira" "losstraj" "reference" "shokri" "yeom" "calibration" "aug")
+#"shokri" "yeom" "calibration" "aug"
+categories=("single_attack")
+#subcategories=("common_tp")
 
 # For different distributions
 #datasets=("cifar10" "cinic10")
@@ -15,19 +16,13 @@
 #datasets=("cifar10")
 #archs=("resnet56")
 #mias=("shokri" "top_1_shokri" "top_3_shokri")
-#categories=("single_attack" "threshold" "fpr")
-#subcategories=("pairwise" "common_tp")
+#categories=("fpr")
+#subcategories=("common_tp")
 
-datasets=("cifar10")
-archs=("resnet56")
-mias=("shokri" "yeom" "lira" "calibration" "losstraj" "aug" "reference")
-categories=("fpr" )
-subcategories=("pairwise")
 
 option=("TPR")
 seeds=(0 1 2)
-#fprs=(0.001 0.01 0 0.1 0.2 0.3 0.4 0.5 0.8)
-fprs=(0.1)
+fprs=(0.01)
 
 # Prepare the parameter lists for the experiment
 mialist=""

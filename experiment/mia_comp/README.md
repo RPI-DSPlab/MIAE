@@ -18,6 +18,7 @@ The main script of the project is `obtain-roc.py` and `analysis_main.py`, which 
 1. Load the predictions on the same target dataset from multiple MIAs.
 2. Perform the analysis on the predictions across different MIAs.
 
+
 ## Usage
 
 1. Prepare the target datasets and target models
@@ -35,3 +36,33 @@ The python environment needed is provided at `miae-conda-env.yaml`. To create th
 ```bash 
 conda env create -f miae-conda-env.yaml
 ```
+
+-------------------
+# obtain_graph.py
+
+The `obtain_graph.py` script is designed to load data, generate various plots, and evaluate metrics. 
+The code is divided into three primary categories: Data Loading, Plot Diagram, and Evaluation.
+
+## Data Loading
+
+This section handles loading and processing data required for plotting and analysis. The key functions include:
+
+- **`load_and_create_predictions`**: Loads data and create prediction object used in later evaluations and plotting.
+- **`load_diff_distribution`**: Loads data and create prediction object for *same attack different distribution* case.
+
+## Plot Diagram
+
+This section focuses on generating different types of plots for analysis, including Venn diagrams, AUC curves, and distribution plots:
+
+- **`plot_venn`**: Plots a Venn diagram for comparisons between attackss.
+- **`plot_auc`**: Plots a AUC diagram (Area Under the Curve)  for different models or attacks.
+- **`plot_hardness_distribution`**: Plots the distribution of data hardness, useful for understanding which data points are more difficult to classify.
+- **`plot_hardness_distribution_unique`**: Plots a unique distribution of data hardness.
+- **`multi_seed_convergence`**: Visualizes the convergence across multiple seeds for the model or experiment.
+
+## Evaluation
+
+This section includes evaluation functions for analyzing results from different experiments and attacks:
+
+- **`single_attack_seed_ensemble`**: Evaluates the performance of a single attack across multiple seeds using ensemble techniques.
+- **`eval_metrics`**: Computes and evaluates various similarity metrics.

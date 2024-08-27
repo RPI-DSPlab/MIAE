@@ -74,14 +74,10 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
                 attack_name = f"{new_attack_name}_{s}"
             pred_obj = prediction.Predictions(pred_arr, attack_set_membership, attack_name)
             pred_list.append(pred_obj)
-        pred_dict[attack_name.split('_')[0]] = pred_list
-
-    # Add ground_truth pred
-    # ground_pred_list = []
-    # for s in seeds:
-    #     ground_pred = prediction.Predictions(attack_set_membership, attack_set_membership, f"ground_truth_{s}")
-    #     ground_pred_list.append(ground_pred)
-    # pred_dict["ground_truth"] = ground_pred_list
+        if "top" in att:
+            pred_dict[attack_name.rsplit('_', 1)[0]] = pred_list
+        else:
+            pred_dict[attack_name.split('_')[0]] = pred_list
 
     return pred_dict
 
@@ -145,12 +141,14 @@ def plot_venn(pred_list: List[prediction.Predictions], pred_list2: List[predicti
     :param pred_list: list of Predictions objects processed using union
     :param pred_list2: list of Predictions objects processed using intersection
     :param graph_goal: goal of the venn diagram: "common_TP" or "single attack"
-    :param graph_title: title of the graph
     :param graph_path: path to save the graph
     :return: None
     """
     if graph_goal == "common_tp":
-        venn_diagram.plot_venn_for_all_attacks(pred_list, pred_list2, graph_path)
+        if len(pred_list) == 3:
+            venn_diagram.plot_venn_diagram(pred_list, pred_list2, graph_path, signal=False)
+        else:
+            venn_diagram.plot_venn_for_all_attacks(pred_list, pred_list2, graph_path)
     elif graph_goal == "single_attack":
         venn_diagram.plot_venn_single(pred_list, graph_path)
     elif graph_goal == "pairwise":
@@ -253,7 +251,6 @@ def plot_hardness_distribution(
                 attack_tp = prediction.union_tp(pred, fpr)
                 hardness.plot_distribution_pred_TP(attack_tp, save_path=graph_path + f"_vs_{attack}_tp_fpr{fpr}.png",
                                                    title=graph_title + f" {attack} TP at {fpr} FPR")
-
 
 def plot_hardness_distribution_unique(
         predictions: Dict[str, List[prediction.Predictions]] or Dict[str, prediction.Predictions],

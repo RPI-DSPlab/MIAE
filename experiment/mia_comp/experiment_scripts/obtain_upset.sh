@@ -1,16 +1,16 @@
 # This script generates UpSet diagrams for the MIAE experiment
-#datasets=("cifar10")
-#archs=("resnet56")
-#mias=("losstraj" "shokri" "aug" "calibration" "lira" "yeom" "reference")
-#categories=("threshold" "fpr")
-#subcategories=("common_tp")
-
-# For same attack different signals
 datasets=("cifar10")
 archs=("resnet56")
-mias=("shokri" "top_1_shokri" "top_3_shokri")
+mias=("losstraj" "lira" "reference")
 categories=("threshold" "fpr")
 subcategories=("common_tp")
+
+# For same attack different signals
+#datasets=("cifar10")
+#archs=("resnet56")
+#mias=("shokri" "top_1_shokri" "top_3_shokri")
+#categories=("threshold" "fpr")
+#subcategories=("common_tp")
 
 ## For different distributions
 #datasets=("cifar10" "cinic10")
@@ -20,8 +20,8 @@ subcategories=("common_tp")
 #subcategories=("common_tp")
 
 option=("TPR")
-seeds=(0 1 2)
-fprs=(0.001 0.01 0 0.1 0.2 0.3 0.4 0.5 0.8)
+seeds=(0 1 2 3 4 5)
+fprs=(0.01)
 
 # Prepare the parameter lists for the experiment
 mialist=""
@@ -40,7 +40,7 @@ for fpr in "${fprs[@]}"; do
 done
 
 
-experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"
+experiment_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 if [ -d "$graph_dir" ]; then
