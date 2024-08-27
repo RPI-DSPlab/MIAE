@@ -17,6 +17,7 @@ import numpy as np
 import pickle
 
 import sys
+
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 import miae.eval_methods.sample_hardness
@@ -28,9 +29,32 @@ import miae.visualization.upset_diagram as upset_diagram
 import miae.eval_methods.prediction
 import utils
 
+# plot settings
+
+COLUMNWIDTH = 241.14749
+COLUMNWIDTH_INCH = 0.01384 * COLUMNWIDTH
+TEXTWIDTH = 506.295
+TEXTWIDTH_INCH = 0.01384 * TEXTWIDTH
+
+import matplotlib as mpl
+
+mia_name_mapping = {"losstraj": "losstraj", "shokri": "Class-NN", "yeom": "LOSS", "lira": "LIRA", "aug": "aug", "calibration": "calibrated-loss", "reference": "reference"}
+mia_color_mapping = {"losstraj": '#1f77b4', "shokri": '#ff7f0e', "yeom": '#2ca02c', "lira": '#d62728', "aug": '#9467bd', "calibration": '#8c564b', "reference": '#e377c2'}
+
+plt.style.use('seaborn-v0_8-paper')
+# set fontsize
+plt.rc('xtick', labelsize=7)
+plt.rc('ytick', labelsize=7)
+plt.rc('legend', fontsize=7)
+plt.rc('font', size=7)
+plt.rc('axes', titlesize=8)
+plt.rc('axes', labelsize=8)
 
 
-def load_and_create_predictions(attack: List[str], dataset: str, architecture: str, data_path: str, seeds: List[int] = None) -> Dict[str, List[prediction.Predictions]]:
+
+def load_and_create_predictions(attack: List[str], dataset: str, architecture: str, data_path: str,
+                                seeds: List[int] = None,
+                                ) -> Dict[str, List[prediction.Predictions]]:
     """
     Load the predictions of the attack of all seeds and create the Predictions objects
     :param attack: List[str]: list of attack names
@@ -159,6 +183,7 @@ def plot_venn(pred_list: List[prediction.Predictions], pred_list2: List[predicti
         venn_diagram.plot_venn_single(pred_list, graph_path)
 
 
+
 def eval_metrics(pred_list: List[prediction.Predictions], save_path: str, title: str, process: Optional[str]):
     """
     Calculate the evaluation metrics for the given list of Predictions.
@@ -274,16 +299,18 @@ def plot_hardness_distribution_unique(
             prediction_list.append(pred)
             attack_tp = prediction.union_tp(pred, fpr)
             if common_tp_across_attacks == None:  # first set to intersect
-               common_tp_across_attacks = set(attack_tp)
+                common_tp_across_attacks = set(attack_tp)
             else:
-               common_tp_across_attacks = common_tp_across_attacks.intersection(set(attack_tp))
+                common_tp_across_attacks = common_tp_across_attacks.intersection(set(attack_tp))
             tp_each_attack.append(attack_tp)
 
         # stores the tp samples that's unique to each attack
         unqiue_tp_each_attack = [tp - common_tp_across_attacks for tp in tp_each_attack]
 
-        hardness.plot_distribution_pred_TP(unqiue_tp_each_attack, save_path=graph_path + f"_unique_tp_each_attack_fpr{fpr}.png",
-                                           title=graph_title + f" unique TP for each attack at {fpr} FPR", labels=attack_names, no_hardness=True)
+        hardness.plot_distribution_pred_TP(unqiue_tp_each_attack,
+                                           save_path=graph_path + f"_unique_tp_each_attack_fpr{fpr}.png",
+                                           title=graph_title + f" unique TP for each attack at {fpr} FPR",
+                                           labels=attack_names, no_hardness=True)
 
 
 def multi_seed_convergence(predictions: Dict[str, List[prediction.Predictions]], graph_title: str, graph_path: str,
@@ -295,7 +322,7 @@ def multi_seed_convergence(predictions: Dict[str, List[prediction.Predictions]],
     :param graph_title: str: title of the graph
     :param graph_path: str: path to save the graph
     :param set_op: str: set operation to be used for the convergence: [union, intersection]
-    :param attack_fpr: float: false positive rate to be plotted as vertical line on auc graph
+    :param attack_fpr: float: fpr of the each attack to be aggregated from
 
     :return: None
     """
@@ -349,48 +376,42 @@ def multi_seed_convergence(predictions: Dict[str, List[prediction.Predictions]],
             precision = tp / (tp + fp) if (tp + fp) != 0 else 0
             precision_dict[attack].append(precision)
 
-    num_plots = 4
-    num_seed = 0
-    fig, axes = plt.subplots(1, num_plots, figsize=(26, 5))
-    fig.subplots_adjust(wspace=0.4)  # Adjust the spacing between subplots
-    # Plotting the convergence of number of true positives
-    for attack, num_tp in num_tp_dict.items():
-        axes[0].plot(num_tp, label=attack)
-        num_seed = len(num_tp)
-    axes[0].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
-    axes[0].set_xlabel("Number of seeds")
-    axes[0].set_ylabel("Number of True Positives")
-    axes[0].set_title("Number of True Positives Convergence")
-    axes[0].legend()
+    def plot_convergence(y_dict, num_seed, y_axis_option: str, save_dir):
+        """
+        plot the convergence of the different attacks
+        """
 
-    # Plotting the convergence of true positive rate
-    for attack, tpr in tpr_dict.items():
-        axes[1].plot(tpr, label=attack)
-    axes[1].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
-    axes[1].set_xlabel("Number of seeds")
-    axes[1].set_ylabel("True Positive Rate")
-    axes[1].set_title("True Positive Rate Convergence")
-    axes[1].legend()
+        plt.figure(figsize=(COLUMNWIDTH_INCH, 3))
+        # setting font size
+        plt.rcParams.update({'font.size': 7})
+        plt.rcParams["font.weight"] = "bold"
 
-    # Plotting the convergence of false positive rate
-    for attack, tpr in fpr_dict.items():
-        axes[2].plot(tpr, label=attack)
-    axes[2].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
-    axes[2].set_xlabel("Number of seeds")
-    axes[2].set_ylabel("False Positive Rate")
-    axes[2].set_title("False Positive Rate Convergence")
-    axes[2].legend()
+        for idx, (attack, y) in enumerate(y_dict.items()):  # y here is the data to plot on the y-axis
+            color = mia_color_mapping[attack]
+            plt.plot(y, label=mia_name_mapping[attack], color=color, markerfacecolor='none')
+            # annotate the last point
+            if y_axis_option == "Number of True Positives":  # integer values
+                plt.annotate(f"{int(y[-1])}", (num_seed - 1, y[-1]), textcoords="offset points", xytext=(0, 5),
+                             ha='center', fontsize=7, color=color)
+            else:
+                plt.annotate(f"{y[-1]:.2f}", (num_seed - 1, y[-1]), textcoords="offset points", xytext=(0, 5),
+                             ha='center', fontsize=7, color=color)
 
-    # Plotting the convergence of precision
-    for attack, precision in precision_dict.items():
-        axes[3].plot(precision, label=attack)
-    axes[3].set_xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
-    axes[3].set_xlabel("Number of seeds")
-    axes[3].set_ylabel("Precision")
-    axes[3].set_title("Precision Convergence")
-    axes[3].legend()
+        plt.xticks(np.arange(num_seed), np.arange(1, num_seed + 1))
+        plt.xlabel("Number of instances", fontweight='bold')
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(save_dir, format='pdf')
+        plt.close()
 
-    plt.savefig(graph_path + f"_fpr{attack_fpr}.png", dpi=300)
+    num_seed = len(predictions[list(predictions.keys())[0]])
+
+    for y_dict, y_axis_option in [(num_tp_dict, "Number of True Positives"), (tpr_dict, "True Positive Rate"),
+                                  (fpr_dict, "False Positive Rate"), (precision_dict, "Precision")]:
+        if os.path.exists(f"{graph_path}/{attack_fpr}") is False:
+            os.makedirs(f"{graph_path}/{attack_fpr}")
+        save_dir = f"{graph_path}/{attack_fpr}/{y_axis_option.replace(' ', '_')}.pdf"
+        plot_convergence(y_dict, num_seed, y_axis_option, save_dir)
 
 
 def single_attack_seed_ensemble(predictions: Dict[str, List[prediction.Predictions]], graph_title: str, graph_path: str,
@@ -490,9 +511,13 @@ if __name__ == '__main__':
     parser.add_argument("--option", type=str, help="Option for the comparison on venn diagram, TPR or TNR")
 
     # for auc graph
-    parser.add_argument("--fpr", type=float, nargs="+",
+    parser.add_argument("--fpr_for_auc", action='store_true',
                         help="True positive rate to be plotted as vertical line on auc graph")
     parser.add_argument("--log_scale", type=bool, default="True", help="Whether to plot the graph in log scale")
+
+    # for convergence graph
+    parser.add_argument("--fpr", type=float, nargs="+",
+                        help="fprs of instances for convergence graph (coverage/stability) to be aggregating from")
 
     # for hardness distribution graph
     parser.add_argument("--hardness", type=str, default="None", help="Type of hardness: [il, pd, external]")
@@ -566,6 +591,7 @@ if __name__ == '__main__':
         else:
             raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
 
+
     elif args.graph_type == "upset":
         if args.graph_goal == "common_tp":
             pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path,
@@ -581,12 +607,16 @@ if __name__ == '__main__':
                 df_or, df_and = upset_diagram.data_process_for_upset(pred_or_list, pred_and_list)
                 upset_diagram.plot_upset(df_or, df_and, args.graph_path)
 
+
     elif args.graph_type == "auc":
         pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR,
                                            args.seed)
         for i, seed in enumerate(args.seed):
             pred_dict_seed = {k: v[i] for k, v in pred_dict.items()}
-            plot_auc(pred_dict_seed, args.graph_title + f" sd{seed}", args.graph_path + f"_sd{seed}.png", args.fpr)
+            if args.fpr_for_auc:
+                plot_auc(pred_dict_seed, args.graph_title + f" sd{seed}", args.graph_path + f"_sd{seed}.pdf", args.fpr)
+            else:
+                plot_auc(pred_dict_seed, args.graph_title + f" sd{seed}", args.graph_path + f"_sd{seed}.pdf", None)
 
     elif args.graph_type == "hardness_distribution":
         pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR,

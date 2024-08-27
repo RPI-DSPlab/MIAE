@@ -5,7 +5,7 @@ import copy
 import logging
 import os
 import re
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import scipy
@@ -16,7 +16,7 @@ import torch.nn as nn
 from torchvision.transforms import transforms
 from tqdm import tqdm
 
-from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
+from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils
 from miae.utils.dataset_utils import get_xy_from_dataset
 from torch.cuda.amp import GradScaler, autocast
 from miae.utils.set_seed import set_seed
@@ -24,7 +24,7 @@ from miae.utils.set_seed import set_seed
 
 class LiraModelAccess(ModelAccess):
     """
-    Your implementation of ModelAccess for Lira.
+    Implementation of ModelAccess for Lira.
     """
 
     def __init__(self, model, untrained_model, access_type: ModelAccessType = ModelAccessType.BLACK_BOX):
@@ -34,29 +34,6 @@ class LiraModelAccess(ModelAccess):
         super().__init__(model, untrained_model, access_type)
         self.model = model
         self.model.eval()
-
-    def get_signal_lira(self, dataloader, device):
-        """
-        Generates logits for a dataloader given a model
-
-        Args:
-        model (torch.nn.Module): The PyTorch model to generate logits.
-        data: a data point
-        device: the device (cpu or cuda) where the computations will take place.
-        """
-
-        self.model.eval()
-        all_logits = []
-
-        with torch.no_grad():
-            for images, _ in dataloader:
-                images = images.to(device)
-                outputs = self.model(images)
-                all_logits.append(outputs.unsqueeze(1).expand(-1, 2, -1))
-        all_logits = torch.cat(all_logits, dim=0)
-        all_logits = all_logits.unsqueeze(1)
-        return all_logits
-
 
 
 class LiraAuxiliaryInfo(AuxiliaryInfo):
@@ -76,8 +53,7 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
         self.lr = config.get('lr', 0.1)
         self.momentum = config.get('momentum', 0.9)
         self.decay = config.get('decay', 0.9999)
-        self.target_seed_base = config.get('target_seed_base', 24)  # the seed begin number for target model
-        self.shadow_seed_base = config.get('shadow_seed_base', 100)  # the seed begin number for shadow model
+        self.seed = config.get('seed', 24)
         self.epochs = config.get('epochs', 100)
         self.device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
         self.batch_size = config.get('shadow_batchsize', 128)
@@ -88,6 +64,9 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
         # Auxiliary info for LIRA
         self.num_shadow_models = config.get('num_shadow_models', 20)
         self.shadow_path = config.get('shadow_path', f"{self.save_path}/weights/shadow/")
+        self.online = config.get('online', True)
+        self.fix_variance = config.get('fix_variance', True)
+        self.query_batch_size = config.get('query_batch_size', 256)
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
@@ -96,14 +75,15 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
             os.makedirs(self.log_path)
 
         if self.log_path is not None:
-            self.lira_logger = logging.getLogger('lira_logger')
-            self.lira_logger.setLevel(logging.INFO)
+            self.logger = logging.getLogger('lira_logger')
+            self.logger.setLevel(logging.INFO)
             fh = logging.FileHandler(self.log_path + '/lira.log')
             fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
-            self.lira_logger.addHandler(fh)
+            self.logger.addHandler(fh)
 
 
-def _split_data(fullset, expid, iteration_range):
+def _split_data(fullset, expid, iteration_range, seed):
+    np.random.seed(seed) # make sure the seed is set correct
     keep = np.random.uniform(0, 1, size=(iteration_range, len(fullset)))
     order = keep.argsort(0)
     keep = order < int(.5 * iteration_range)
@@ -111,7 +91,7 @@ def _split_data(fullset, expid, iteration_range):
     return np.where(keep)[0], np.where(~keep)[0]
 
 
-class LIRAUtil:
+class LIRAUtil(MIAUtils):
     @classmethod
     def _make_directory_if_not_exists(cls, dir_path):
         """
@@ -212,8 +192,6 @@ class LIRAUtil:
         """
         # init
         iteration_range = info.num_shadow_models
-        seed_base = info.shadow_seed_base
-        set_seed(seed_base)
         device = torch.device(info.device)
 
         if not os.path.exists(info.shadow_path):
@@ -221,10 +199,9 @@ class LIRAUtil:
 
         # if the required shadow models are already trained, skip the training
         if len(os.listdir(info.shadow_path)) >= iteration_range:
-            print(f"shadow models are already trained, skip the training")
+            cls.log(info, f"shadow models are already trained, skip the training", print_flag=True)
             return
 
-        skip_index = 0  # if a model is too bad, we skip that seed by increasing this index
 
         for expid in range(iteration_range):
             # Define the directory path
@@ -234,14 +211,13 @@ class LIRAUtil:
             # Check if the directory exists and create
             if os.path.exists(dir_path):
                 if os.path.exists(dir_path + "/shadow.pth") and os.path.exists(dir_path + "/keep.npy"):
+                    cls.log(info, f"shadow model {expid} already exists at {dir_path}, skip training", print_flag=True)
                     continue
             else:
                 cls._make_directory_if_not_exists(dir_path)
 
-            set_seed(expid + seed_base + skip_index)
-
             # split the data
-            shadow_train_indices, shadow_out_indices = _split_data(dataset, expid, iteration_range)
+            shadow_train_indices, shadow_out_indices = _split_data(dataset, expid, iteration_range, info.seed)
 
             # Create the data loaders for training and testing
             shadow_train_loader = DataLoader(Subset(dataset, shadow_train_indices), batch_size=info.batch_size,
@@ -256,31 +232,20 @@ class LIRAUtil:
                                         lr=info.lr, momentum=info.momentum, weight_decay=info.weight_decay)
             scheduler = CosineAnnealingLR(optimizer, info.epochs)
 
-            if info.log_path is not None:
-                info.lira_logger.info(
-                    f"training shadow model #{expid} with "
-                    f"train size: {len(shadow_train_indices)} and test size: {len(shadow_out_indices)}")
-            print(f"training shadow model #{expid} with "
-                  f"train size: {len(shadow_train_indices)} and test size: {len(shadow_out_indices)}")
-            train_complete = False
+            cls.log(info, f"training shadow model #{expid} with "
+                          f"train size: {len(shadow_train_indices)} and test size: {len(shadow_out_indices)}",
+                    print_flag=True)
 
-            while not train_complete:  # if the model is not learned well, retrain it
-                train_acc = 0
-                for epoch in tqdm(range(1, info.epochs + 1)):
-                    # print the length of the train and test set
-                    loss, train_acc = LIRAUtil.train(curr_model, device, shadow_train_loader, optimizer, scheduler=scheduler)
-                    test_acc = LIRAUtil.test(curr_model, device, shadow_out_loader)
-                    if (epoch % 20 == 0 or epoch == info.epochs) and info.log_path is not None:
-                        info.lira_logger.info(
-                            f"Train Shadow Model #{expid}: {epoch}/{info.epochs}: TRAIN loss: {loss:.3f}, "
-                            f"TRAIN acc: {train_acc * 100:.3f}%, TEST acc: {test_acc * 100:.3f}%, lr: {scheduler.get_last_lr()[0]: .4f}")
+            for epoch in tqdm(range(1, info.epochs + 1)):
+                # print the length of the train and test set
+                loss, train_acc = LIRAUtil.train(curr_model, device, shadow_train_loader, optimizer,
+                                                 scheduler=scheduler)
+                test_acc = LIRAUtil.test(curr_model, device, shadow_out_loader)
+                if (epoch % 20 == 0 or epoch == info.epochs):
+                    cls.log(info, f"Train Shadow Model #{expid}: {epoch}/{info.epochs}: TRAIN loss: {loss:.3f}, "
+                                    f"TRAIN acc: {train_acc * 100:.3f}%, TEST acc: {test_acc * 100:.3f}%, lr: {scheduler.get_last_lr()[0]: .4f}",
+                            print_flag=True)
 
-                if train_acc > 0.5:
-                    train_complete = True
-                else:
-                    skip_index += 1
-                    info.lira_logger.info(f"model {expid} is too bad, skip this record") if info.log_path is not None else None
-                    set_seed(expid + seed_base + skip_index)
 
             # save model
             LIRAUtil.save_model(curr_model, f"{dir_path}/shadow.pth")
@@ -291,7 +256,7 @@ class LIRAUtil:
 
     @classmethod
     def lira_mia(cls, keep, scores, check_scores, in_size=100000, out_size=100000,
-                 fix_variance=False):
+                 fix_variance=True):
         """
         Implements the core logic of the LIRA membership inference attack.
 
@@ -299,8 +264,8 @@ class LIRAUtil:
         keep (np.ndarray): An array indicating which samples to keep.
         scores (np.ndarray): An array containing the scores of the samples.
         check_scores (np.ndarray): An array containing the scores of the samples for target model.
-        in_size (int): The number of samples to keep from the input.
-        out_size (int): The number of samples to keep from the output.
+        in_size (int):
+        out_size (int):
         fix_variance (bool): If true, the variance is fixed.
         """
         dat_in = []
@@ -342,21 +307,15 @@ class LIRAUtil:
 
     @classmethod
     def _generate_logits(cls, model, data_loader, device):
-        model.eval()
-        all_logits = []
-
-        with torch.no_grad():
-            for images, _ in data_loader:
-                images = images.to(device)
-                outputs = model(images)
-                all_logits.append(outputs.unsqueeze(1).expand(-1, 2, -1))
-        all_logits = torch.cat(all_logits, dim=0)
-        all_logits = all_logits.unsqueeze(1)
-        return all_logits
+        """
+        warpper function for get_signal_lira
+        """
+        model_access = LiraModelAccess(model, model)
+        return model_access.get_signal_lira(data_loader, device, 18)
 
     @classmethod
     def process_shadow_models(cls, info: LiraAuxiliaryInfo, auxiliary_dataset: Dataset, shadow_model_arch) \
-            -> (List[torch.Tensor], List[torch.Tensor]):
+            -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
         """
         Load and process the shadow models to generate the scores and kept indices.
 
@@ -367,26 +326,27 @@ class LIRAUtil:
 
         :return: The list of scores and the list of kept indices.
         """
-        fullsetloader = DataLoader(auxiliary_dataset, batch_size=20, shuffle=False, num_workers=2)
+        fullsetloader = DataLoader(auxiliary_dataset, batch_size=info.query_batch_size, shuffle=False, num_workers=2)
 
         _, fullset_targets = get_xy_from_dataset(auxiliary_dataset)
 
         score_list = []
         keep_list = []
-        model_locations = sorted(os.listdir(info.shadow_path), key=lambda x: int(re.search(r'\d+', x).group())) # os.listdir(info.shadow_path)
+        model_locations = sorted(os.listdir(info.shadow_path),
+                                 key=lambda x: int(re.search(r'\d+', x).group()))  # os.listdir(info.shadow_path)
 
         for index, dir_name in enumerate(model_locations, start=1):
             seed_folder = os.path.join(info.shadow_path, dir_name)
             if os.path.isdir(seed_folder):
                 model_path = os.path.join(seed_folder, "shadow.pth")
-                print(f"load model [{index}/{len(model_locations)}]: {model_path}")
+                cls.log(info, f"load model [{index}/{len(model_locations)}]: {model_path}", print_flag=True)
                 model = cls.load_model(shadow_model_arch, path=model_path).to(info.device)
                 # print(shadow_model_arch, model_path)
                 scores, mean_acc = cls._calculate_score(cls._generate_logits(model,
                                                                              fullsetloader,
                                                                              info.device).cpu().numpy(),
                                                         fullset_targets)
-                print("Mean acc", mean_acc)
+                cls.log(info, f"Model {index} mean acc: {mean_acc}", print_flag=True)
                 # Convert the numpy array to a PyTorch tensor and add a new dimension
                 scores = torch.unsqueeze(torch.from_numpy(scores), 0)
                 score_list.append(scores)
@@ -396,7 +356,7 @@ class LIRAUtil:
                     keep = torch.unsqueeze(torch.from_numpy(np.load(keep_path)), 0)
                     keep_list.append(keep)
             else:
-                print(f"model {index} at {model_path} does not exist, skip this record")
+                cls.log(info, f"model {index} at {model_path} does not exist, skip this record", print_flag=True)
 
         return score_list, keep_list
 
@@ -412,16 +372,16 @@ class LIRAUtil:
 
         :return: The list of scores(predictive probabilities)
         """
-        dataset_loader = torch.utils.data.DataLoader(dataset, batch_size=20, shuffle=False, num_workers=8)
+        dataset_loader = torch.utils.data.DataLoader(dataset, batch_size=info.query_batch_size, shuffle=False, num_workers=8)
 
         _, fullset_targets = get_xy_from_dataset(dataset)
 
         score_list = []
 
-        print(f"processing target model")
+        cls.log(info, f"processing target model", print_flag=True)
         target_model_access.to_device(info.device)
         scores, mean_acc = cls._calculate_score(
-            target_model_access.get_signal_lira(dataset_loader, info.device).cpu().numpy(), fullset_targets)
+            target_model_access.get_signal_lira(dataset_loader, info.device, 18).cpu().numpy(), fullset_targets)
 
         # Convert the numpy array to a PyTorch tensor and add a new dimension
         scores = torch.unsqueeze(torch.from_numpy(scores), 0)
@@ -432,7 +392,7 @@ class LIRAUtil:
     @classmethod
     def _calculate_score(cls, predictions: torch.Tensor, labels: torch.Tensor):
         """
-        Calculates the score for each prediction.
+        Calculates the score for each prediction by log logit scaling
 
         Args:
         predictions (torch.Tensor): The tensor of model predictions.
@@ -491,6 +451,9 @@ class LiraAttack(MiAttack):
         for dir in [self.auxiliary_info.save_path, self.auxiliary_info.shadow_path, self.auxiliary_info.log_path]:
             if dir is not None:
                 os.makedirs(dir, exist_ok=True)
+
+        if self.auxiliary_info.online is False:
+            raise NotImplementedError("LIRA does not support offline training yet.")
         self.prepared = True
 
     def infer(self, dataset: torch.utils.data.Dataset) -> np.ndarray:
@@ -502,6 +465,8 @@ class LiraAttack(MiAttack):
         """
         TEST = False  # if True, we save scores and keep to the file
 
+        set_seed(self.auxiliary_info.seed)
+
         shadow_model = self.target_model_access.get_untrained_model()
         # concatenate the target dataset and the auxiliary dataset
         shadow_target_concat_set = ConcatDataset([self.auxiliary_dataset, dataset])
@@ -511,9 +476,9 @@ class LiraAttack(MiAttack):
 
         if TEST:
             # if we find the scores and keep from the file, we don't need to calculate it again
-            if os.path.exists('shadow_scores.npy') and os.path.exists('shadow_keeps.npy'):
-                self.shadow_scores = torch.from_numpy(np.load('shadow_scores.npy'))
-                self.shadow_keeps = torch.from_numpy(np.load('shadow_keeps.npy'))
+            if os.path.exists('shadow_scores_lira.npy') and os.path.exists('shadow_keeps_lira.npy'):
+                self.shadow_scores = torch.from_numpy(np.load('shadow_scores_lira.npy'))
+                self.shadow_keeps = torch.from_numpy(np.load('shadow_keeps_lira.npy'))
             else:
                 self.shadow_scores, self.shadow_keeps = LIRAUtil.process_shadow_models(self.auxiliary_info,
                                                                                        shadow_target_concat_set,
@@ -521,11 +486,11 @@ class LiraAttack(MiAttack):
                 # Convert the list of tensors to a single tensor
                 self.shadow_scores = torch.cat(self.shadow_scores, dim=0)
                 self.shadow_keeps = torch.cat(self.shadow_keeps, dim=0)
-                np.save('shadow_scores.npy', self.shadow_scores)
+                np.save('shadow_scores_lira.npy', self.shadow_scores)
 
                 # save it as txt for debugging
                 # np.savetxt('shadow_scores.txt', self.shadow_scores.numpy())
-                np.save('shadow_keeps.npy', self.shadow_keeps)
+                np.save('shadow_keeps_lira.npy', self.shadow_keeps)
         else:
             self.shadow_scores, self.shadow_keeps = LIRAUtil.process_shadow_models(self.auxiliary_info,
                                                                                    shadow_target_concat_set,
@@ -540,8 +505,7 @@ class LiraAttack(MiAttack):
         target_scores = torch.cat(target_scores, dim=0)
 
         predictions = LIRAUtil.lira_mia(np.array(self.shadow_keeps), np.array(self.shadow_scores),
-                                        np.array(target_scores))
+                                        np.array(target_scores), fix_variance=self.auxiliary_info.fix_variance)
 
         # return the predictions on the target data
         return -predictions[-len(dataset):]
-

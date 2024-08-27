@@ -4,10 +4,10 @@ plot_dir='/data/public/comp_mia_data/multiseed_convergence/graphs/multiseed_conv
 
 datasets=("cifar10")
 archs=("resnet56")
-mias=("losstraj" "shokri" "yeom" "lira" "aug" "calibration")
+mias=("losstraj" "shokri" "yeom" "lira" "aug" "calibration" "reference")
 fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
-#seeds=(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
-seeds=(0 1 2 3 4 5)
+seeds=(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+#seeds=(0 1 2 3 4 5)
 
 # prepare the list of mias and fprs as arguments
 mialist=""
@@ -28,6 +28,7 @@ for dataset in "${datasets[@]}"; do
         # clean the plot directory
         rm -rf "${plot_dir:?}/${dataset:?}/${arch:?}"
         mkdir -p ${plot_dir}/${dataset}/${arch}
+        echo "plots at ${plot_dir}/${dataset}/${arch}"
 
         # convert fprlist to space-separated string
         fprlist=$(printf "%s " "${fprs[@]}")
@@ -36,6 +37,8 @@ for dataset in "${datasets[@]}"; do
         # common TP (intersection of all seeds)
         graph_title="multi-seed common TP for ${dataset} ${arch}"
         graph_path="${plot_dir}/${dataset}/${arch}/multi_seed_intersection_TP"
+        rm -rf "${graph_path}"
+        mkdir -p ${graph_path}
         python3 obtain_graphs.py --graph_type "multi_seed_convergence_intersection"\
                                   --dataset "${dataset}"\
                                   --graph_title "${graph_title}"\
@@ -49,6 +52,8 @@ for dataset in "${datasets[@]}"; do
         # attack coverage (union of all seeds)
         graph_title="multi-seed attack coverage for ${dataset} ${arch}"
         graph_path="${plot_dir}/${dataset}/${arch}/multi_seed_union_TP"
+        rm -rf "${graph_path}"
+        mkdir -p ${graph_path}
         python3 obtain_graphs.py --graph_type "multi_seed_convergence_union"\
                                   --dataset "${dataset}"\
                                   --graph_title "${graph_title}"\
