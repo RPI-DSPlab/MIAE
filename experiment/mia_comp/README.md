@@ -39,7 +39,6 @@ conda env create -f miae-conda-env.yaml
 
 -------------------
 # obtain_graph.py
-
 The `obtain_graph.py` script is designed to load data, generate various plots, and evaluate metrics. 
 The code is divided into three primary categories: Data Loading, Plot Diagram, and Evaluation.
 
@@ -66,3 +65,12 @@ This section includes evaluation functions for analyzing results from different 
 
 - **`single_attack_seed_ensemble`**: Evaluates the performance of a single attack across multiple seeds using ensemble techniques.
 - **`eval_metrics`**: Computes and evaluates various similarity metrics.
+
+-------------------
+# obtain_jaccard.py
+The `obtain_jaccard.py` is designed to save the Jaccard similarity between different MIAs and plot a heatmap 
+to visualize the Jaccard similarity matrix.
+
+------  
+# obtain_accuracy.py
+The `obtain_accuracy.py` is designed to save the accuracy of different MIAs under TPR@FPRs and balanced accuracy.

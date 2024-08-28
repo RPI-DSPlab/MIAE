@@ -30,7 +30,8 @@ import utils
 
 
 
-def load_and_create_predictions(attack: List[str], dataset: str, architecture: str, data_path: str, seeds: List[int] = None) -> Dict[str, List[prediction.Predictions]]:
+def load_and_create_predictions(attack: List[str], dataset: str, architecture: str, data_path: str,
+                                seeds: List[int] = None) -> Dict[str, List[prediction.Predictions]]:
     """
     Load the predictions of the attack of all seeds and create the Predictions objects
     :param attack: List[str]: list of attack names

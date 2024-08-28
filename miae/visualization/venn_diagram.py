@@ -209,7 +209,8 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
 
     for text in venn.subset_labels:
         if text is not None:
-            text.set_fontsize(14)
+            text.set_fontsize(16)
+            text.set_fontweight('bold')
 
     plt.tight_layout()
     os.makedirs(save_path, exist_ok=True)
@@ -234,7 +235,8 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
 
     for text in venn.subset_labels:
         if text is not None:
-            text.set_fontsize(14)
+            text.set_fontsize(16)
+            text.set_fontweight('bold')
 
     plt.tight_layout()
     os.makedirs(save_path, exist_ok=True)
