@@ -43,6 +43,14 @@ class Predictions:
         self.ground_truth_arr = ground_truth_arr
         self.name = name
 
+
+    def update_name(self, new_name):
+        """
+        Update the name of the Predictions object.
+        :param new_name: new name of the Predictions object
+        """
+        self.name = new_name
+
     def is_hard(self):
         """
         return true if the predictions are hard labels
@@ -144,7 +152,6 @@ class Predictions:
     def tpr_at_fpr(self, fpr: float) -> float:
         """
         Compute TPR at a specified FPR.
-
         :param fpr: FPR value
         :return: TPR value
         """
@@ -155,8 +162,22 @@ class Predictions:
         false_negative = torch.logical_and(pred_tensor == 0, ground_truth_tensor == 1).sum().item()
         total_positive = true_positive + false_negative
         tpr = true_positive / total_positive if total_positive > 0 else 0
-
         return tpr
+
+    def tnr_at_fpr(self, fpr: float) -> float:
+        """
+        Compute TNR at a specified FPR.
+        :param fpr: FPR value
+        :return: TNR value
+        """
+        adjusted_pred = self.adjust_fpr(fpr)
+        pred_tensor = torch.tensor(adjusted_pred)
+        ground_truth_tensor = torch.tensor(self.ground_truth_arr)
+        true_negative = torch.logical_and(pred_tensor == 0, ground_truth_tensor == 0).sum().item()
+        false_positive = torch.logical_and(pred_tensor == 1, ground_truth_tensor == 0).sum().item()
+        total_negative = true_negative + false_positive
+        tnr = true_negative / total_negative if total_negative > 0 else 0
+        return tnr
 
     def __len__(self):
         """
@@ -235,43 +256,99 @@ def intersection_tp(preds: List[Predictions], fpr=None):
     """
     return _common_tp(preds, fpr, set_op="intersection")
 
-def _common_fp(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):
+
+def find_common_tp_pred(pred_list: List[Predictions], fpr) -> Predictions:
     """
-    Find the union/intersection false positive samples among the predictions.
-    Note that this is used for both different attacks or the same attack with different seeds.
+    Get the common true positive predictions across different seeds of a single attack
+    this is used for the Venn diagram
+
+    :param pred_list: List of Predictions objects for the same attack but different seeds
+    :param fpr: FPR value for adjusting the predictions
+    :return: Predictions object containing only common true positives
+    """
+    if len(pred_list) < 2:
+        raise ValueError("At least 2 predictions are required for comparison.")
+
+    common_tp_union_indices = union_tp(pred_list, fpr=fpr)
+    common_tp_union = np.zeros_like(pred_list[0].pred_arr)
+    common_tp_union[list(common_tp_union_indices)] = 1
+
+    common_tp_intersection_indices = intersection_tp(pred_list, fpr=fpr)
+    common_tp_intersection = np.zeros_like(pred_list[0].pred_arr)
+    common_tp_intersection[list(common_tp_intersection_indices)] = 1
+
+    name = pred_list[0].name.rsplit('_', 1)[0]
+    pred_union = Predictions(common_tp_union, pred_list[0].ground_truth_arr, name + "_Coverage")
+    pred_intersection = Predictions(common_tp_intersection, pred_list[0].ground_truth_arr, name + "_Stability")
+
+    return pred_union, pred_intersection
+
+
+def _common_tn(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):
+    """
+    Find the union/intersection true negative samples among the predictions.
+    Note that this is used for both different attacks or same attack with different seeds.
 
     :param preds: list of Predictions
     :param fpr: FPR values for adjusting the predictions
     :param threshold: threshold for converting predictions to binary labels (only used when not using fpr)
 
-    :return: common false positive samples
+    :return: common true negative samples
     """
     if fpr is None:
-        FP = [np.where((pred.predictions_to_labels(threshold) == 1) & (pred.ground_truth_arr == 0))[0] for pred in preds]
+        TN = [np.where((pred.predictions_to_labels(threshold) == 0) & (pred.ground_truth_arr == 0))[0] for pred in preds]
     else:
         adjusted_preds = [pred.adjust_fpr(fpr) for pred in preds]
-        FP = [np.where((adjusted_preds[i] == 1) & (preds[i].ground_truth_arr == 0))[0] for i in range(len(preds))]
-    common_FP = set(FP[0])
-    if len(FP) < 2:
-        return common_FP
-    for i in range(1, len(FP)):
+        TN = [np.where((adjusted_preds[i] == 0) & (preds[i].ground_truth_arr == 0))[0] for i in range(len(preds))]
+    common_TN = set(TN[0])
+    if len(TN) < 2:
+        return common_TN
+    for i in range(1, len(TN)):
         if set_op == "union":
-            common_FP = common_FP.union(set(FP[i]))
+            common_TN = common_TN.union(set(TN[i]))
         elif set_op == "intersection":
-            common_FP = common_FP.intersection(set(FP[i]))
-    return common_FP
+            common_TN = common_TN.intersection(set(TN[i]))
+    return common_TN
 
-def union_fp(preds: List[Predictions], fpr=None):
-    """
-    Find the union false positive samples among the predictions, it's a wrapper for common_fp
-    """
-    return _common_fp(preds, fpr, set_op="union")
 
-def intersection_fp(preds: List[Predictions], fpr=None):
+def union_tn(preds: List[Predictions], fpr=None):
     """
-    Find the intersection false positive samples among the predictions, it's a wrapper for common_fp
+    Find the union true negative samples among the predictions, it's a wrapper for common_tn
     """
-    return _common_fp(preds, fpr, set_op="intersection")
+    return _common_tn(preds, fpr, set_op="union")
+
+
+def intersection_tn(preds: List[Predictions], fpr=None):
+    """
+    Finds the intersection true negative samples among the predictions, it's a wrapper for common_tn
+    """
+    return _common_tn(preds, fpr, set_op="intersection")
+
+def find_common_tn_pred(pred_list: List[Predictions], fpr) -> Predictions:
+    """
+    Get the common true negative predictions across different seeds of a single attack
+    this is used for the Venn diagram
+
+    :param pred_list: List of Predictions objects for the same attack but different seeds
+    :param fpr: FPR value for adjusting the predictions
+    :return: Predictions object containing only common true negatives
+    """
+    if len(pred_list) < 2:
+        raise ValueError("At least 2 predictions are required for comparison.")
+
+    common_tn_union_indices = union_tn(pred_list, fpr=fpr)
+    common_tn_union = np.zeros_like(pred_list[0].pred_arr)
+    common_tn_union[list(common_tn_union_indices)] = 1
+
+    common_tn_intersection_indices = intersection_tn(pred_list, fpr=fpr)
+    common_tn_intersection = np.zeros_like(pred_list[0].pred_arr)
+    common_tn_intersection[list(common_tn_intersection_indices)] = 1
+
+    name = pred_list[0].name.rsplit('_', 1)[0]
+    pred_union = Predictions(common_tn_union, pred_list[0].ground_truth_arr, name + "_tn_Coverage")
+    pred_intersection = Predictions(common_tn_intersection, pred_list[0].ground_truth_arr, name + "_tn_Stability")
+
+    return pred_union, pred_intersection
 
 
 def _common_pred(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):
@@ -352,34 +429,6 @@ def multi_seed_ensemble(pred_list: List[Predictions], method, threshold: float =
     pred_name_ensemble = pred_list[0].name.split('_')[0] + f" ensemble_{method}"
     return Predictions(ensemble_pred, pred_list[0].ground_truth_arr, pred_name_ensemble)
 
-
-def find_common_tp_pred(pred_list: List[Predictions], fpr) -> Predictions:
-    """
-    Get the common true positive predictions across different seeds of a single attack
-    this is used for the Venn diagram
-
-    :param pred_list: List of Predictions objects for the same attack but different seeds
-    :param fpr: FPR value for adjusting the predictions
-    :return: Predictions object containing only common true positives
-    """
-    if len(pred_list) < 2:
-        raise ValueError("At least 2 predictions are required for comparison.")
-
-    common_tp_union_indices = union_tp(pred_list, fpr=fpr)
-    common_tp_union = np.zeros_like(pred_list[0].pred_arr)
-    common_tp_union[list(common_tp_union_indices)] = 1
-
-    common_tp_intersection_indices = intersection_tp(pred_list, fpr=fpr)
-    common_tp_intersection = np.zeros_like(pred_list[0].pred_arr)
-    common_tp_intersection[list(common_tp_intersection_indices)] = 1
-
-    name = pred_list[0].name.rsplit('_', 1)[0]
-    pred_union = Predictions(common_tp_union, pred_list[0].ground_truth_arr, name + "_union")
-    pred_intersection = Predictions(common_tp_intersection, pred_list[0].ground_truth_arr, name + "_intersection")
-
-    return pred_union, pred_intersection
-
-
 def averaging_predictions(pred_list: List[Predictions]) -> np.ndarray:
     """
     Average the predictions from different attacks.
@@ -421,6 +470,7 @@ def unanimous_voting(pred_list: List[Predictions]) -> np.ndarray:
     unanimous_voted_labels = np.mean(labels_list, axis=0)
     unanimous_voted_labels = (unanimous_voted_labels == 1).astype(int)
     return unanimous_voted_labels
+
 
 def plot_auc(pred_list: List[List[Predictions]] | List[Predictions],
              name_list: List[str],
@@ -588,6 +638,7 @@ def plot_auc(pred_list: List[List[Predictions]] | List[Predictions],
                 writer.writerows(acc_list)
 
     return
+
 def hard_label_ensembling_single_method(pred_list: List[Predictions], method: str, skip=2) -> List[Predictions]:
     """
     Hard label ensemble is when after ensemble, the prediction is either 0 or 1.
@@ -601,6 +652,7 @@ def hard_label_ensembling_single_method(pred_list: List[Predictions], method: st
         ensemble_pred.append(multi_seed_ensemble(pred_list[:i + 1], method))
         ensemble_pred[-1].name = f"num_attack_{i + 1}"
     return ensemble_pred
+
 
 def hard_label_ensembling_multiple_methods(pred_list: List[Predictions], method: List[str]) -> List[Predictions]:
     """
