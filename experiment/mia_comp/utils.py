@@ -11,7 +11,9 @@ import numpy as np
 from torch.utils.data import Dataset
 from typing import List, Dict
 
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..")))
+sys.path.append("../../../")
+sys.path.append("../../")
+sys.path.append("../")
 from miae.eval_methods.prediction import Predictions
 
 class TargetDataset():
@@ -45,13 +47,15 @@ class ExperiementSet():
     A class to store a set of attack experiement. A set of experiments is defined by the target dataset and
     multi-instances attack predictions on the target dataset.
     """
-    def __init__(self, target_dataset: TargetDataset, attack_preds: Dict[str, List[Predictions]]):
+    def __init__(self, target_dataset: TargetDataset, attack_preds: Dict[str, List[Predictions]], adjusted_fpr=None):
         """
         target_dataset: the target dataset object
         attack_preds: a dictionary mapping attack names to a list of Predictions. 
+        adjusted_fpr: the FPR used to adjust the FPR for all preds in the experiement. If None, no adjustment is made.
         """
         self.target_dataset = target_dataset
         self.attack_preds = attack_preds
+        self.adjusted_fpr = adjusted_fpr
 
     @classmethod
     def from_dir(cls, target_dataset: TargetDataset, attack_list: List[str], pred_path: str, sd_list, model, fpr_to_adjust=None):
@@ -68,13 +72,60 @@ class ExperiementSet():
                     curr_pred = Predictions(curr_pred.adjust_fpr(fpr_to_adjust), curr_pred.ground_truth_arr,
                                             curr_pred.name)
                 attack_preds[a].append(curr_pred)
-        return cls(target_dataset, attack_preds)
+        return cls(target_dataset, attack_preds, fpr_to_adjust)
     
     def retrive_preds(self, attack_name: str, seed: int) -> Predictions:
         """
         retrive the predictions for a specific attack and seed
         """
         return self.attack_preds[attack_name][seed]
+
+    def get_preds_stability(self, attack_name: str) -> Predictions:
+        """
+        retrive the stability of the prediction for a specific attack. The stability is the intersection of the
+        TP of the predictions of all seeds.
+        """
+        list_of_base_pred = [self.attack_preds[attack_name][seed].pred_arr for seed in range(len(self.attack_preds[attack_name]))]
+        ret_arr = np.array(list_of_base_pred).all(axis=0)
+        return Predictions(ret_arr, self.attack_preds[attack_name][0].ground_truth_arr, f"{attack_name}_stability")
+    
+    def get_preds_coverage(self, attack_name: str) -> Predictions:
+        """
+        retrive the coverage of the prediction for a specific attack. The coverage is the union of the
+        TP of the predictions of all seeds.
+        """
+        list_of_base_pred = [self.attack_preds[attack_name][seed].pred_arr for seed in range(len(self.attack_preds[attack_name]))]
+        ret_arr = np.array(list_of_base_pred).any(axis=0)
+        return Predictions(ret_arr, self.attack_preds[attack_name][0].ground_truth_arr, f"{attack_name}_coverage")
+    
+    def get_class_unique_TP(self, attack_names: List[str], set_op: str) -> List[Predictions]:
+        """
+        return the unique TP of the stability of the prediction for a specific attack and seed
+        
+        :param attack_names: list of attack names
+        :param set_op: the set operation to use to combine the unique TP of the attacks. (union or intersection)
+        """
+
+        if set_op == "intersection":
+            list_of_base_pred_arr = [self.get_preds_stability(a).pred_arr for a in attack_names]
+            list_of_base_pred_name = [self.get_preds_stability(a).name for a in attack_names]
+        elif set_op == "union":
+            list_of_base_pred_arr = [self.get_preds_coverage(a).pred_arr for a in attack_names]
+            list_of_base_pred_name = [self.get_preds_coverage(a).name for a in attack_names]
+        else:
+            raise ValueError(f"set_op must be either 'union' or 'intersection'. Got {set_op} instead.")
+
+        ret_list = []
+
+        for base_pred_idx in range(len(list_of_base_pred_arr)):
+            curr_pred = list_of_base_pred_arr[base_pred_idx]
+            other_attack_preded = np.zeros_like(list_of_base_pred_arr[base_pred_idx])
+            for i in range(len(list_of_base_pred_arr)):
+                if i != base_pred_idx:
+                    np.logical_or(other_attack_preded, list_of_base_pred_arr[i], out = other_attack_preded)
+            curr_pred_unique = np.logical_and(curr_pred, np.logical_not(other_attack_preded))
+            ret_list.append(Predictions(curr_pred_unique, self.get_preds_stability(attack_names[base_pred_idx]).ground_truth_arr, list_of_base_pred_name[base_pred_idx] + "_unique_TP"))
+        return ret_list
 
 
 def read_pred(preds_path: str, extend_name: str, sd: int, dataset: str, model: str,
