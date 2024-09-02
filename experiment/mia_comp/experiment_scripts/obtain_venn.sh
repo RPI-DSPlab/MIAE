@@ -1,10 +1,10 @@
 ## This script generates Venn diagrams for the MIAE experiment
 datasets=("cifar10")
 archs=("resnet56")
-mias=("lira" "losstraj" "reference" "shokri" "yeom" "calibration" "aug")
-#"shokri" "yeom" "calibration" "aug"
-categories=("single_attack")
-#subcategories=("common_tp")
+#mias=("lira" "losstraj" "reference" "shokri" "yeom" "calibration" "aug")
+mias=("lira" "losstraj" "reference")
+categories=("fpr" "threshold")
+subcategories=("common_tp" "pairwise")
 
 # For different distributions
 #datasets=("cifar10" "cinic10")
@@ -21,9 +21,9 @@ categories=("single_attack")
 
 
 option=("TPR")
-seeds=(0 1 2)
-fprs=(0.01)
-
+seeds=(0)
+#fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
+fprs=(0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 # Prepare the parameter lists for the experiment
 mialist=""
 for mia in "${mias[@]}"; do
@@ -51,7 +51,7 @@ experiment_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
 # For different distributions
 #experiment_dir="/data/public/comp_mia_data/same_attack_different_distribution"
 
-graph_dir="$experiment_dir/graphs"
+graph_dir="$experiment_dir/graphs_for_single_seed"
 mkdir -p "$graph_dir"
 
 # Check if directory creation was successful
