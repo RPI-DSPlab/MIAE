@@ -9,6 +9,7 @@ from sklearn.metrics import balanced_accuracy_score, roc_curve, auc
 import matplotlib.pyplot as plt
 import os
 from sklearn.metrics import balanced_accuracy_score, roc_curve, auc
+import csv
 
 FPR_SAMPLES = []
 for fpr in [10e-6, 10e-5, 10e-4, 10e-3, 10e-2, 10e-1, 10e0]:
@@ -36,9 +37,12 @@ class Predictions:
         :param ground_truth_arr: ground truth as a numpy array
         :param name: name of the attack
         """
+        if type(pred_arr) != np.ndarray or type(ground_truth_arr) != np.ndarray:
+            raise ValueError("The predictions and ground truth should be numpy arrays.")
         self.pred_arr = pred_arr
         self.ground_truth_arr = ground_truth_arr
         self.name = name
+
 
     def update_name(self, new_name):
         """
@@ -47,7 +51,16 @@ class Predictions:
         """
         self.name = new_name
 
-    def predictions_to_labels(self, threshold: float = 0.5) -> np.ndarray:
+    def is_hard(self):
+        """
+        return true if the predictions are hard labels
+        """
+        for i in self.pred_arr:
+            if i not in [0.0, 1.0, 0, 1]:
+                return False
+        return True
+
+    def predictions_to_labels(self, threshold: float = 0.5, normalization=False) -> np.ndarray:
         """
         Convert predictions to binary labels.
 
@@ -55,8 +68,8 @@ class Predictions:
         :param threshold: threshold for converting predictions to binary labels
         :return: binary labels as a numpy array
         """
-        pred_norm = pred_normalization(self.pred_arr)
-        labels = (pred_norm > threshold).astype(int)
+        pred = pred_normalization(self.pred_arr) if normalization else self.pred_arr
+        labels = (pred > threshold).astype(int)
         return labels
 
     def accuracy(self, threshold=0.5) -> float:
@@ -67,7 +80,10 @@ class Predictions:
         :param threshold: threshold for converting predictions to binary labels
         :return: accuracy of the predictions
         """
-        return np.mean(self.predictions_to_labels(threshold) == self.ground_truth_arr)
+        if not self.is_hard():
+            return np.mean(self.predictions_to_labels(threshold) == self.ground_truth_arr)
+        else:
+            return np.mean(self.pred_arr == self.ground_truth_arr)
 
     def balanced_attack_accuracy(self) -> float:
         """
@@ -82,6 +98,8 @@ class Predictions:
         """
         Compute the false positive rate (FPR) of the predictions.
         """
+        if not self.is_hard():
+            raise ValueError("The predictions are not hard labels.")
         pred_tensor = torch.tensor(self.pred_arr)
         ground_truth_tensor = torch.tensor(self.ground_truth_arr)
         false_positive = torch.logical_and(pred_tensor == 1, ground_truth_tensor == 0).sum().item()
@@ -94,6 +112,8 @@ class Predictions:
         """
         Compute the true positive rate (TPR) of the predictions.
         """
+        if not self.is_hard():
+            raise ValueError("The predictions are not hard labels.")
         pred_tensor = torch.tensor(self.pred_arr)
         ground_truth_tensor = torch.tensor(self.ground_truth_arr)
         true_positive = torch.logical_and(pred_tensor == 1, ground_truth_tensor == 1).sum().item()
@@ -108,6 +128,10 @@ class Predictions:
         :param target_fpr: target FPR
         :return: adjusted predictions as a numpy array
         """
+
+        if self.is_hard():
+            raise ValueError("The predictions are already hard label (0, 1), fpr is already determined.")
+
         fpr, tpr, thresholds = roc_curve(self.ground_truth_arr, self.pred_arr)
 
         # Find the threshold closest to the target FPR
@@ -168,6 +192,27 @@ class Predictions:
         Save the prediction to a file.
         """
         np.save(os.path.join(path, file_name), self.pred_arr)
+
+
+    def roc_curve(self):
+        """
+        Compute the ROC curve of the predictions with sklearn roc_curve.
+        """
+        fpr, tpr, threshold = roc_curve(self.ground_truth_arr, self.pred_arr)
+        return fpr, tpr, threshold
+    
+    def confusion_matrix_precision(self):
+        """
+        Compute the precision under the confusion matrix.Precision = TP / (TP + FP)
+        """
+        if not self.is_hard():
+            raise ValueError("Precision metric requires hard label predictions")
+
+        TP = np.sum((self.predictions_to_labels() == 1) & (self.ground_truth_arr == 1))
+        FP = np.sum((self.predictions_to_labels() == 1) & (self.ground_truth_arr == 0))
+        if (TP + FP) == 0:
+            print(f"prediction {self.name} has no positive samples")
+        return TP / (TP + FP)
 
 
 def _common_tp(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):
@@ -427,6 +472,173 @@ def unanimous_voting(pred_list: List[Predictions]) -> np.ndarray:
     return unanimous_voted_labels
 
 
+def plot_auc(pred_list: List[List[Predictions]] | List[Predictions],
+             name_list: List[str],
+             title: str,
+             fpr_values: List[float] = None,
+             save_path: str = None,
+             acc_save: str = "False"
+             ):
+    """
+    Plot the AUC graph for the predictions from different attacks with FPR sampling: take the hard label predictions from
+    different FPRs and plot the ROC curve.
+
+    :param pred_list: List of lists predictions: [pred1, pred2, ...], where pred1 = [pred1_fpr1, pred1_fpr2, ...]
+                        or List of Predictions. (depends on the prediction type)
+    :param name_list: List of names for the attacks.
+    :param title: Title of the graph.
+    :param fpr_values: list of FPR values to plot vertical lines
+    :param save_path: Path to save the graph, including the file name.
+    :param acc_save: Save the accuracy and AUC values to a file. If False, print instead of saving.
+    """
+
+    # get the ground_truth_arr
+    if isinstance(pred_list[0], list):
+        ground_truth_arr = pred_list[0][0].ground_truth_arr
+    elif isinstance(pred_list[0], Predictions):
+        ground_truth_arr = pred_list[0].ground_truth_arr
+    else:
+        raise ValueError("Invalid prediction type.")
+
+
+    def do_plot_hard(predictions: List[Predictions],
+                    legend: str = '',
+                    acc_dict: dict = None,
+                     **plot_kwargs: Union[int, str, float]) -> Tuple[float, float]:
+        """
+        Generate the ROC curves for hard label predictions.
+        """
+        fpr_tpr = []
+        for pred in predictions:
+            fpr_i = pred.compute_fpr()
+            tpr_i = pred.compute_tpr()
+            fpr_tpr.append((fpr_i, tpr_i))
+
+        fpr_tpr.sort()
+        fpr, tpr = zip(*fpr_tpr)  # unpack the list of tuples
+        fpr, tpr = np.array(fpr), np.array(tpr)
+
+
+        acc = np.max(1 - (fpr + (1 - tpr)) / 2)
+        auc_score = auc(fpr, tpr)
+
+        low = tpr[np.where(fpr < .001)[0][-1]] if np.any(fpr < .001) else 0
+
+
+        print(f'Attack: {legend.strip():<20} AUC: {auc_score:<8.4f} max Accuracy: {acc:<8.4f} TPR@0.1%FPR: {low:<8.4f}')
+
+        if acc_dict is not None:
+            acc_dict["attack"] = legend.strip()
+            acc_dict["AUC"] = auc_score
+            acc_dict["max Accuracy"] = acc
+            acc_dict["TPR@0.1%FPR"] = low
+
+        metric_text = f'auc={auc_score:.3f}'
+
+        plt.plot(fpr, tpr, label=legend + metric_text, **plot_kwargs)
+
+        return acc, auc_score
+
+    def do_plot_soft(prediction: Predictions,
+                     answers: np.ndarray,
+                     legend: str = '',
+                     acc_list: list = None,
+                     **plot_kwargs: Union[int, str, float],) -> Tuple[float, float]:
+        """
+        Generate the ROC curves for soft label predictions.
+
+        Args:
+            prediction (np.ndarray): The predicted scores.
+            answers (np.ndarray): The ground truth labels.
+            legend (str, optional): Legend for the plot. Defaults to ''.
+            acc_list (list, optional): List to store the accuracy and AUC values as dictories. Defaults to None.
+
+        Returns:
+            Tuple[float, float]: Accuracy and Area Under the Curve (AUC).
+        """
+        pred_as_arr = prediction.pred_arr
+        def sweep(score: np.ndarray, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float, float]:
+            """
+             Compute roc curve, auc, and accuracy.
+
+            Args:
+                score (np.ndarray): The predicted scores.
+                x (np.ndarray): The ground truth labels.
+
+            Returns:
+                Tuple[np.ndarray, np.ndarray, float, float]: The False Positive Rate (FPR),
+                True Positive Rate (TPR), Area Under the Curve (AUC), and Accuracy.
+            """
+            fpr, tpr, _ = roc_curve(x, score)
+            acc = np.max(1 - (fpr + (1 - tpr)) / 2)
+            return fpr, tpr, auc(fpr, tpr), acc
+
+        fpr, tpr, auc_score, acc = sweep(np.array(pred_as_arr), np.array(answers, dtype=bool))
+
+        low = tpr[np.where(fpr < .001)[0][-1]] if np.any(fpr < .001) else 0
+
+        print(f'Attack: {legend.strip():<20} AUC: {auc_score:<8.4f} max Accuracy: {acc:<8.4f} TPR@0.1%FPR: {low:<8.4f}')
+
+        if acc_list is not None:
+            acc_dict = dict()
+            acc_dict["attack"] = legend.strip()
+            acc_dict["AUC"] = auc_score
+            acc_dict["max Accuracy"] = acc
+            acc_dict["TPR@0.1%FPR"] = low
+            acc_list.append(acc_dict)
+
+        metric_text = f'auc={auc_score:.3f}'
+
+        plt.plot(fpr, tpr, label=legend + metric_text, **plot_kwargs)
+
+        return acc, auc_score
+
+    plt.figure(figsize=(6, 5))
+
+    membership_list = [ground_truth_arr for _ in range(len(name_list))]
+    acc_list = [] if acc_save else None
+    for prediction, answer, legend in zip(pred_list, membership_list, name_list):
+        if isinstance(prediction, Predictions):
+            do_plot_soft(prediction, answer, f"{legend}\n", acc_list)
+        elif isinstance(prediction[0], Predictions):
+            # there are multiple FPR values
+            do_plot_hard(prediction, f"{legend}\n", acc_list)
+        else:
+            raise ValueError("Invalid prediction type.")
+
+    plt.semilogx()
+    plt.semilogy()
+
+    plt.xlim(1e-5, 1)
+    plt.ylim(1e-5, 1)
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.plot([0, 1], [0, 1], ls='--', color='gray')
+    plt.legend(fontsize=8)
+
+    # Draw vertical lines on specified FPR values
+    if fpr_values:
+        for fpr_value in fpr_values:
+            plt.axvline(x=fpr_value, color='r', linestyle='--', linewidth=1)
+            plt.text(fpr_value, 0.5, f'FPR={fpr_value:.3f}', color='r', rotation=90)
+
+
+    if save_path is not None:
+        format = save_path.split('.')[-1]
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.show()
+        plt.savefig(save_path, format=format)
+
+        if acc_list is not None:
+            # save the accuracy and AUC values to a file
+            format = save_path.split('.')[-1]
+            with open(save_path.replace(format, "csv"), "w") as f:
+                writer = csv.DictWriter(f, fieldnames=acc_list[0].keys())
+                writer.writeheader()
+                writer.writerows(acc_list)
+
+    return
+
 def hard_label_ensembling_single_method(pred_list: List[Predictions], method: str, skip=2) -> List[Predictions]:
     """
     Hard label ensemble is when after ensemble, the prediction is either 0 or 1.
@@ -465,142 +677,3 @@ def sample_and_adjust_fpr(pred: Predictions) -> List[Predictions]:
     adjusted_preds = [Predictions(pred_arr, pred.ground_truth_arr, pred.name + f"_{i}") for i, pred_arr in enumerate(adjusted_preds_arr)]
 
     return adjusted_preds
-
-
-def plot_auc(pred_list: List[List[Predictions]] | List[Predictions],
-             name_list: List[str],
-             title: str,
-             fpr_values: List[float] = None,
-             save_path: str = None):
-    """
-    Plot the AUC graph for the predictions from different attacks with FPR sampling: take the hard label predictions from
-    different FPRs and plot the ROC curve.
-
-    :param pred_list: List of lists predictions: [pred1, pred2, ...], where pred1 = [pred1_fpr1, pred1_fpr2, ...]
-                        or List of Predictions. (depends on the prediction type)
-    :param name_list: List of names for the attacks.
-    :param title: Title of the graph.
-    :param fpr_values: list of FPR values to plot vertical lines
-    :param save_path: Path to save the graph.
-    """
-
-    # get the ground_truth_arr
-    if isinstance(pred_list[0], list):
-        ground_truth_arr = pred_list[0][0].ground_truth_arr
-    elif isinstance(pred_list[0], Predictions):
-        ground_truth_arr = pred_list[0].ground_truth_arr
-    else:
-        raise ValueError("Invalid prediction type.")
-
-
-    def do_plot_hard(predictions: List[Predictions],
-                     legend: str = '',
-                     **plot_kwargs: Union[int, str, float]) -> Tuple[float, float]:
-        """
-        Generate the ROC curves for hard label predictions.
-        """
-        fpr_tpr = []
-        for pred in predictions:
-            fpr_i = pred.compute_fpr()
-            tpr_i = pred.compute_tpr()
-            fpr_tpr.append((fpr_i, tpr_i))
-
-        fpr_tpr.sort()
-        fpr, tpr = zip(*fpr_tpr)  # unpack the list of tuples
-        fpr, tpr = np.array(fpr), np.array(tpr)
-
-
-        acc = np.max(1 - (fpr + (1 - tpr)) / 2)
-        auc_score = auc(fpr, tpr)
-
-        low = tpr[np.where(fpr < .001)[0][-1]] if np.any(fpr < .001) else 0
-
-        print(f'Attack: {legend.strip():<20} AUC: {auc_score:<8.4f} max Accuracy: {acc:<8.4f} TPR@0.1%FPR: {low:<8.4f}')
-
-        metric_text = f'auc={auc_score:.3f}'
-
-        plt.plot(fpr, tpr, label=legend + metric_text, **plot_kwargs)
-
-        return acc, auc_score
-
-    def do_plot_soft(prediction: Predictions,
-                     answers: np.ndarray,
-                     legend: str = '',
-                     **plot_kwargs: Union[int, str, float]) -> Tuple[float, float]:
-        """
-        Generate the ROC curves for soft label predictions.
-
-        Args:
-            prediction (np.ndarray): The predicted scores.
-            answers (np.ndarray): The ground truth labels.
-            legend (str, optional): Legend for the plot. Defaults to ''.
-            sweep_fn (Callable, optional): Function used to compute the ROC curve. Defaults to sweep.
-
-        Returns:
-            Tuple[float, float]: Accuracy and Area Under the Curve (AUC).
-        """
-        pred_as_arr = prediction.pred_arr
-        def sweep(score: np.ndarray, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float, float]:
-            """
-            Compute a Receiver Operating Characteristic (ROC) curve.
-
-            Args:
-                score (np.ndarray): The predicted scores.
-                x (np.ndarray): The ground truth labels.
-
-            Returns:
-                Tuple[np.ndarray, np.ndarray, float, float]: The False Positive Rate (FPR),
-                True Positive Rate (TPR), Area Under the Curve (AUC), and Accuracy.
-            """
-            fpr, tpr, _ = roc_curve(x, score)
-            acc = np.max(1 - (fpr + (1 - tpr)) / 2)
-            return fpr, tpr, auc(fpr, tpr), acc
-
-        fpr, tpr, auc_score, acc = sweep(np.array(pred_as_arr), np.array(answers, dtype=bool))
-
-        low = tpr[np.where(fpr < .001)[0][-1]] if np.any(fpr < .001) else 0
-
-        print(f'Attack: {legend.strip():<20} AUC: {auc_score:<8.4f} max Accuracy: {acc:<8.4f} TPR@0.1%FPR: {low:<8.4f}')
-
-        metric_text = f'auc={auc_score:.3f}'
-
-        plt.plot(fpr, tpr, label=legend + metric_text, **plot_kwargs)
-
-        return acc, auc_score
-
-    plt.figure(figsize=(6, 5))
-    plt.title(title)
-
-    membership_list = [ground_truth_arr for _ in range(len(name_list))]
-    for prediction, answer, legend in zip(pred_list, membership_list, name_list):
-        if isinstance(prediction, Predictions):
-            do_plot_soft(prediction, answer, f"{legend}\n")
-        elif isinstance(prediction[0], Predictions):
-            # there are multiple FPR values
-            do_plot_hard(prediction, f"{legend}\n")
-        else:
-            raise ValueError("Invalid prediction type.")
-
-    plt.semilogx()
-    plt.semilogy()
-
-    plt.xlim(1e-5, 1)
-    plt.ylim(1e-5, 1)
-    plt.xlabel("False Positive Rate")
-    plt.ylabel("True Positive Rate")
-    plt.plot([0, 1], [0, 1], ls='--', color='gray')
-    plt.legend(fontsize=8)
-
-    # Draw vertical lines on specified FPR values
-    if fpr_values:
-        for fpr_value in fpr_values:
-            plt.axvline(x=fpr_value, color='r', linestyle='--', linewidth=1)
-            plt.text(fpr_value, 0.5, f'FPR={fpr_value:.3f}', color='r', rotation=90)
-
-    if save_path is not None:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path)
-
-    plt.show()
-
-    return

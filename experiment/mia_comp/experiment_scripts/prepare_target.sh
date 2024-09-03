@@ -1,22 +1,23 @@
 # This script is used to partition the dataset into target dataset and shadow dataset, then train the target model
 seed=0
 # for repeat training, we do shuffle_seed from 2 to 5
-shuffle_seed=4
+shuffle_seed=1
 data_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_0/target"
 mkdir -p "$data_dir"
 
 
 #datasets=("cifar10" "cifar100" "cinic10")
-datasets=("cifar10" "cifar100")
+datasets=("cinic10")
 
 
 archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+#archs=("resnet56")
 
 prepare_path="/data/public/prepare_sd${seed}"
 
 target_model_path="$data_dir/target_models"
 
-cd /home/wangz56/MIAE/experiment/mia_comp
+cd /home/wangz56/MIAE/MIAE_training_dir/experiment/mia_comp
 
 conda activate conda-zhiqi
 
@@ -33,7 +34,7 @@ for dataset in "${datasets[@]}"; do
   mkdir -p "$data_dir/$dataset"
   # save the dataset
   echo "Saving dataset $dataset"
-#  python3 obtain_pred.py --dataset "$dataset" --save_dataset "True" --data_path "$data_dir" --seed "$seed" --data_aug "True" --shuffle_seed "$shuffle_seed"
+  python3 obtain_pred.py --dataset "$dataset" --save_dataset "True" --data_path "$data_dir" --seed "$seed" --data_aug "True" --shuffle_seed "$shuffle_seed"
     for arch in "${archs[@]}"; do
       # for each arch, train the target model
       mkdir -p "$target_model_path/$dataset/$arch"

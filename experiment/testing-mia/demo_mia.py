@@ -14,7 +14,8 @@ import sys
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 from miae.utils.set_seed import set_seed
-from miae.attacks import losstraj_mia, merlin_mia, lira_mia, aug_mia, calibration_mia, shokri_mia
+from miae.attacks import (losstraj_mia, merlin_mia, lira_mia, aug_mia, calibration_mia, shokri_mia, yeom_mia,
+                          reference_mia, rmia_mia)
 from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
 from experiment import models
@@ -22,20 +23,20 @@ from experiment import models
 # attacks that's not part of MIAE package
 from experiment.mia_comp.same_attack_different_signal import top_k_shokri_mia
 
-batch_size = 128
-targetset_ratio = 0.35  # percentage of training set to be used for training/test the target model
+batch_size = 256
+targetset_ratio = 0.5  # percentage of training set to be used for training/test the target model
 train_test_ratio = 0.5  # percentage of training set to be used for training any model that uses a test set
 lr = 0.1
-target_train_epochs = 80
+target_train_epochs = 100
 attack_epochs = 80
 
 current_dir = os.getcwd()
-target_model_dir = os.path.join(current_dir,"target_model")
-attack_dir = os.path.join(current_dir,"attack")
-savedir = os.path.join(current_dir,"results")
+target_model_dir = os.path.join(current_dir, "target_model")
+attack_dir = os.path.join(current_dir, "attack")
+savedir = os.path.join(current_dir, "results")
 seed = 0
 
-aug = True
+aug = False
 
 
 def print_key_stats(predictions: np.ndarray, ground_truth: np.ndarray, attack_name: str, savedir: str):
@@ -51,7 +52,7 @@ def print_key_stats(predictions: np.ndarray, ground_truth: np.ndarray, attack_na
     # calculate accuracy of prediction
     _, one_hot_pred = torch.max(torch.tensor(predictions), 1)
     accuracy = np.mean(one_hot_pred == ground_truth)
-    print(f"accuracy on testset of attack {attack_name}: {accuracy*100:.2f}%")
+    print(f"accuracy on testset of attack {attack_name}: {accuracy * 100:.2f}%")
 
     plt.hist(predictions)
     plt.title(f"{attack_name} predictions")
@@ -74,7 +75,8 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
     trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
     testloader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2)
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, target_model.parameters()), lr=lr, momentum=0.9, weight_decay=0.0001)
+    optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, target_model.parameters()), lr=lr, momentum=0.9,
+                                weight_decay=0.0001)
 
     # Create a learning rate scheduler
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, target_train_epochs)
@@ -109,10 +111,12 @@ def train_target_model(model, target_model_dir: str, device: torch.device, train
                 outputs = target_model(inputs)
                 _, predicted = torch.max(outputs, 1)
                 train_correct_prediction += (predicted == labels).sum().item()
-            print(f"Epoch {epoch} train_acc: {train_correct_prediction / len(trainset):.2f} test_acc: {test_correct_predictions / len(testset):.2f} loss: {loss.item():.4f}， lr: {scheduler.get_last_lr()[0]:.4f}")
+            print(
+                f"Epoch {epoch} train_acc: {train_correct_prediction / len(trainset):.2f} test_acc: {test_correct_predictions / len(testset):.2f} loss: {loss.item():.4f}， lr: {scheduler.get_last_lr()[0]:.4f}")
 
     # save the target model
-    torch.save(target_model.state_dict(), os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pkl"))
+    torch.save(target_model.state_dict(),
+               os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pkl"))
 
 
 def obtain_roc_auc(attacks: List[mia_base.MiAttack], savedir: str, data_to_attack: Dataset, membership: np.ndarray):
@@ -200,11 +204,11 @@ def main():
     target_set, aux_set = dataset_utils.dataset_split(dataset, [target_len, shadow_len])
 
     target_trainset, target_testset = dataset_utils.dataset_split(target_set, [int(len(target_set) * train_test_ratio),
-                                               len(target_set) - int(len(target_set) * train_test_ratio)])
-
+                                                                               len(target_set) - int(
+                                                                                   len(target_set) * train_test_ratio)])
 
     # -- STEP 1: train target model
-    target_model = models.create_resnet56()
+    target_model = models.create_wideresnet32_4()
     untrained_target_model = deepcopy(target_model)
     print("Target model: ", target_model.__class__.__name__, " is being trained with ", target_trainset.__class__.__name__, "len: ", len(target_trainset), " and ", target_testset.__class__.__name__, "len: ", len(target_testset))
     if not os.path.exists(os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pkl")):
@@ -220,7 +224,13 @@ def main():
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': 10, 'batch_size': batch_size})
     lira_aux_info = lira_mia.LiraAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': 10, 'batch_size': batch_size,
-             'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/lira'})
+             'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/lira', "num_shadow_models": 20})
+    reference_aux_info = reference_mia.ReferenceAuxiliaryInfo(
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/reference', 'num_classes': 10, 'batch_size': batch_size,
+             'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/reference', "num_shadow_models": 20})
+    rmia_aux_info = rmia_mia.RMIAAuxiliaryInfo(
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/rmia', 'num_classes': 10, 'batch_size': batch_size,
+             'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/rmia', "num_shadow_models": 20})
     aug_aux_info = aug_mia.AugAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/aug', 'num_classes': 10, 'batch_size': batch_size,
              'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/aug'})
@@ -236,13 +246,23 @@ def main():
          'num_classes': 10, 'batch_size': batch_size, 'lr': lr, 'epochs': attack_epochs,
          'log_path': attack_dir + '/top_k_shokri', 'top_k': 3})
 
+    yeom_aux_info = yeom_mia.YeomAuxiliaryInfo(
+        {'device': device, 'seed': seed, 'save_path': attack_dir + '/yeom', 'num_classes': 10, 'batch_size': batch_size,
+         'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir + '/yeom'})
+
+
     losstraj_target_model_access = losstraj_mia.LosstrajModelAccess(deepcopy(target_model), untrained_target_model)
     merlin_target_model_access = merlin_mia.MerlinModelAccess(deepcopy(target_model), untrained_target_model)
     lira_target_model_access = lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
+    reference_target_model_access = reference_mia.ReferenceModelAccess(deepcopy(target_model), untrained_target_model)
     aug_target_model_access = aug_mia.AugModelAccess(deepcopy(target_model), untrained_target_model)
     shokri_target_model_access = shokri_mia.ShokriModelAccess(deepcopy(target_model), untrained_target_model)
-    top_k_shokri_target_model_access = top_k_shokri_mia.TopKShokriModelAccess(deepcopy(target_model), untrained_target_model)
-    calibration_target_model_access = calibration_mia.CalibrationModelAccess(deepcopy(target_model), untrained_target_model)
+    top_k_shokri_target_model_access = top_k_shokri_mia.TopKShokriModelAccess(deepcopy(target_model),
+                                                                              untrained_target_model)
+    calibration_target_model_access = calibration_mia.CalibrationModelAccess(deepcopy(target_model),
+                                                                      untrained_target_model)
+    yeom_target_model_access = yeom_mia.YeomModelAccess(deepcopy(target_model), untrained_target_model)
+    rmia_target_model_access = rmia_mia.RMIAModelAccess(deepcopy(target_model), untrained_target_model)
 
     attacks = [
         # losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
@@ -251,12 +271,20 @@ def main():
         # aug_mia.augAttack(aug_target_model_access, aug_aux_info)
         # calibration_mia.CalibrationAttack(calibration_target_model_access, calibration_aux_info)
         # shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info),
-        top_k_shokri_mia.TopKShokriAttack(top_k_shokri_target_model_access, top_k_shokri_aux_info)
+        # top_k_shokri_mia.TopKShokriAttack(top_k_shokri_target_model_access, top_k_shokri_aux_info)
+        # yeom_mia.YeomAttack(yeom_target_model_access, yeom_aux_info)
+        # shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info),
+        # top_k_shokri_mia.TopKShokriAttack(top_k_shokri_target_model_access, top_k_shokri_aux_info)
+        # reference_mia.ReferenceAttack(reference_target_model_access, reference_aux_info),
+        rmia_mia.RMIAAttack(rmia_target_model_access, rmia_aux_info)
     ]
 
     # -- prepare the attacks
     for attack in attacks:
         print("Preparing attack: ", attack.__class__.__name__)
+        # make directory for attack
+        if not os.path.exists(attack.auxiliary_info.save_path):
+            os.makedirs(attack.auxiliary_info.save_path)
         attack.prepare(aux_set)
 
     # -- STEP 3: attack the target dataset
