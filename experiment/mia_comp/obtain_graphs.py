@@ -219,7 +219,7 @@ def eval_metrics(pred_list: List[prediction.Predictions], save_path: str, title:
         for result in pairwise_overlap_coeff:
             pair = result[0]
             f.write(f"    {pair[0].name} vs {pair[1].name}: {result[1]:.4f}\n")
-        f.write(f"(4) Average Jaccard Similarity: {overlap_coeff:.4f}\n")
+        f.write(f"(4) Average Overlap Coefficient: {overlap_coeff:.4f}\n")
         f.write(f"(5) Set Size Variance: {set_size_var:.4f}\n")
         f.write(f"(6) Entropy: {ent:.4f}\n")
         f.write("\n")
