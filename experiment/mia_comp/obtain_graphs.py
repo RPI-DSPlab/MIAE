@@ -586,6 +586,10 @@ if __name__ == '__main__':
             pred_dict = load_diff_distribution(attack_list, args.dataset_list, args.architecture, args.data_path, args.FPR, args.seed, args.option)
             for attack, pred_list in pred_dict.items():
                 plot_venn(pred_list, [], args.graph_goal, args.graph_path)
+        elif args.graph_goal == "model_compare":
+            pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path,
+                                                    args.seed)
+            venn_diagram.compare_models(pred_dict, args.FPR, args.architecture, args.graph_path)
         else:
             raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
 

@@ -1,9 +1,9 @@
 ## This script generates Venn diagrams for the MIAE experiment
 datasets=("cifar10")
-archs=("wrn32_4")
-#mias=("lira" "losstraj" "reference" "shokri" "yeom" "calibration" "aug")
-mias=("aug" "calibration" "losstraj" "shokri")
-categories=("single_attack")
+archs=("resnet56")
+mias=("lira" "losstraj" "reference" "shokri" "yeom" "calibration" "aug")
+#mias=("aug" "calibration" "losstraj" "shokri")
+categories=("model_compare")
 subcategories=("pairwise")
 
 # For different distributions
@@ -223,6 +223,34 @@ for category in "${categories[@]}"; do
                                                 --opt ${opt}
                     done
                 done
+            done
+        done
+    elif [ "$category" == "model_compare" ]; then
+        for dataset in "${datasets[@]}"; do
+            for arch in "${archs[@]}"; do
+                  for fpr in ${fprlist}; do
+                      plot_dir="$venn_dir/$category/$dataset/fpr_$fpr"
+                      rm -rf "$plot_dir"
+                      mkdir -p "$plot_dir"
+
+                      # run the experiment
+                      graph_title="$dataset, $arch, $mia (FPR: $fpr)"
+                      graph_path="${plot_dir}"
+
+                      python obtain_graphs.py --dataset "$dataset" \
+                                              --architecture "$arch" \
+                                              --attacks ${mialist} \
+                                              --data_path "$experiment_dir" \
+                                              --single_attack_name "" \
+                                              --threshold "0" \
+                                              --FPR $fpr \
+                                              --graph_type "venn" \
+                                              --graph_goal "model_compare" \
+                                              --graph_title "$graph_title" \
+                                              --graph_path "$graph_path" \
+                                              --seed ${seedlist} \
+                                              --opt ""
+                  done
             done
         done
     fi
