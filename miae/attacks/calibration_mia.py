@@ -155,7 +155,8 @@ class CalibrationAttack(MiAttack):
         shadow_model_loss = CalibrationUtil.get_loss(recombined_aux_set, self.shadow_model, self.aux_info.device)
         target_model_loss = CalibrationUtil.get_loss(recombined_aux_set, self.target_model_access.model, self.aux_info.device)
 
-        calibrated_loss = target_model_loss - shadow_model_loss
+        # now target model acts as the calibration model, and shadow model acts as the target model for mimic the real membership inference attack
+        calibrated_loss = shadow_model_loss - target_model_loss
         membership_label = np.concatenate([np.ones(len(train_set)), np.zeros(len(test_set))])
 
         # calculate the threshold
@@ -179,7 +180,6 @@ class CalibrationAttack(MiAttack):
         losses_threshold_diff = []
 
         # load the attack models
-        target_data_loader = DataLoader(target_data, batch_size=self.aux_info.batch_size, shuffle=False, num_workers=2)
         self.target_model_access.to_device(self.aux_info.device)
         shadow_model_loss = CalibrationUtil.get_loss(target_data, self.shadow_model, self.aux_info.device)
         target_model_loss = CalibrationUtil.get_loss(target_data, self.target_model_access, self.aux_info.device)
