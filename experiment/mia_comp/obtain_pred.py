@@ -82,6 +82,26 @@ def get_dataset(datset_name, aug, targetset_ratio, train_test_ratio, shuffle_see
 
     return target_trainset, target_testset, aux_set, num_classes, input_size
 
+def load_dataset_info(datset_name):
+    """
+    get the basic info for dataset
+    :param datset_name: name of the dataset
+    :return: number of classes and input size
+    """
+    if datset_name == "cifar10":
+        num_classes = 10
+        input_size = 32
+    elif datset_name == "cifar100":
+        num_classes = 100
+        input_size = 32
+    elif datset_name == "cinic10":
+        num_classes = 10
+        input_size = 32
+    else:
+        raise ValueError("Invalid dataset")
+
+    return num_classes, input_size
+
 
 def train_target_model(model, target_model_dir: str, device: torch.device, trainset: Dataset, testset: Dataset, arg):
     """
@@ -293,6 +313,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default=None, help='dataset: [cifar10, cifar100, cinic10]')
     parser.add_argument('--result_path', type=str, default=None, help='path to save the prediction')
     parser.add_argument('--data_path', type=str, default=None, help='path to the dataset')
+    parser.add_argument('--dataset_file_root', type=str, default=None, help='path to the dataset on the server, used as a root for custom datasets')
     parser.add_argument('--target_model_path', type=str, default=str(os.getcwd()), help='path to the target model')
     parser.add_argument('--preparation_path', type=str, default=str(os.getcwd()), help='path to the preparation file')
     parser.add_argument('--lira_shadow_path', type=str, default=str(os.getcwd()), help='path to the shadow model ('
@@ -365,10 +386,8 @@ if __name__ == '__main__':
         target_testset = pickle.load(f)
     with open(os.path.join(dataset_save_path, "aux_set.pkl"), "rb") as f:
         aux_set = pickle.load(f)
-
-    _, _, _, num_classes, input_size = get_dataset(args.dataset, args.data_aug,
-                                                   args.target_set_ratio,
-                                                   args.train_test_ratio, args.shuffle_seed)
+        
+    num_classes, input_size = load_dataset_info(args.dataset)
     dataset_to_attack = ConcatDataset([target_trainset, target_testset])
     target_membership = np.concatenate([np.ones(len(target_trainset)), np.zeros(len(target_testset))])
 
