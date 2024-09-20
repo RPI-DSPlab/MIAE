@@ -1,10 +1,10 @@
 ## This script generates Venn diagrams for the MIAE experiment
 datasets=("cifar10")
-archs=("wrn32_4")
-#mias=("lira" "losstraj" "reference" "shokri" "yeom" "calibration" "aug")
-mias=("aug" "calibration" "losstraj" "shokri")
-categories=("single_attack")
-subcategories=("pairwise")
+archs=("resnet56" "wrn32_4")
+mias=("lira" "losstraj" "reference" "shokri" "yeom" "calibration" "aug")
+#mias=("aug" "calibration" "losstraj" "shokri")
+categories=("model_compare") # "threshold" "fpr" "single_attack"
+subcategories=("pairwise") # "common_tp"
 
 # For different distributions
 #datasets=("cifar10" "cinic10")
@@ -21,9 +21,9 @@ subcategories=("pairwise")
 
 
 option=("TPR")
-seeds=(0 1 2)
+seeds=(3 4 5)
 #fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
-fprs=(0.01 0.1 0.2 0.3 0.4 0.5 0.8)
+fprs=(0.1 0.2 0.3 0.4 0.5 0.8)
 # Prepare the parameter lists for the experiment
 mialist=""
 for mia in "${mias[@]}"; do
@@ -222,6 +222,34 @@ for category in "${categories[@]}"; do
                                                 --dataset_list ${datasetlist} \
                                                 --opt ${opt}
                     done
+                done
+            done
+        done
+    elif [ "$category" == "model_compare" ]; then
+        for dataset in "${datasets[@]}"; do
+            for arch in "${archs[@]}"; do
+                for fpr in ${fprlist}; do
+                    plot_dir="$venn_dir/$category/$dataset/fpr_$fpr/$arch"
+                    rm -rf "$plot_dir"
+                    mkdir -p "$plot_dir"
+
+                    # run the experiment
+                    graph_title="$dataset, $arch, $mia (FPR: $fpr)"
+                    graph_path="${plot_dir}"
+
+                    python obtain_graphs.py --dataset "$dataset" \
+                                            --architecture "$arch" \
+                                            --attacks ${mialist} \
+                                            --data_path "$experiment_dir" \
+                                            --single_attack_name "" \
+                                            --threshold "0" \
+                                            --FPR $fpr \
+                                            --graph_type "venn" \
+                                            --graph_goal "model_compare" \
+                                            --graph_title "$graph_title" \
+                                            --graph_path "$graph_path" \
+                                            --seed ${seedlist} \
+                                            --opt ""
                 done
             done
         done

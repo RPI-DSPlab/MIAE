@@ -530,3 +530,68 @@ def plot_venn_for_all_attacks(pred_or: List[Predictions], pred_and: List[Predict
         plt.close()
 
 
+def compare_models(pred_dict: Dict[str, List[Predictions]], FPR: float, architecture: str, save_path: str) -> Dict[
+    str, float]:
+    """
+    Compare the models by listing the number of attacked points of every instance of each attack.
+    Save results in both CSV and LaTeX-formatted txt files.
+    :param pred_dict: dictionary of Predictions from different attacks.
+    :param architecture: architecture of the model.
+    :param save_path: path to save the comparison results.
+    :return: dictionary of the number of attacked points for each attack.
+    """
+    # Dictionary for matching the attack names
+    attack_name_mapping = {
+        "aug": "Augmentation attack",
+        "losstraj": "Loss trajectory attack",
+        "LIRA": "LiRA",
+        "reference": "Reference attack",
+        "Class-NN": "Class-NN",
+        "LOSS": "LOSS",
+        "loss-cali": "Difficulty calibration loss attack"
+    }
+
+    # check if it is hard or soft label
+    for attack, pred_list in pred_dict.items():
+        for pred in pred_list:
+            if not pred.is_hard():
+                pred.pred_arr = pred.adjust_fpr(FPR)
+
+    attacked_points = {}
+    for attack, pred_list in pred_dict.items():
+        attacked_points[attack] = []
+        for pred in pred_list:
+            attacked_points[attack].append(set(np.where((pred.pred_arr == 1) & (pred.ground_truth_arr == 1))[0]))
+
+    result = {}
+    for attack, attacked_pts in attacked_points.items():
+        result[attack] = []
+        for i, attacked_pt in enumerate(attacked_pts):
+            result[attack].append(len(attacked_pt))
+        # find common attacked points
+        common_attacked_points = set.intersection(*attacked_pts)
+        result[attack].append(len(common_attacked_points))
+
+    # Save results into CSV and .txt file
+    csv_file_path = f"{save_path}/{architecture}_attacked_points.csv"
+    txt_file_path = f"{save_path}/{architecture}_attacked_points.txt"
+
+    with open(csv_file_path, 'w') as csv_file, open(txt_file_path, 'w') as txt_file:
+        # Writing to CSV file
+        csv_file.write("Attack,I_1,I_2,I_3,Intersection\n")
+        for attack, attacked_pts in result.items():
+            csv_file.write(f"{attack},")
+            for attacked_pt in attacked_pts:
+                csv_file.write(f"{attacked_pt},")
+            csv_file.write("\n")
+
+        # Writing to LaTeX-formatted .txt file with matching attack names
+        for attack, attacked_pts in result.items():
+            attack_name = attack_name_mapping.get(attack,
+                                                  attack)  # Match attack names, default to original if not found
+            txt_file.write(f"{attack_name} & ")
+            txt_file.write(" & ".join(str(attacked_pt) for attacked_pt in attacked_pts))
+            if architecture == "wrn32_4":
+                txt_file.write(" \\\\")
+            txt_file.write("\n")
+
