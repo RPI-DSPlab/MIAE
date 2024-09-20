@@ -1,6 +1,6 @@
 # Membership Inference Attacks (MIA)
 
-This directory contains the implementation of various Membership Inference Attacks (MIA). All attacks are based on the classes defined in the `base.py` file. 
+This directory contains the implementation of various Membership Inference Attacks (MIA). All attacks are based on the classes defined in the `base.py` file.
 
 ## Base Classes
 
@@ -29,3 +29,16 @@ This is an abstract base class for all attacks. It defines the interface for an 
 To implement a new attack, create a new file in this directory. In this file, define a new class that inherits from `MiAttack`. Implement the required methods `prepare` and `infer`. You may also need to define new subclasses of `ModelAccess` and `AuxiliaryInfo` if your attack requires a new type of model access or auxiliary information.
 
 For examples of how to implement an attack, see the existing attack implementations in this directory.
+
+## Attacks
+| filename             | Attack                  | Paper                                                                                  |
+|----------------------|-------------------------|----------------------------------------------------------------------------------------|
+| `aug_mia.py`         | Augmentation Attack     | Label-Only Membership Inference Attacks, PMLR 2021                                     |
+| `calibration_mia.py` | Calibration Loss Attack | On the Importance of Difficulty Calibration in Membership Inference Attacks, ICLR 2022 |
+| `lira_mia`           | LIRA Attack             | Membership Inference Attacks From First Principles", S&P 2022                          |
+| `shokri_mia.py`      | Class-NN Attack         | Membership Inference Attacks Against Machine Learning Models, IEEE S&P 2017            |
+| `losstraj_mia.py`    | Loss Trajectory Attack  | Membership Inference Attacks by Exploiting Loss Trajectory, CCS 2022                   |
+| `reference_mia.py`   | Reference Attack        | Enhanced Membership Inference Attacks against Machine Learning Models, CCS 2022        |
+| `yeom_mia.py`        | LOSS Attack             | Privacy Risk in Machine Learning: Analyzing the Connection to Overfitting, IEEE S&P 2018|
+
+Any attack file not listed here are not fully implemented yet.
