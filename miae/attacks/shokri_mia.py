@@ -75,6 +75,7 @@ class ShokriAuxiliaryInfo(AuxiliaryInfo):
         self.shadow_model_path = config.get("shadow_model_path", f"{self.save_path}/shadow_models")
         self.attack_dataset_path = config.get("attack_dataset_path", f"{self.save_path}/attack_dataset")
         self.attack_model_path = config.get("attack_model_path", f"{self.save_path}/attack_models")
+        self.shadow_diff_init = config.get("shadow_diff_init", False)  # different initialization for shadow models
         self.cos_scheduler = config.get("cos_scheduler", True)  # use cosine annealing scheduler for shadow model
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
@@ -191,6 +192,15 @@ class ShokriAttack(MiAttack):
 
                 shadow_model_i = self.target_model_access.get_untrained_model()
                 shadow_model_i.to(self.auxiliary_info.device)
+
+
+                if self.auxiliary_info.shadow_diff_init:
+                    try:
+                        set_seed((self.auxiliary_info.seed + i)*100) # *100 to avoid overlapping of different instances
+                        shadow_model_i.initialize_weights()
+                    except:
+                        raise NotImplementedError("the model doesn't have .initialize_weights method")
+
                 train_len = int(len(sub_shadow_dataset_list[i]) * self.auxiliary_info.shadow_train_ratio)
                 test_len = len(sub_shadow_dataset_list[i]) - train_len
                 shadow_train_dataset, shadow_test_dataset = torch.utils.data.random_split(sub_shadow_dataset_list[i],

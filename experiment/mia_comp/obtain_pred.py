@@ -230,7 +230,8 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
     if args.attack == "shokri":
         return shokri_mia.ShokriAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
-             'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+             'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path, 'num_shadow_models': 10, 
+             "shadow_diff_init" : True})
     if args.attack == "top_k_shokri":
         return top_k_shokri_mia.TopKShokriAuxiliaryInfo(
             {'device': device, 'shadow_seed_base': 50*args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
@@ -238,15 +239,15 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
              'top_k': 3})
     if args.attack == "lira":
         return lira_mia.LiraAuxiliaryInfo(
-            {'device': device, 'shadow_seed_base': args.seed*50, 'save_path': args.preparation_path, 'num_classes': num_classes,
+            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
             'batch_size': args.batch_size, 'lr': 0.1, "num_shadow_models": 20, 'epochs': args.attack_epochs, 'log_path': args.result_path,
-             'shadow_path': args.lira_shadow_path})
+             'shadow_path': args.lira_shadow_path, 'shadow_diff_init': True})
 
     if args.attack == "reference":
         return reference_mia.ReferenceAuxiliaryInfo(
-            {'device': device, 'shadow_seed_base': args.seed*50, 'save_path': args.preparation_path, 'num_classes': num_classes,
+            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
             'batch_size': args.batch_size, 'lr': 0.1, "num_shadow_models": 20, 'epochs': args.attack_epochs, 'log_path': args.result_path,
-             'shadow_path': args.lira_shadow_path})
+             'shadow_path': args.lira_shadow_path, 'shadow_diff_init': True})
 
     if args.attack == "aug":
         return aug_mia.AugAuxiliaryInfo(

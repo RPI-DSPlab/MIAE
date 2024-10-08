@@ -67,6 +67,7 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
         self.online = config.get('online', True)
         self.fix_variance = config.get('fix_variance', True)
         self.query_batch_size = config.get('query_batch_size', 256)
+        self.shadow_diff_init = config.get('shadow_diff_init', True) # whether to re-init every shadow model
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
@@ -191,6 +192,7 @@ class LIRAUtil(MIAUtils):
         :param info: The auxiliary info instance containing all the necessary information.
         """
         # init
+        set_seed(info.seed)
         iteration_range = info.num_shadow_models
         device = torch.device(info.device)
 
@@ -207,6 +209,15 @@ class LIRAUtil(MIAUtils):
             # Define the directory path
             folder_name = expid
             dir_path = f"{info.shadow_path}/{folder_name}"
+
+            if info.shadow_diff_init:
+                try:
+                    set_seed((info.seed + expid)*100) # *100 to avoid overlapping of different instances
+                    model.initialize_weights()
+                except:
+                    raise NotImplementedError("the model doesn't have .initialize_weights method")
+                
+            set_seed(info.seed)
 
             # Check if the directory exists and create
             if os.path.exists(dir_path):
