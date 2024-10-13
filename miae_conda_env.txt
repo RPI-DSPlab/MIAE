@@ -151,7 +151,6 @@ https://repo.anaconda.com/pkgs/main/linux-64/rfc3986-validator-0.1.1-py311h06a43
 https://repo.anaconda.com/pkgs/main/linux-64/rpds-py-0.10.6-py311hb02cf49_0.conda
 https://repo.anaconda.com/pkgs/main/noarch/send2trash-1.8.0-pyhd3eb1b0_1.conda
 https://repo.anaconda.com/pkgs/main/linux-64/setuptools-67.8.0-py311h06a4308_0.conda
-https://repo.anaconda.com/pkgs/main/noarch/six-1.16.0-pyhd3eb1b0_1.conda
 https://repo.anaconda.com/pkgs/main/linux-64/sniffio-1.2.0-py311h06a4308_1.conda
 https://repo.anaconda.com/pkgs/main/linux-64/soupsieve-2.4-py311h06a4308_0.conda
 https://repo.anaconda.com/pkgs/main/noarch/threadpoolctl-2.2.0-pyh0d69192_0.conda
