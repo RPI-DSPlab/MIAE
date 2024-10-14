@@ -1,10 +1,10 @@
 ## This script generates Venn diagrams for the MIAE experiment
-datasets=("cifar10")
-archs=("resnet56" "wrn32_4")
-mias=("lira" "losstraj" "reference" "shokri" "yeom" "calibration" "aug")
-#mias=("aug" "calibration" "losstraj" "shokri")
-categories=("model_compare") # "threshold" "fpr" "single_attack"
-subcategories=("pairwise") # "common_tp"
+#datasets=("cifar10")
+#archs=("resnet56")
+#mias=("lira" "losstraj" "reference" "shokri" "yeom" "calibration" "aug")
+##mias=("shokri")
+#categories=("single_attack") # "threshold" "fpr" "single_attack"
+#subcategories=("common_tp") # "common_tp"
 
 # For different distributions
 #datasets=("cifar10" "cinic10")
@@ -13,17 +13,17 @@ subcategories=("pairwise") # "common_tp"
 #categories=("dif_distribution")
 
 # For same attack different signal
-#datasets=("cifar10")
-#archs=("resnet56")
-#mias=("shokri" "top_1_shokri" "top_3_shokri")
-#categories=("fpr")
-#subcategories=("common_tp")
+datasets=("cifar10")
+archs=("resnet56")
+mias=("shokri" "top_1_shokri" "top_3_shokri")
+categories=("fpr")
+subcategories=("common_tp")
 
 
 option=("TPR")
-seeds=(3 4 5)
+seeds=(0 1 2 3 4 5)
 #fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
-fprs=(0.1 0.2 0.3 0.4 0.5 0.8)
+fprs=(0.1)
 # Prepare the parameter lists for the experiment
 mialist=""
 for mia in "${mias[@]}"; do
@@ -46,10 +46,10 @@ for dataset in "${datasets[@]}"; do
 done
 
 
-experiment_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
+#experiment_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
 
 # For different distributions
-#experiment_dir="/data/public/comp_mia_data/same_attack_different_distribution"
+experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"
 
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
@@ -150,7 +150,7 @@ for category in "${categories[@]}"; do
                                                     --architecture "$arch" \
                                                     --attacks ${mialist} \
                                                     --data_path "$experiment_dir" \
-                                                    --threshold "$threshold" \
+                                                    --threshold "0" \
                                                     --FPR "$fpr" \
                                                     --graph_type "venn" \
                                                     --graph_goal "$graph_goal" \

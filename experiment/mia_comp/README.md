@@ -61,7 +61,7 @@ The code is divided into three primary categories: Data Loading, Plot Diagram, a
    
    - **`plot_venn`**: Plots a Venn diagram for comparisons between attackss.
       ```bash
-     bash 
+      bash experiment_scripts/obtain_venn.sh 
        ``` 
    - **`plot_auc`**: Plots a AUC diagram (Area Under the Curve)  for different models or attacks.
       ```bash
@@ -77,13 +77,14 @@ The code is divided into three primary categories: Data Loading, Plot Diagram, a
 ### `obtain_jaccard.py`
    The `obtain_jaccard.py` is designed to save the Jaccard similarity between different MIAs and plot a heatmap to visualize the Jaccard similarity matrix.
    ```bash
-  bash 
+   bash experiment_scripts/obtain_jaccard.sh
+
    ```
 
 ### `obtain_accuracy.py`
    The `obtain_accuracy.py` is designed to save the accuracy of different MIAs under TPR@FPRs and balanced accuracy.
    ```bash
-  bash 
+    bash experiment_scripts/obtain_accuracy.sh
    ```
    
 ### `process_CINIC10.ipynb`
