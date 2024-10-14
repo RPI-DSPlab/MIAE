@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import pandas as pd
-pd.set_option('future.no_silent_downcasting', True)
+# pd.set_option('future.no_silent_downcasting', True)
 import matplotlib.pyplot as plt
 from upsetplot import UpSet, from_contents
 from typing import List, Dict

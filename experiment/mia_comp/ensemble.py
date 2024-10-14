@@ -21,13 +21,10 @@ from torchvision.models import resnet18
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
 import torch
-from matplotlib import pyplot as plt
 from torch import nn
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from typing import List, Dict, Tuple
 import numpy as np
-
-import miae.eval_methods.sample_hardness
 
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 import miae.eval_methods.prediction as prediction
@@ -36,7 +33,7 @@ from miae.utils import dataset_utils
 from experiment import models
 from experiment.models import get_model
 from obtain_pred import train_target_model
-from utils import load_target_dataset, read_pred, read_preds
+from miae.eval_methods.experiment import load_target_dataset, read_preds
 
 
 # --------------------- functions and classes for ensemble -------------------------

@@ -8,14 +8,10 @@ Currently, it supports the following accuracy metrics:
 
 import argparse
 import os
-import torch
-from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from typing import List, Dict
-import numpy as np
-import pandas as pd
-import utils
+from miae.eval_methods import experiment
 import sys
-from tqdm import tqdm
+
 sys.path.append(os.path.join(os.getcwd(), "..", "..", ".."))
 from MIAE.miae.eval_methods.prediction import Predictions, pred_tp_set_op, multi_seed_ensemble
 

@@ -13,7 +13,7 @@ from typing import List, Dict
 
 sys.path.append("../../../")
 sys.path.append("../../")
-sys.path.append("../")
+sys.path.append("../../experiment/")
 from miae.eval_methods.prediction import Predictions
 
 class TargetDataset():

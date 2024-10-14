@@ -9,12 +9,9 @@ Three types of venn diagrams:
 """
 import argparse
 import os
-import torch
 from matplotlib import pyplot as plt
-from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from typing import List, Dict, Optional
 import numpy as np
-import pickle
 
 import sys
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
@@ -26,7 +23,7 @@ import miae.visualization.venn_diagram as venn_diagram
 import miae.visualization.upset_diagram as upset_diagram
 
 import miae.eval_methods.prediction
-import utils
+from miae.eval_methods import experiment
 
 # plot settings
 
@@ -34,8 +31,6 @@ COLUMNWIDTH = 241.14749
 COLUMNWIDTH_INCH = 0.01384 * COLUMNWIDTH
 TEXTWIDTH = 506.295
 TEXTWIDTH_INCH = 0.01384 * TEXTWIDTH
-
-import matplotlib as mpl
 
 mia_name_mapping = {"losstraj": "losstraj", "shokri": "Class-NN", "yeom": "LOSS", "lira": "LIRA", "aug": "aug", "calibration": "calibrated-loss", "reference": "reference"}
 mia_color_mapping = {"losstraj": '#1f77b4', "shokri": '#ff7f0e', "yeom": '#2ca02c', "lira": '#d62728', "aug": '#9467bd', "calibration": '#8c564b', "reference": '#e377c2'}
@@ -76,7 +71,7 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
 
     # Load the target_dataset
     target_dataset_path = f"{data_path}/target/{dataset}/"
-    index_to_data, attack_set_membership = utils.load_target_dataset(target_dataset_path)
+    index_to_data, attack_set_membership = experiment.load_target_dataset(target_dataset_path)
 
 
     pred_dict = {}
@@ -86,7 +81,7 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
             att_npy = att
 
             pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att_npy}.npy"
-            pred_arr = utils.load_predictions(pred_path)
+            pred_arr = experiment.load_predictions(pred_path)
             new_attack_name = name_mapping.get(att, att)
             if "distribution" in data_path:
                 attack_name = f"{new_attack_name}_{dataset}"
@@ -226,7 +221,7 @@ def plot_auc(predictions: Dict[str, prediction.Predictions], graph_title: str, g
              fprs: List[float] = None):
     """
     plot the AUC of the different attacks
-    :param predictions: List[utils.Predictions]: list of Predictions objects
+    :param predictions: List[Predictions]: list of Predictions objects
     :param graph_title: str: title of the graph
     :param graph_path: str: path to save the graph
     :param fprs: List[float]: list of false positive rates to be plotted as vertical lines on auc graph,
@@ -250,7 +245,7 @@ def plot_hardness_distribution(
         graph_title: str, graph_path: str, fpr_list: List[float] = None):
     """
     plot the hardness distribution of the different attacks
-    :param predictions: List[utils.Predictions]: list of Predictions objects
+    :param predictions: List[Predictions]: list of Predictions objects
     :param graph_title: str: title of the graph
     :param graph_path: str: path to save the graph
     :param hardness: str: type of hardness: [il, pd]
@@ -279,7 +274,7 @@ def plot_hardness_distribution_unique(
     """
     plot the hardness distribution of the different attacks for all attacks on one plot,
     each color represent oen attack's uniquely attacked TP data points
-    :param predictions: List[utils.Predictions]: list of Predictions objects
+    :param predictions: List[Predictions]: list of Predictions objects
     :param graph_title: str: title of the graph
     :param graph_path: str: path to save the graph
     :param hardness: str: type of hardness: [il, pd]
@@ -313,7 +308,7 @@ def multi_seed_convergence(predictions: Dict[str, List[prediction.Predictions]],
     """
     plot the convergence of the different attacks
 
-    :param predictions: List[utils.Predictions]: list of Predictions objects, each element in a list is a Predictions object for a specific seed
+    :param predictions: List[Predictions]: list of Predictions objects, each element in a list is a Predictions object for a specific seed
     :param graph_title: str: title of the graph
     :param graph_path: str: path to save the graph
     :param set_op: str: set operation to be used for the convergence: [union, intersection]
@@ -412,8 +407,9 @@ def multi_seed_convergence(predictions: Dict[str, List[prediction.Predictions]],
 def single_attack_seed_ensemble(predictions: Dict[str, List[prediction.Predictions]], graph_title: str, graph_path: str,
                                 num_seeds: int, skip: int = 2):
     """
+    This Function is outdated. For ensemble attack analysis, look at the ensemble directory.
     ensemble attacks from multiple seeds and plot the roc/auc curve for each attack and ensemble method with different number of seeds
-    :param predictions: Dict[str, List[utils.Predictions]]: dictionary with attack names as keys and corresponding Predictions objects list as values
+    :param predictions: Dict[str, List[Predictions]]: dictionary with attack names as keys and corresponding Predictions objects list as values
     :param graph_title: str: title of the graph
     :param graph_path: str: path to save the graph
     :param num_seeds: int: number of seeds to ensemble
@@ -488,7 +484,7 @@ if __name__ == '__main__':
                         help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet]')
     parser.add_argument("--attacks", type=str, nargs="+", default=None, help='MIA type: [losstraj, yeom, shokri]')
     parser.add_argument("--graph_type", type=str, default="venn",
-                        help="graph_type: [venn, auc, hardness_distribution, multi_seed_convergence, single_attack_seed_ensemble]")
+                        help="graph_type: [venn, auc, hardness_distribution, multi_seed_convergence]")
     parser.add_argument("--graph_title", type=str, help="Title of the graph")
     parser.add_argument("--graph_path", type=str, help="Path to save the graph")
     parser.add_argument("--data_path", type=str, help="Path to the original predictions and target dataset")
@@ -679,7 +675,7 @@ if __name__ == '__main__':
             graph_path = args.graph_path
             multi_seed_convergence(pred_dict, graph_title, graph_path, "union", fpr)
 
-    elif args.graph_type == "single_attack_seed_ensemble":
+    elif args.graph_type == "single_attack_seed_ensemble": # outdated
         pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path,
                                                 args.seed)
         single_attack_seed_ensemble(pred_dict, args.graph_title, args.graph_path, len(args.seed), skip=args.skip)

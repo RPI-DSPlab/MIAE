@@ -1,4 +1,5 @@
 """
+This script is outdated. We no longer conduct this type of analysis.
 This script is used to obtain the example hardness on a given dataset.
 Work flow:
 1. Load the dataset
