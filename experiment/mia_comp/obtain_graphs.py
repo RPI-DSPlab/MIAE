@@ -83,10 +83,7 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
     for att in attack:
         pred_list = []
         for s in seeds:
-            if "top" in att:
-                att_npy = f"top_k_shokri"
-            else:
-                att_npy = att
+            att_npy = att
 
             pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att_npy}.npy"
             pred_arr = utils.load_predictions(pred_path)

@@ -179,11 +179,6 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
     venn_unweighted = venn3_unweighted if len(pred_list) == 3 else venn2_unweighted
     venn_weighted = venn3 if len(pred_list) == 3 else venn2
 
-    # get total number of attacked points
-    total = 0
-    for pred in attacked_points.values():
-        total += len(pred)
-
     # Color mapping
     plt.style.use('seaborn-v0_8-paper')
     mia_color_mapping = {
@@ -199,8 +194,9 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
     plt.figure(figsize=(6, 6))
     ax = plt.gca()
     ax.axis('off')
+    total = len(set.union(*venn_sets))
     venn = venn_unweighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors[:len(pred_list)],
-                           subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x/total):.1%}" + ")")
+                           subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x / total):.1%}" + ")")
 
     # Adjust text positions and sizes
     for text in venn.set_labels:
@@ -226,7 +222,7 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
     ax = plt.gca()
     ax.axis('off')
     venn = venn_weighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors[:len(pred_list)],
-                         subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x/total):.1%}" + ")")
+                         subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x / total):.1%}" + ")")
 
     # Adjust text positions and sizes
     for text in venn.set_labels:
@@ -371,15 +367,8 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
         adjusted_pred_dict = {}
         result_or = []
         result_and = []
-        for attack, pred_obj_list in pred_dict.items():
-            adjusted_pred_list = []
-            for pred in pred_obj_list:
-                adjusted_pred_arr = pred.adjust_fpr(target_fpr)
-                adjusted_pred_obj = Predictions(adjusted_pred_arr, pred.ground_truth_arr, pred.name)
-                adjusted_pred_list.append(adjusted_pred_obj)
-            adjusted_pred_dict[attack] = adjusted_pred_list
 
-        for attack, adjusted_list in adjusted_pred_dict.items():
+        for attack, adjusted_list in pred_dict.items():
             if option == "TPR":
                 common_or, common_and = find_common_tp_pred(adjusted_list, fpr=target_fpr)
             elif option == "TNR":
@@ -402,6 +391,7 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], s
     :param save_path: path to save the graph
     :param signal: whether the signal is included in the attack
     """
+    # if signal, mapped the attack name to the signal name
     attacked_points_or = {pred.name: set() for pred in pred_or}
     attacked_points_and = {pred.name: set() for pred in pred_and}
 
@@ -423,9 +413,7 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], s
         attacked_points_and[pred.name] = set(np.where((pred.pred_arr == 1) & (pred.ground_truth_arr == 1))[0])
         venn_sets_and.append(attacked_points_and[pred.name])
 
-    total_or = 0
-    for pred in attacked_points_or.values():
-        total_or += len(pred)
+    total_or = len(set.union(*venn_sets_or))
 
     # plot venn diagram for the or set
     plt.figure(figsize=(10, 8))
@@ -436,7 +424,7 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], s
     plt.style.use('seaborn-v0_8-paper')
     default_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
     venn_or = venn3(subsets=venn_sets_or, set_labels=venn_labels_or, set_colors=default_colors,
-                    subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x/total_or):.1%}" + ")")
+                    subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x / total_or):.1%}" + ")")
     for text in venn_or.set_labels:
         if text:
             text.set_fontsize(23)
@@ -450,9 +438,7 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], s
     plt.savefig(os.path.join(save_path, "union.pdf"))
     plt.close()
 
-    total_and = 0
-    for pred in attacked_points_and.values():
-        total_and += len(pred)
+    total_and = len(set.union(*venn_sets_and))
 
     # plot venn diagram for the and set
     plt.figure(figsize=(10, 8))
@@ -462,7 +448,7 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], s
     plt.style.use('seaborn-v0_8-paper')
     default_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
     venn_and = venn3(subsets=venn_sets_and, set_labels=venn_labels_and, set_colors=default_colors,
-                     subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x/total_and):.1%}" + ")")
+                     subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x / total_and):.1%}" + ")")
     for text in venn_and.set_labels:
         if text:
             text.set_fontsize(23)
