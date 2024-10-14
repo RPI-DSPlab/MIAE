@@ -214,7 +214,6 @@ class ModelAccess(ABC):
         """
         self.model.eval()
 
-
 class MiAttack(ABC):
     """
     Base class for all attacks.
