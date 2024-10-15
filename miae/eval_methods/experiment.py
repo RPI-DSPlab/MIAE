@@ -42,16 +42,16 @@ class TargetDataset():
         return cls(name, target_trainset, target_testset, aux_set, index_to_data, membership, dir=target_data_dir)
 
 
-class ExperiementSet():
+class ExperimentSet():
     """
-    A class to store a set of attack experiement. A set of experiments is defined by the target dataset and
+    A class to store a set of attack experiment. A set of experiments is defined by the target dataset and
     multi-instances attack predictions on the target dataset.
     """
     def __init__(self, target_dataset: TargetDataset, attack_preds: Dict[str, List[Predictions]], adjusted_fpr=None):
         """
         target_dataset: the target dataset object
         attack_preds: a dictionary mapping attack names to a list of Predictions. 
-        adjusted_fpr: the FPR used to adjust the FPR for all preds in the experiement. If None, no adjustment is made.
+        adjusted_fpr: the FPR used to adjust the FPR for all preds in the experiment. If None, no adjustment is made.
         """
         self.target_dataset = target_dataset
         self.attack_preds = attack_preds
@@ -60,7 +60,7 @@ class ExperiementSet():
     @classmethod
     def from_dir(cls, target_dataset: TargetDataset, attack_list: List[str], pred_path: str, sd_list, model, fpr_to_adjust=None):
         """
-        alternative constructor to load the experiement set from a directory
+        alternative constructor to load the experiment set from a directory
         """
         attack_preds = dict()
         ret_list = read_preds(pred_path, "", sd_list, target_dataset.dataset_name, model, attack_list, target_dataset.membership)
@@ -74,15 +74,23 @@ class ExperiementSet():
                 attack_preds[a].append(curr_pred)
         return cls(target_dataset, attack_preds, fpr_to_adjust)
     
-    def retrive_preds(self, attack_name: str, seed: int) -> Predictions:
+    
+    def get_attack_names(self) -> List[str]:
         """
-        retrive the predictions for a specific attack and seed
+        return the list of attack names in the experiment set
+        """
+        return list(self.attack_preds.keys())
+        
+    
+    def retrieve_preds(self, attack_name: str, seed: int) -> Predictions:
+        """
+        retrieve the predictions for a specific attack and seed
         """
         return self.attack_preds[attack_name][seed]
 
     def get_preds_stability(self, attack_name: str) -> Predictions:
         """
-        retrive the stability of the prediction for a specific attack. The stability is the intersection of the
+        retrieve the stability of the prediction for a specific attack. The stability is the intersection of the
         TP of the predictions of all seeds.
         """
         list_of_base_pred = [self.attack_preds[attack_name][seed].pred_arr for seed in range(len(self.attack_preds[attack_name]))]
@@ -91,7 +99,7 @@ class ExperiementSet():
     
     def get_preds_coverage(self, attack_name: str) -> Predictions:
         """
-        retrive the coverage of the prediction for a specific attack. The coverage is the union of the
+        retrieve the coverage of the prediction for a specific attack. The coverage is the union of the
         TP of the predictions of all seeds.
         """
         list_of_base_pred = [self.attack_preds[attack_name][seed].pred_arr for seed in range(len(self.attack_preds[attack_name]))]

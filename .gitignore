@@ -166,3 +166,5 @@ miae/samples/
 *.pkl
 *.json
 *.txt
+experiment/mia_comp/data/
+
