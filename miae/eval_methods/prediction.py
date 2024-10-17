@@ -811,10 +811,22 @@ class HardPreds:
         :param new_name: new name of the HardPreds object
         """
         self.name = new_name
+
+    def get_tp(self, count=True) -> np.ndarray:
+        """
+        Get the indices of the true positive samples.
+        """
+        tp_lists = []
+        for p in self._hard_preds:
+            tp_lists.append(np.where((p == 1) & (self.gt == 1))[0])
+        if count:
+            return [len(tp) for tp in tp_lists]
+        
+        return tp_lists
     
 
 
-def plot_roc_hard_preds(hard_preds_list: List[HardPreds], save_dir: str):
+def plot_roc_hard_preds(hard_preds_list: List[HardPreds], save_dir: str, tp_or_tpr: str = "TP"):
     """
     Plot the ROC curves for the hard predictions from different FPR values.
 
@@ -823,14 +835,26 @@ def plot_roc_hard_preds(hard_preds_list: List[HardPreds], save_dir: str):
         save_dir (str): _description_
     """
     for pred in hard_preds_list:
-        plt.plot(pred._fprs, pred._tprs, label=pred.name)
+        if tp_or_tpr == "TP":
+            plt.plot(pred._fprs, pred.get_tp(count=True), label=pred.name)
+        elif tp_or_tpr == "TPR":
+            plt.plot(pred._fprs, pred._tprs, label=pred.name)
     
-    plt.semilogx()
-    plt.semilogy()
-    plt.xlim(1e-5, 1)
-    plt.ylim(1e-5, 1)
+    if tp_or_tpr == "TPR":
+        plt.semilogx()
+        plt.semilogy()
+        plt.xlim(1e-5, 1)
+        plt.ylim(1e-5, 1)
+    elif tp_or_tpr == "TP":
+        plt.semilogx()
+        plt.xlim(1e-5, 1)
+        plt.ylim(0, len(pred.get_tp()[0]))
+        # set y-axis to log scale
+        plt.yscale('log')
+    else:
+        raise ValueError("Invalid value for tp_or_tpr.")
     plt.xlabel("False Positive Rate")
-    plt.ylabel("True Positive Rate")
+    plt.ylabel("True Positive Rate") if tp_or_tpr == "TPR" else plt.ylabel("True Positive Count")
     plt.plot([0, 1], [0, 1], ls='--', color='gray')
     # plt.subplots_adjust(bottom=.18, left=.18, top=.96, right=.96)
     plt.legend(fontsize=8)
