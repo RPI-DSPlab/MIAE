@@ -5,9 +5,10 @@ import torch
 from torch.utils.data import Dataset, Subset
 from tqdm import tqdm
 import pickle
+from typing import Optional
 
 from miae.attacks.attack_classifier import *
-
+from transformers import AutoTokenizer, AutoModelForQuestionAnswering
 
 class ModelAccessType(Enum):
     """ Enum class for model access type. """
@@ -183,7 +184,8 @@ class ModelAccess(ABC):
         all_logits = torch.cat(all_logits, dim=0)
         all_logits = all_logits.unsqueeze(1)
         return all_logits
-    
+
+
 
     def __call__(self, data):
         return self.get_signal(data)
@@ -213,6 +215,105 @@ class ModelAccess(ABC):
         :return:
         """
         self.model.eval()
+
+class LLM_ModelAccess(ABC):
+    def __init__(self, model, tokenizer, device):
+        self.model = model
+        self.tokenizer = tokenizer
+        self.device = device
+
+    def get_signal_llm(self, text: Optional[str] = None, tokens: Optional[np.ndarray] = None, no_grads: bool = True,
+                        return_all_probs: bool = False,
+                        pickle_filename: str = 'log_probs.pkl'):
+        """
+        Get the log probabilities for a text under the current model and store them in a pickle file.
+        :param text: The input text for which to calculate probabilities.
+        :param tokens: An array of token ids.
+        :param no_grads (bool): If True, computations are done without tracking gradients.
+        :param return_all_probs (bool): If True, stores the log prob for all tokens in the text.
+        :param pickle_filename (str): The filename of the pickle file where results will be stored.
+        """
+        if self.device is None:
+            raise ValueError("Device must be provided.")
+        if self.tokenizer is None:
+            raise ValueError("Tokenizer must be provided.")
+        if text is None and tokens is None:
+            raise ValueError("Either `text` or `tokens` must be provided.")
+
+        if tokens is not None:
+            labels = torch.tensor(tokens, dtype=torch.long).unsqueeze(0)
+        else:
+            tokenized = self.tokenizer(text, return_tensors="pt")
+            labels = tokenized.input_ids
+
+        labels = labels.to(self.device)
+        sequence_length = labels.size(1)
+
+        target_token_log_probs = []
+        all_token_log_probs = []
+
+        # Determine the number of chunks needed
+        max_length = self.max_length if hasattr(self, 'max_length') else self.model.config.max_position_embeddings
+        stride = self.stride if hasattr(self, 'stride') else max_length
+
+        with torch.set_grad_enabled(not no_grads):
+            for i in range(0, sequence_length, stride):
+                # Define the window of tokens to process
+                begin = max(i + stride - max_length, 0)
+                end = min(i + stride, sequence_length)
+                target_len = end - i  # Target length for this chunk
+
+                input_ids = labels[:, begin:end]
+                target_ids = input_ids.clone()
+
+                # Mask out tokens that are not in the target sequence
+                target_ids[:, :-target_len] = -100  # Ignore index for loss computation
+
+                # Get model outputs <= model forward pass
+                outputs = self.model(input_ids, labels=target_ids)
+                logits = outputs.logits
+
+                # Adjusts the logits and labels to align them for next-token prediction
+                shift_logits = logits[:, :-1, :].contiguous()
+                shift_labels = target_ids[:, 1:].contiguous()
+
+                # Compute log probabilities
+                log_probs = torch.nn.functional.log_softmax(shift_logits, dim=-1)
+
+                # Collect log probabilities for the target tokens
+                for idx in range(shift_labels.size(1)):
+                    token_id = shift_labels[0, idx].item()
+                    if token_id != -100:
+                        token_log_prob = log_probs[0, idx, token_id]
+                        target_token_log_probs.append(token_log_prob.item())
+                        if return_all_probs:
+                            all_token_log_probs.append(log_probs[0, idx].cpu())
+
+        # Prepare data to be pickled
+        data_to_pickle = {'target_token_log_probs': target_token_log_probs}
+        if return_all_probs:
+            all_token_log_probs = torch.stack(all_token_log_probs, dim=0)
+            data_to_pickle['all_token_log_probs'] = all_token_log_probs.numpy()
+
+        # Save the data to a pickle file
+        with open(pickle_filename, 'wb') as f:
+            pickle.dump(data_to_pickle, f)
+
+    def to_device(self, device):
+        """
+        Move the model to the device.
+        :param device:
+        :return:
+        """
+        self.model.to(device)
+
+    def eval(self):
+        """
+        Set the model to evaluation mode.
+        :return:
+        """
+        self.model.eval()
+
 
 class MiAttack(ABC):
     """
