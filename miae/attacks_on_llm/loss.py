@@ -64,7 +64,7 @@ class LossAttack(MiAttack):
         super().__init__(target_model_access, aux_info)
         self.aux_info = aux_info
         self.target_model_access = target_model_access
-        self.threshold = None  # Fix spelling here (was threshhold)
+        self.threshold = None
         self.prepared = False
 
     def prepare(self, auxiliary_dataset):
