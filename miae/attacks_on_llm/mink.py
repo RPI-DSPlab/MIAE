@@ -1,10 +1,10 @@
 import numpy as np
 import torch
-from miae.attacks.base import LLM_ModelAccess
+from miae.attacks.base import ModelAccessType, AuxiliaryInfo
 from miae.attacks_on_llm.all_attacks import Attack
 
 class MinKProbAttack(Attack):
-    def __init__(self, target_model, k: float = 0.2, window: int = 1, stride: int = 1, is_blackbox: bool = True):
+    def __init__(self, config, target_model, k: float = 0.2, window: int = 1, stride: int = 1, is_blackbox: bool = True):
         """
         Initialize MinKProbAttack with necessary parameters.
 
@@ -14,7 +14,7 @@ class MinKProbAttack(Attack):
         :param stride: Step size for the sliding window over n-grams.
         :param is_blackbox: Boolean indicating if this is a black-box attack.
         """
-        super().__init__(target_model, is_blackbox)
+        super().__init__(config, target_model, is_blackbox)
         self.k = k
         self.window = window
         self.stride = stride
@@ -51,5 +51,14 @@ class MinKProbAttack(Attack):
         min_k_probs = sorted(ngram_probs)[: int(len(ngram_probs) * self.k)]
         result = -np.mean(min_k_probs)
 
-        # Return the negative mean of the top-k% n-grams
         return result
+
+class MinKProbAuxiliaryInfo(AuxiliaryInfo):
+    def __init__(self, config):
+        """
+        Initialize the auxiliary information.
+        :param config: the loss trajectory.
+        :param attack_model: the attack model.
+        """
+        super().__init__(config)
+
