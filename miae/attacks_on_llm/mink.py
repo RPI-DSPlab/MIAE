@@ -5,7 +5,8 @@ from miae.attacks_on_llm.all_attacks import Attack
 from miae.attacks_on_llm.config import ExperimentConfig as ExpConfig
 
 class MinKProbAttack(Attack):
-    def __init__(self, config:ExpConfig, target_model, k: float = 0.2, window: int = 1, stride: int = 1, is_blackbox: bool = True):
+    def __init__(self, target_model, config: ExpConfig, k: float = 0.2, window: int = 1,
+                 stride: int = 1, is_blackbox: bool = True):
         """
         Initialize MinKProbAttack with necessary parameters.
 
