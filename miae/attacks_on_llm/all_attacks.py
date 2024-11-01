@@ -14,12 +14,11 @@ class AllAttacks(str, Enum):
 
 # Base attack class
 class Attack:
-    def __init__(self, config, target_model: Model, is_blackbox=True):
+    def __init__(self, config, target_model: Model):
         self.confid = config
         self.target_model = target_model
-        self.is_blackbox = is_blackbox
 
-    def _attack(self, document, probs, tokens=None, **kwargs):
+    def _attack(self, document, probs, tokens=None):
         """
         Actual logic for attack.
         """

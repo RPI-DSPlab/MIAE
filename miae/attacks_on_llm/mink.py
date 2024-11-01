@@ -2,11 +2,9 @@ import numpy as np
 import torch
 from miae.attacks.base import ModelAccessType, AuxiliaryInfo
 from miae.attacks_on_llm.all_attacks import Attack
-from miae.attacks_on_llm.config import ExperimentConfig as ExpConfig
 
 class MinKProbAttack(Attack):
-    def __init__(self, target_model, config: ExpConfig, k: float = 0.2, window: int = 1,
-                 stride: int = 1, is_blackbox: bool = True):
+    def __init__(self, target_model, config):
         """
         Initialize MinKProbAttack with necessary parameters.
 
@@ -16,12 +14,13 @@ class MinKProbAttack(Attack):
         :param stride: Step size for the sliding window over n-grams.
         :param is_blackbox: Boolean indicating if this is a black-box attack.
         """
-        super().__init__(config, target_model, is_blackbox)
-        self.k = k
-        self.window = window
-        self.stride = stride
+        super().__init__(config, target_model)
+        self.k = config.get("k", 0.2)
+        self.window = config.get("window", 1)
+        self.stride = config.get("stride", 1)
+        self.is_blackbox = config.get("is_blackbox", True)
 
-    def _attack(self, document, probs=None, tokens=None, **kwargs):
+    def _attack(self, document, probs=None, tokens=None):
         """
         Main logic for the Min-k % Prob Attack. Computes model probabilities and returns likelihood over the top k% of n-grams.
 
@@ -55,3 +54,21 @@ class MinKProbAttack(Attack):
 
         return result
 
+class MinKAuxiliaryInfo(AuxiliaryInfo):
+    """
+    Class to encapsulate the configuration for the Min-K Probability Attack.
+    """
+    def __init__(self, config):
+        """
+        Initialize the MinKAuxiliaryInfo with the provided configuration dictionary.
+        :param config: Dictionary containing the configuration parameters.
+        """
+        super().__init__(config)
+
+
+    def save_config_to_dict(self):
+        """
+        Save the configuration to a dictionary.
+        :return: Dictionary containing the configuration.
+        """
+        return super().save_config_to_dict()
