@@ -2,9 +2,10 @@ import numpy as np
 import torch
 from miae.attacks.base import ModelAccessType, AuxiliaryInfo
 from miae.attacks_on_llm.all_attacks import Attack
+from miae.attacks_on_llm.config import ExperimentConfig as ExpConfig
 
 class MinKProbAttack(Attack):
-    def __init__(self, config, target_model, k: float = 0.2, window: int = 1, stride: int = 1, is_blackbox: bool = True):
+    def __init__(self, config:ExpConfig, target_model, k: float = 0.2, window: int = 1, stride: int = 1, is_blackbox: bool = True):
         """
         Initialize MinKProbAttack with necessary parameters.
 
@@ -52,13 +53,4 @@ class MinKProbAttack(Attack):
         result = -np.mean(min_k_probs)
 
         return result
-
-class MinKProbAuxiliaryInfo(AuxiliaryInfo):
-    def __init__(self, config):
-        """
-        Initialize the auxiliary information.
-        :param config: the loss trajectory.
-        :param attack_model: the attack model.
-        """
-        super().__init__(config)
 
