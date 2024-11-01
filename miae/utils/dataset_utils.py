@@ -3,6 +3,7 @@ import numpy as np
 from torch.utils.data import Dataset
 from typing import List
 from copy import deepcopy
+from datasets import Dataset, load_dataset
 
 
 def get_xy_from_dataset(dataset: Dataset) -> (np.ndarray, np.ndarray):
@@ -53,3 +54,22 @@ def dataset_split(dataset, lengths: list, shuffle_seed=1):
     return [torch.utils.data.Subset(dataset, indices[offset - length:offset]) for offset, length in
             zip(torch._utils._accumulate(lengths), lengths)]
 
+def load_mimir_dataset(name: str, split: str) -> Dataset:
+    """
+    Load the MIMIR dataset
+    :param name: the name of the dataset such as "arxiv", "pile_cc", etc
+    :param split: the split of the dataset such as ngram_13_0.8
+    """
+
+    dataset = load_dataset("iamgroot42/mimir", name, split=split)
+
+    if "member" not in dataset.column_names:
+        raise ValueError("The dataset does not contain the column 'member'")
+    if "non-member" not in dataset.column_names:
+        raise ValueError("The dataset does not contain the column 'non-member'")
+
+    all_labels = [1] * len(dataset["member"]) + [0] * len(dataset["non-member"])
+    all_texts = dataset["member"] + dataset["non-member"]
+    new_dataset = Dataset.from_dict({"text": all_texts, "label": all_labels})
+
+    return new_dataset
