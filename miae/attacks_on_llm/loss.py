@@ -4,18 +4,21 @@ from miae.attacks.base import ModelAccessType, AuxiliaryInfo
 from miae.attacks_on_llm.all_attacks import Attack
 
 class LossAttack(Attack):
-    def __init__(self, config, target_model, threshold: float = None, is_blackbox: bool = True):
+    def __init__(self, target_model, config):
         """
         Initialize LossAttack with necessary parameters.
 
         :param target_model: Instance of LLM_ModelAccess (Model) for the target model.
-        :param threshold: Loss threshold to infer membership.
-        :param is_blackbox: Boolean indicating if this is a black-box attack.
+        :param config: Dictionary containing configuration parameters, including threshold.
         """
-        super().__init__(config, target_model, is_blackbox)
-        self.threshold = threshold
+        super().__init__(config, target_model)
+        self.threshold = config.get("threshold", None)
+        self.is_blackbox = config.get("is_blackbox", True)
 
-    def _attack(self, document, tokens=None, **kwargs):
+        if self.threshold is None:
+            raise ValueError("Threshold not set in configuration for LossAttack")
+
+    def _attack(self, document, tokens=None):
         """
         Main logic for the Loss Attack. Computes model loss and returns a membership prediction based on the threshold.
 
@@ -24,7 +27,7 @@ class LossAttack(Attack):
 
         :return: Binary prediction (1 if member, 0 if non-member).
         """
-        # Calculate log probabilities and loss for the document
+        # Retrieve log probabilities for each token in the document
         log_probs_data = self.target_model.get_signal_llm(
             text=document,
             tokens=tokens,
@@ -33,25 +36,32 @@ class LossAttack(Attack):
         )
         target_token_log_probs = log_probs_data['target_token_log_probs']
 
-        # Convert log probabilities to loss (negative log likelihood)
+        # Convert log probabilities to losses (negative log likelihoods)
         with torch.no_grad():
             losses = [-log_prob for log_prob in target_token_log_probs]
         
-        # Compute average loss over the document
+        # Calculate the average loss over the document
         avg_loss = np.mean(losses)
         
-        # Infer membership based on the threshold
-        if self.threshold is not None:
-            return int(avg_loss < self.threshold)  # 1 if member, 0 if non-member
-        else:
-            raise ValueError("Threshold not set for LossAttack")
+        # Return membership prediction based on the threshold
+        return int(avg_loss < self.threshold)  # 1 if member, 0 if non-member
 
 class LossAttackAuxiliaryInfo(AuxiliaryInfo):
+    """
+    Class to encapsulate the configuration for the Loss Attack.
+    """
     def __init__(self, config):
         """
-        Initialize the auxiliary information.
-        :param config: the configuration dictionary.
+        Initialize the LossAttackAuxiliaryInfo with the provided configuration dictionary.
+        :param config: Dictionary containing configuration parameters.
         """
         super().__init__(config)
         self.threshold = config.get("threshold", None)
         self.device = config.get("device", 'cuda' if torch.cuda.is_available() else 'cpu')
+
+    def save_config_to_dict(self):
+        """
+        Save the configuration to a dictionary.
+        :return: Dictionary containing the configuration.
+        """
+        return super().save_config_to_dict()
