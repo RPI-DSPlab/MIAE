@@ -6,15 +6,9 @@ import numpy as np
 import torch
 from matplotlib import pyplot as plt
 from sklearn.metrics import balanced_accuracy_score, roc_curve, auc
-import matplotlib.pyplot as plt
-import os
-from sklearn.metrics import balanced_accuracy_score, roc_curve, auc
 import csv
 
-FPR_SAMPLES = []
-for fpr in [10e-6, 10e-5, 10e-4, 10e-3, 10e-2, 10e-1, 10e0]:
-    FPR_SAMPLES.extend([i*fpr for i in range(1, 10)])
-
+from miae.utils.roc_auc import fig_fpr_tpr
 
 def pred_normalization(pred: np.ndarray) -> np.ndarray:
     """
@@ -29,6 +23,12 @@ def pred_normalization(pred: np.ndarray) -> np.ndarray:
 
 
 class Predictions:
+    """
+    Predictions class stores the predictions and ground truth for a single attack instance.
+    It could be either hard label predictions or soft label predictions.
+    If it's hard label, the predictions are considered as "membership predictions".
+    If it's soft label, the predictions are considered as "membership scores".
+    """
     def __init__(self, pred_arr: np.ndarray, ground_truth_arr: np.ndarray, name: str):
         """
         Initialize the Predictions object.
@@ -53,7 +53,9 @@ class Predictions:
 
     def is_hard(self):
         """
-        return true if the predictions are hard labels
+        return true if the predictions are hard labels.
+        Hard label predictions are considered as "membership predictions", and
+        Soft label predictions are considered as "membership scores".
         """
         for i in self.pred_arr:
             if i not in [0.0, 1.0, 0, 1]:
@@ -440,22 +442,6 @@ def averaging_predictions(pred_list: List[Predictions]) -> np.ndarray:
     return np.mean(pred_list, axis=0)
 
 
-def majority_voting(pred_list: List[Predictions], threshold=None | float, ) -> np.ndarray:
-    """
-    Majority voting for the predictions from different attacks.
-
-    :param pred_list: list of Predictions
-    :return: majority voted prediction
-    """
-    # convert predictions to binary labels
-    labels_list = [pred.predictions_to_labels(threshold=threshold) for pred in pred_list]
-
-    # calculate the majority voted prediction
-    majority_voted_labels = np.mean(labels_list, axis=0)
-    majority_voted_labels = (majority_voted_labels > 0.5).astype(int)
-    return majority_voted_labels
-
-
 def unanimous_voting(pred_list: List[Predictions]) -> np.ndarray:
     """
     Unanimous voting for the predictions from different attacks.
@@ -639,41 +625,244 @@ def plot_auc(pred_list: List[List[Predictions]] | List[Predictions],
 
     return
 
-def hard_label_ensembling_single_method(pred_list: List[Predictions], method: str, skip=2) -> List[Predictions]:
+
+def get_fpr_tpr_hard_label(pred: np.array, gt: np.array) -> Tuple[float, float]:
     """
-    Hard label ensemble is when after ensemble, the prediction is either 0 or 1.
-    Single method refers to that we are comparing the same methods while incrementing number of preds to ensemble.
+    Compute the true positive rate (TPR) and false positive rate (FPR) for hard label predictions.
 
-    pred_list: List of Predictions of the same attack but different seeds.
-    method: method for ensemble the predictions, should be one of ["HC", "HP", "avg", "majority"]
+    :param pred: predicted labels as a numpy array
+    :param gt: ground truth labels as a numpy array
+    :return: FPR and TPR
     """
-    ensemble_pred = []
-    for i in range(0, len(pred_list), skip):
-        ensemble_pred.append(multi_seed_ensemble(pred_list[:i + 1], method))
-        ensemble_pred[-1].name = f"num_attack_{i + 1}"
-    return ensemble_pred
+    pred_tensor = torch.tensor(pred)
+    ground_truth_tensor = torch.tensor(gt)
+    true_positive = torch.logical_and(pred_tensor == 1, ground_truth_tensor == 1).sum().item()
+    false_positive = torch.logical_and(pred_tensor == 1, ground_truth_tensor == 0).sum().item()
+    false_negative = torch.logical_and(pred_tensor == 0, ground_truth_tensor == 1).sum().item()
+    true_negative = torch.logical_and(pred_tensor == 0, ground_truth_tensor == 0).sum().item()
+    total_positive = true_positive + false_negative
+    total_negative = true_negative + false_positive
+    TPR = true_positive / total_positive if total_positive > 0 else 0
+    FPR = false_positive / total_negative if total_negative > 0 else 0
+    return FPR, TPR
 
 
-def hard_label_ensembling_multiple_methods(pred_list: List[Predictions], method: List[str]) -> List[Predictions]:
+class HardPreds:
     """
-    Hard label ensemble is when after ensemble, the prediction is either 0 or 1.
-    Multiple methods refers to that we are comparing different methods with all seeds.
-
+    For a given attack instance' MIAScore (soft prediction), we use HardPreds to store the hard predictions
+    of this score at all FPR values/thresholds. It's used to calculate the AUC and accuracy of the hard predictions' ensemble.
+    We also save the ensemble-ed hard predictions at different FPR values.
     """
-    ensemble_pred = []
-    for m in method:
-        ensemble_pred.append(multi_seed_ensemble(pred_list, m))
-        ensemble_pred[-1].name = f"ensemble_{m}"
-    return ensemble_pred
+    def __init__(self, fprs, tprs, hard_preds, gt, name: str):
+        """
+        Initialize the HardPreds object.
+
+        :param fprs: false positive rates
+        :param tprs: true positive rates
+        :param name: name of the attack
+        :param hard_preds: hard predictions at different FPR values
+        """
+        self._fprs = fprs
+        self._tprs = tprs
+        self._hard_preds = hard_preds
+        self.gt = gt
+        self.name = name
+    
+
+    @classmethod
+    def from_pred(cls, mia_score: Predictions, name: str = None,
+                  fprs_to_align=np.logspace(-6, 0, num=5000)
+                  ):
+        """
+        Initialize the HardPreds object from Predictions object (as mia_score).
+
+        :param mia_score: membership inference attack scores as a Predictions object
+        :param name: Optional name for the HardPreds object
+        :param fprs_to_align: FPR values to align the hard predictions
+        :return: HardPreds object
+        """
+        if mia_score.is_hard():
+            raise ValueError("The predictions should not be hard labels.")
+
+        scores_arr = mia_score.pred_arr
+        gt_arr = mia_score.ground_truth_arr
+        fprs, tprs, thresholds = roc_curve(gt_arr, scores_arr)
+
+        hard_preds = []
+        # align the hard predictions at different FPR values
+        for fpr in fprs_to_align:
+            idx = np.where(fprs <= fpr)[0][-1]
+            threshold = thresholds[idx]
+            hard_pred = (scores_arr >= threshold).astype(int)
+            hard_preds.append(hard_pred)
+
+        # recalculating fprs and tprs for the hard predictions
+        fprs, tprs = [], []
+        for p in hard_preds:
+            fpr, tpr= get_fpr_tpr_hard_label(p, gt_arr)
+            fprs.append(fpr)
+            tprs.append(tpr)
+
+        name = mia_score.name if name is None else name
+        return cls(fprs, tprs, hard_preds, mia_score.ground_truth_arr, name)
+    
+
+    def get_all_preds(self) -> List[Predictions]:
+        """
+        Get all hard predictions at different FPR values.
+
+        :return: list of hard predictions as Predictions objects
+        """
+        return [Predictions(hard_pred, self.mia_score.ground_truth_arr, self.name + f"_FPR_{fpr:.6f}")
+                for hard_pred, fpr in zip(self._hard_preds, self._fprs)]
+    
+    def get_all_preds_arr(self) -> List[np.ndarray]:
+        """
+        Get all hard predictions at different FPR values.
+
+        :return: list of hard predictions as numpy arrays
+        """
+        return self._hard_preds
+    
+    
+    @classmethod
+    def ensemble(cls, hard_preds_list: List['HardPreds'], method: str, name=None) -> 'HardPreds':
+        """
+        Ensemble the hard predictions from different FPR values.
+
+        :param hard_preds_list: list of HardPreds
+        :param method: method for ensemble the predictions: ["union", "intersection", "majority voting"]
+        :return: ensemble prediction
+        """
+
+        #  ----- check hard_preds_list quality
+        if len(hard_preds_list) < 2:
+            raise ValueError("At least 2 hard predictions are required for ensemble.")
+        
+        num_inferred_samples = len(hard_preds_list[0].get_all_preds_arr()[0])
+        for hard_preds in hard_preds_list:
+            if len(hard_preds.get_all_preds_arr()[0]) != num_inferred_samples:
+                raise ValueError("All hard predictions should have the same number of samples.")
+        
+        # calculate the sets of hard predictions are being ensemble-ed. each set of 
+        # hard predictions should have similar fprs.
+        set_of_hard_pred_count = len(hard_preds_list[0]._fprs)
+        for hard_preds in hard_preds_list:
+            if len(hard_preds._fprs) != set_of_hard_pred_count:
+                raise ValueError("All hard predictions should have the same number of hard prediction arrays.")
+            
+        gt = hard_preds_list[0].gt
+            
+        # ----- ensemble the hard predictions
+            
+        fprs, tprs, hard_preds, name = [], [], [], name
+            
+        if method == "union":
+            name = hard_preds_list[0].name + "_union" if name is None else name
+            for i in range(set_of_hard_pred_count):
+                ensemble_pred = np.zeros_like(hard_preds_list[0].get_all_preds_arr()[0])
+                for hp in hard_preds_list:
+                    ensemble_pred = np.logical_or(ensemble_pred, hp.get_all_preds_arr()[i])
+                hard_preds.append(ensemble_pred)
+
+        elif method == "intersection":
+            name = hard_preds_list[0].name + "_intersection" if name is None else name
+            for i in range(set_of_hard_pred_count):
+                ensemble_pred = np.ones_like(hard_preds_list[0].get_all_preds_arr()[0])
+                for hp in hard_preds_list:
+                    ensemble_pred = np.logical_and(ensemble_pred, hp.get_all_preds_arr()[i])
+                hard_preds.append(ensemble_pred)
+
+        elif method == "majority_vote":
+            name = hard_preds_list[0].name + "_majority_vote" if name is None else name
+            for i in range(set_of_hard_pred_count):
+                ensemble_pred = np.zeros_like(hard_preds_list[0].get_all_preds_arr()[0])
+                for hard_preds in hard_preds_list:
+                    ensemble_pred += hard_preds.get_all_preds_arr()[i]
+                ensemble_pred = (ensemble_pred > len(hard_preds_list) / 2).astype(int)
+                hard_preds.append(ensemble_pred)
+
+        else:
+            raise ValueError("Invalid method for ensemble the hard predictions.")
 
 
-def sample_and_adjust_fpr(pred: Predictions) -> List[Predictions]:
+        # recalculate fprs and tprs for the ensemble-ed hard predictions
+        for i in range(set_of_hard_pred_count):
+            fpr, tpr = get_fpr_tpr_hard_label(hard_preds[i], gt)
+            fprs.append(fpr)
+            tprs.append(tpr)
+        
+        return cls(fprs, tprs, hard_preds, gt, name)
+    
+    
+    def to_pred(self) -> Predictions:
+        """
+        Get the hard predictions at a specified FPR value.
+
+        :param fpr: FPR value
+        :return: hard predictions at the specified FPR value
+        """
+        return Predictions(self._hard_preds, self.gt, self.name)
+    
+
+    def change_name(self, new_name):
+        """
+        Update the name of the HardPreds object.
+        :param new_name: new name of the HardPreds object
+        """
+        self.name = new_name
+
+    def get_tp(self, count=True) -> np.ndarray:
+        """
+        Get the indices of the true positive samples.
+        """
+        tp_lists = []
+        for p in self._hard_preds:
+            tp_lists.append(np.where((p == 1) & (self.gt == 1))[0])
+        if count:
+            return [len(tp) for tp in tp_lists]
+        
+        return tp_lists
+    
+
+
+def plot_roc_hard_preds(hard_preds_list: List[HardPreds], save_dir: str, tp_or_tpr: str = "TP"):
     """
-    Adjust the predictions to achieve a target FPR, and sample the predictions for different FPR values.
-    :param pred: List of Predictions of the same attack but different seeds.
-    :return: List of Predictions at different FPR values.
-    """
-    adjusted_preds_arr = [pred.adjust_fpr(fpr) for fpr in FPR_SAMPLES]
-    adjusted_preds = [Predictions(pred_arr, pred.ground_truth_arr, pred.name + f"_{i}") for i, pred_arr in enumerate(adjusted_preds_arr)]
+    Plot the ROC curves for the hard predictions from different FPR values.
 
-    return adjusted_preds
+    Args:
+        hard_preds_list (List[HardPreds]): 
+        save_dir (str): _description_
+    """
+    for pred in hard_preds_list:
+        if tp_or_tpr == "TP":
+            plt.plot(pred._fprs, pred.get_tp(count=True), label=pred.name)
+        elif tp_or_tpr == "TPR":
+            plt.plot(pred._fprs, pred._tprs, label=pred.name)
+    
+    if tp_or_tpr == "TPR":
+        plt.semilogx()
+        plt.semilogy()
+        plt.xlim(1e-5, 1)
+        plt.ylim(1e-5, 1)
+    elif tp_or_tpr == "TP":
+        plt.semilogx()
+        plt.xlim(1e-5, 1)
+        plt.ylim(0, len(pred.get_tp()[0]))
+        # set y-axis to log scale
+        plt.yscale('log')
+    else:
+        raise ValueError("Invalid value for tp_or_tpr.")
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate") if tp_or_tpr == "TPR" else plt.ylabel("True Positive Count")
+    plt.plot([0, 1], [0, 1], ls='--', color='gray')
+    # plt.subplots_adjust(bottom=.18, left=.18, top=.96, right=.96)
+    plt.legend(fontsize=8)
+
+    os.makedirs(os.path.dirname(save_dir), exist_ok=True)
+    plt.savefig(save_dir, format="pdf")
+
+    plt.clf()
+
+
+    
