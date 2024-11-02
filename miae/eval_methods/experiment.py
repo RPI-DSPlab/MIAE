@@ -75,6 +75,16 @@ class ExperimentSet():
         return cls(target_dataset, attack_preds, fpr_to_adjust)
     
     
+    def batch_adjust_fpr(self, fpr_to_adjust):
+        """
+        adjust the FPR of all predictions in the experiment set
+        """
+        for attack_name in self.attack_preds.keys():
+            for seed in range(len(self.attack_preds[attack_name])):
+                self.attack_preds[attack_name][seed] = Predictions(self.attack_preds[attack_name][seed].adjust_fpr(fpr_to_adjust), self.attack_preds[attack_name][seed].ground_truth_arr, self.attack_preds[attack_name][seed].name)
+        self.adjusted_fpr = fpr_to_adjust
+    
+    
     def get_attack_names(self) -> List[str]:
         """
         return the list of attack names in the experiment set
@@ -90,7 +100,7 @@ class ExperimentSet():
 
     def get_preds_stability(self, attack_name: str) -> Predictions:
         """
-        retrieve the stability of the prediction for a specific attack. The stability is the intersection of the
+        retrieve the intersection(stability) of the prediction for a specific attack. The stability is the intersection of the
         TP of the predictions of all seeds.
         """
         list_of_base_pred = [self.attack_preds[attack_name][seed].pred_arr for seed in range(len(self.attack_preds[attack_name]))]
@@ -99,7 +109,7 @@ class ExperimentSet():
     
     def get_preds_coverage(self, attack_name: str) -> Predictions:
         """
-        retrieve the coverage of the prediction for a specific attack. The coverage is the union of the
+        retrieve the union(coverage) of the prediction for a specific attack. The coverage is the union of the
         TP of the predictions of all seeds.
         """
         list_of_base_pred = [self.attack_preds[attack_name][seed].pred_arr for seed in range(len(self.attack_preds[attack_name]))]
