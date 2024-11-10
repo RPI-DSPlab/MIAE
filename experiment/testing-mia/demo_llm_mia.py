@@ -34,7 +34,7 @@ def main():
     test = split_dateset['test']
 
     # Attack the model
-    # Default configuration
+    # Default configuration for minK attack
     default_config = {
         "experiment_name": "min_k_prob_attack_experiment",
         "base_model": "EleutherAI/pythia-160m",
@@ -58,7 +58,8 @@ def main():
         "batch_size": 50
     }
     mink_info = MinKAuxiliaryInfo(default_config)
-    mink_attack = MinKProbAttack(target_model, mink_info)
+    min_info_dict = mink_info.save_config_to_dict()
+    mink_attack = MinKProbAttack(target_model, min_info_dict)
     document = test[0]['text']
     inputs = tokenizer(document, return_tensors="pt").to(device)
     with torch.no_grad():
@@ -68,8 +69,8 @@ def main():
     tokens = tokenizer.tokenize(document)
 
     # Now call _attack
-    result = mink_attack._attack(document=document, probs=probs, tokens=tokens)
-    print(f"the result is {result}")
+    min_k_result = mink_attack._attack(document=document, probs=probs, tokens=tokens)
+    print(f"the minK result is {min_k_result}")
 
 
 

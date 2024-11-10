@@ -40,15 +40,15 @@ class MinKProbAttack(Attack):
             )
             probs = log_probs_data['all_token_log_probs']
 
+        probs = probs.squeeze(0).max(dim=-1).values
         ngram_probs = []
 
         # Calculate log prob for each n-gram based on the probs
         with torch.no_grad():
-            for i in range(0, probs.shape[0] - self.window + 1, self.stride):
+            for i in range(0, len(probs) - self.window + 1, self.stride):
                 ngram_prob = np.mean(probs[i:i + self.window].numpy())  # Average log prob for the window
                 ngram_probs.append(ngram_prob)
 
-        # Sort and select the top-k% probabilities (smallest values)
         min_k_probs = sorted(ngram_probs)[: int(len(ngram_probs) * self.k)]
         result = -np.mean(min_k_probs)
 
