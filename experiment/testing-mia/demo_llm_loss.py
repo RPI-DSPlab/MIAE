@@ -54,7 +54,7 @@ def main():
         "load_from_cache": False,
         "load_from_hf": True,
         "batch_size": 50,
-        "threshold": 0.5  # Adjust based on testing
+        "threshold": 2.6  # Adjust based on testing
     }
     
     loss_info = LossAttackAuxiliaryInfo(loss_attack_config)
