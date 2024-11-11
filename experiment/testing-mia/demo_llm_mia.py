@@ -1,6 +1,7 @@
 import os
 import torch
 import json
+import numpy as np
 import sys
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 from experiment.llm_models import get_model
@@ -14,6 +15,52 @@ current_dir = os.getcwd()
 attack_dir = os.path.join(current_dir, "attack")
 savedir = os.path.join(current_dir, "results")
 seed = 0
+
+
+def get_threshold(train_set, test_set, attack, tokenizer, device):
+    member_scores = []
+    non_member_scores = []
+
+    # Compute scores for the training set (members)
+    print(f"the length of the train set is: {len(train_set)}")
+    c1 = 0
+    for document in train_set:
+        if c1 % 100 == 0:
+            print(f"c1 is {c1}")
+        log_probs_data = attack.target_model.get_signal_llm(
+            text=document['text'],
+            no_grads=True,
+            return_all_probs=True
+        )
+        probs = torch.tensor(log_probs_data['all_token_log_probs'], device=device)
+        tokens = tokenizer.tokenize(document['text'])
+        score = attack._attack(document=document['text'], probs=probs, tokens=tokens)
+        member_scores.append(score)
+        c1 += 1
+
+    # Compute scores for the test set (non-members)
+    c2 = 0
+    print(f"the length of the test set is: {len(test_set)}")
+    for document in test_set:
+        if c2 % 100 == 0:
+            print(f"c2 is {c2}")
+        log_probs_data = attack.target_model.get_signal_llm(
+            text=document['text'],
+            no_grads=True,
+            return_all_probs=True
+        )
+        probs = torch.tensor(log_probs_data['all_token_log_probs'], device=device)
+        tokens = tokenizer.tokenize(document['text'])
+        score = attack._attack(document=document['text'], probs=probs, tokens=tokens)
+        non_member_scores.append(score)
+        c2 += 1
+
+    avg_member_score = np.mean(member_scores)
+    avg_non_member_score = np.mean(non_member_scores)
+    threshold = (avg_member_score + avg_non_member_score) / 2
+
+    return threshold
+
 
 def main():
     # set up
@@ -60,6 +107,10 @@ def main():
     mink_info = MinKAuxiliaryInfo(default_config)
     min_info_dict = mink_info.save_config_to_dict()
     mink_attack = MinKProbAttack(target_model, min_info_dict)
+
+    threshold = get_threshold(train, test, mink_attack, tokenizer, device)
+    print(f"the threshold is {threshold}")
+
     document = test[0]['text']
     inputs = tokenizer(document, return_tensors="pt").to(device)
     with torch.no_grad():
@@ -72,6 +123,10 @@ def main():
     min_k_result = mink_attack._attack(document=document, probs=probs, tokens=tokens)
     print(f"the minK result is {min_k_result}")
 
+    if min_k_result < threshold:
+        print("The document is classified as a member.")
+    else:
+        print("The document is classified as a non-member.")
 
 
 if __name__ == "__main__":
