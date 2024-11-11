@@ -299,6 +299,8 @@ class LLM_ModelAccess(ABC):
         with open(pickle_filename, 'wb') as f:
             pickle.dump(data_to_pickle, f)
 
+        return data_to_pickle
+    
     def to_device(self, device):
         """
         Move the model to the device.

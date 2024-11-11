@@ -42,6 +42,8 @@ class LossAttack(Attack):
         
         # Calculate the average loss over the document
         avg_loss = np.mean(losses)
+        # print(f"Losses: {losses}")
+        print(f"Average Loss: {avg_loss}")
         
         # Return membership prediction based on the threshold
         return int(avg_loss < self.threshold)  # 1 if member, 0 if non-member
@@ -56,6 +58,7 @@ class LossAttackAuxiliaryInfo(AuxiliaryInfo):
         :param config: Dictionary containing configuration parameters.
         """
         super().__init__(config)
+        self.config = config
         self.threshold = config.get("threshold", None)
         self.device = config.get("device", 'cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -64,4 +67,4 @@ class LossAttackAuxiliaryInfo(AuxiliaryInfo):
         Save the configuration to a dictionary.
         :return: Dictionary containing the configuration.
         """
-        return super().save_config_to_dict()
+        return self.config
