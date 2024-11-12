@@ -2,6 +2,8 @@ import os
 import torch
 import json
 import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_auc_score, roc_curve
 import sys
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 from experiment.llm_models import get_model
@@ -60,8 +62,28 @@ def get_threshold(train_set, test_set, attack, tokenizer, device):
     avg_non_member_score = np.mean(non_member_scores)
     threshold = (avg_member_score + avg_non_member_score) / 2
 
-    return threshold
+    return threshold, member_scores, non_member_scores
 
+def plot_auc_roc(member_scores, non_member_scores):
+    # Combine the scores and labels
+    scores = np.concatenate([member_scores, non_member_scores])
+    labels = np.concatenate([np.ones(len(member_scores)), np.zeros(len(non_member_scores))])
+
+    # Calculate AUC-ROC
+    auc_score = roc_auc_score(labels, scores)
+    fpr, tpr, _ = roc_curve(labels, scores)
+
+    # Plot the ROC curve
+    plt.figure()
+    plt.plot(fpr, tpr, color='blue', label=f'AUC = {auc_score:.4f}')
+    plt.plot([0, 1], [0, 1], color='grey', linestyle='--')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('ROC Curve for Membership Inference Attack')
+    plt.legend()
+    plt.show()
+
+    print(f"AUC-ROC Score: {auc_score}")
 
 def main():
     # set up
@@ -112,7 +134,7 @@ def main():
     min_info_dict = mink_info.save_config_to_dict()
     mink_attack = MinKProbAttack(target_model, min_info_dict)
 
-    threshold = get_threshold(train, test, mink_attack, tokenizer, device)
+    threshold, member_score, non_member_score = get_threshold(train, test, mink_attack, tokenizer, device)
     print(f"the threshold is {threshold}")
 
     document = test[0]['text']
@@ -128,9 +150,12 @@ def main():
     print(f"The minK result is: {min_k_result} \n")
 
     if min_k_result < threshold:
-        print("The document is classified as a member.")
+        print("For minK, the document is classified as a member.")
     else:
-        print("The document is classified as a non-member.")
+        print("For minK, the document is classified as a non-member.")
+
+    # Plot the AUC-ROC curve
+    plot_auc_roc(member_score, non_member_score)
 
     print("Running the loss attack")
 
