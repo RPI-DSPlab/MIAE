@@ -1,8 +1,6 @@
-
-
 import os
 import torch
-import json
+from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_auc_score, roc_curve
@@ -16,59 +14,12 @@ from miae.attacks_on_llm.mink import MinKProbAttack, MinKAuxiliaryInfo
 from miae.attacks_on_llm.loss import LossAttack, LossAttackAuxiliaryInfo
 
 
+
 current_dir = os.getcwd()
 attack_dir = os.path.join(current_dir, "attack")
 savedir = os.path.join(current_dir, "results")
 seed = 0
 
-
-def get_scores(train_set, test_set, attack, device):
-    member_scores = []
-    non_member_scores = []
-
-    for idx, document in enumerate(train_set):
-        if isinstance(attack, LossAttack):
-            tokens = attack.target_model.tokenizer.encode(document['text'])
-            score = attack._attack(document=document['text'], tokens=tokens)
-            member_scores.append(score)
-        elif isinstance(attack, MinKProbAttack):
-            log_probs_data = attack.target_model.get_signal_llm(
-                text=document['text'],
-                no_grads=True,
-                return_all_probs=True
-            )
-            probs = torch.tensor(log_probs_data['all_token_log_probs'], device=device)
-            score = attack._attack(document=document['text'], probs=probs)
-            member_scores.append(score)
-        print(f"Processed train document {idx + 1}/{len(train_set)}")
-    print(f"in get_scores: member_scores for {attack}: {member_scores[:5]}")
-
-    for idx, document in enumerate(test_set):
-        if isinstance(attack, LossAttack):
-            tokens = attack.target_model.tokenizer.encode(document['text'])
-            score = attack._attack(document=document['text'], tokens=tokens)
-            non_member_scores.append(score)
-        elif isinstance(attack, MinKProbAttack):
-            log_probs_data = attack.target_model.get_signal_llm(
-                text=document['text'],
-                no_grads=True,
-                return_all_probs=True
-            )
-            probs = torch.tensor(log_probs_data['all_token_log_probs'], device=device)
-            score = attack._attack(document=document['text'], probs=probs)
-            non_member_scores.append(score)
-        print(f"Processed test document {idx + 1}/{len(test_set)}")
-
-    if isinstance(attack, MinKProbAttack):
-        best_threshold = attack.get_threshold(train_set, device)
-        print(f"best threshold: {best_threshold}")
-        member_classifications = [1 if score < best_threshold else 0 for score in member_scores]
-        non_member_classifications = [0 if score < best_threshold else 1 for score in non_member_scores]
-    else:
-        member_classifications = []
-        non_member_classifications = []
-
-    return member_scores, non_member_scores, member_classifications, non_member_classifications
 
 def plot_auc_roc(attack, member_scores, non_member_scores, save_path):
     """
@@ -130,9 +81,11 @@ def run_minK_attack(attack_config, target_model, train_set, test_set, device):
     mink_attack = MinKProbAttack(target_model, min_info_dict)
 
     member_scores = []
+    labels = []
     non_member_scores = []
 
-    for idx, document in enumerate(train_set):
+    # Use tqdm to display progress for the train set
+    for idx, document in enumerate(tqdm(train_set, desc="Processing Train Set")):
         log_probs_data = mink_attack.target_model.get_signal_llm(
             text=document['text'],
             no_grads=True,
@@ -141,9 +94,11 @@ def run_minK_attack(attack_config, target_model, train_set, test_set, device):
         probs = torch.tensor(log_probs_data['all_token_log_probs'], device=device)
         score = mink_attack._attack(document=document['text'], probs=probs)
         member_scores.append(score)
-        print(f"Processed train document {idx + 1}/{len(train_set)}")
+        labels.append(1)
 
-    for idx, document in enumerate(test_set):
+
+    # Use tqdm to display progress for the test set
+    for idx, document in enumerate(tqdm(test_set, desc="Processing Test Set")):
         log_probs_data = mink_attack.target_model.get_signal_llm(
             text=document['text'],
             no_grads=True,
@@ -152,23 +107,18 @@ def run_minK_attack(attack_config, target_model, train_set, test_set, device):
         probs = torch.tensor(log_probs_data['all_token_log_probs'], device=device)
         score = mink_attack._attack(document=document['text'], probs=probs)
         non_member_scores.append(score)
-        print(f"Processed test document {idx + 1}/{len(test_set)}")
 
-    best_threshold = mink_attack.get_threshold(train_set, device)
+    best_threshold = mink_attack.find_optimal_threshold(member_scores, labels)
     member_classifications = [1 if score < best_threshold else 0 for score in member_scores]
     non_member_classifications = [0 if score < best_threshold else 1 for score in non_member_scores]
 
     # Plot the AUC-ROC curve
+    print("Ready to plot AUC ROC")
     save_path = "/data/public/llm_mia_comp/demo_results/graphs/auc_roc_mink.png"
-    auc_score = plot_auc_roc(member_scores, non_member_scores, save_path)
+    auc_score = plot_auc_roc("Min K", member_scores, non_member_scores, save_path)
 
     print("MinK Attack Results:")
     print(f"AUC-ROC Score: {auc_score}")
-    print(f"Member Scores: {member_scores[:5]}")
-    print(f"Non-Member Scores: {non_member_scores[:5]}")
-    print(f"Best threshold: {best_threshold}")
-    print(f"Total member count: {sum(member_classifications)}")
-    print(f"Total non-member count: {len(non_member_classifications) - sum(non_member_classifications)}")
 
 def run_loss_attack(attack_config, target_model, train_set, test_set):
     loss_info = LossAttackAuxiliaryInfo(attack_config)
@@ -178,12 +128,14 @@ def run_loss_attack(attack_config, target_model, train_set, test_set):
     member_scores = []
     non_member_scores = []
 
-    for idx, document in enumerate(train_set):
+    # Use tqdm to display progress for the train set
+    for idx, document in enumerate(tqdm(train_set, desc="Processing Train Set for LOSS")):
         tokens = loss_attack.target_model.tokenizer.encode(document['text'])
         score = loss_attack._attack(document=document['text'], tokens=tokens)
         member_scores.append(score)
 
-    for idx, document in enumerate(test_set):
+    # Use tqdm to display progress for the test set
+    for idx, document in enumerate(tqdm(test_set, desc="Processing Test Set for LOSS")):
         tokens = loss_attack.target_model.tokenizer.encode(document['text'])
         score = loss_attack._attack(document=document['text'], tokens=tokens)
         non_member_scores.append(score)
@@ -194,16 +146,10 @@ def run_loss_attack(attack_config, target_model, train_set, test_set):
 
     # Plot the AUC-ROC curve
     save_path = "/data/public/llm_mia_comp/demo_results/graphs/auc_roc_loss.png"
-    auc_score = plot_auc_roc(member_scores, non_member_scores, save_path)
+    auc_score = plot_auc_roc("LOSS", member_scores, non_member_scores, save_path)
 
-    print("MinK Attack Results:")
+    print("Loss Attack Results:")
     print(f"AUC-ROC Score: {auc_score}")
-    print(f"Member Scores: {member_scores[:5]}")
-    print(f"Non-Member Scores: {non_member_scores[:5]}")
-    print(f"Threshold: {threshold}")
-    print(f"Total member count: {sum(member_classifications)}")
-    print(f"Total non-member count: {len(non_member_classifications) - sum(non_member_classifications)}")
-
 
 
 def main():
@@ -278,20 +224,12 @@ def main():
     run_loss_attack(loss_config, target_model, train, test)
     print("\n")
 
-    # Run Loss attack over the entire test dataset
-    # loss_results = []
-    # for idx, document in enumerate(test):
-    #     tokens = tokenizer.encode(document['text'])
-    #     result = loss_attack._attack(document=document['text'], tokens=tokens)
-    #     loss_results.append(result)
-    #     print(f"Processed Loss attack on test document {idx + 1}/{len(test)}")
-
-
-
 
 
 if __name__ == "__main__":
-    print(torch.__version__)
+    # print(torch.__version__)
     print(torch.cuda.is_available())
+    # print(torch.version.cuda)  # Should print a version like '12.2'
+    # print(torch.backends.cudnn.enabled)  # Should print True if cuDNN is availa
 
     main()

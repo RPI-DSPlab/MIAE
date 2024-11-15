@@ -39,8 +39,8 @@ class LossAttack(Attack):
 
         # Calculate the average loss over the document
         avg_loss = np.mean(losses)
-        print(f"Average Loss (Likelihood Score): {avg_loss}")
-        print(f"Normalized Probability-Like Score: {np.exp(-avg_loss)}")
+        # print(f"Average Loss (Likelihood Score): {avg_loss}")
+        # print(f"Normalized Probability-Like Score: {np.exp(-avg_loss)}")
 
         # Return the continuous likelihood score directly
         return avg_loss  # Higher score indicates lower likelihood, i.e., more likely non-member

@@ -166,3 +166,16 @@ miae/samples/
 *.pkl
 *.json
 *.txt
+experiment/testing-mia/pythia-160m/step3000/.locks/models--EleutherAI--pythia-160m/1a8b2063777e5ad5cf7cef9b9c14bcfefb460bfc267e1fb00a3a9afaff048e9f.lock
+experiment/testing-mia/pythia-160m/step3000/.locks/models--EleutherAI--pythia-160m/0204ed10c186a4c7c68f55dff8f26087a45898d6.lock
+experiment/testing-mia/pythia-160m/step3000/.locks/models--EleutherAI--pythia-160m/b8368ff94f3bcf3088de5e9912251fc0208ae524.lock
+experiment/testing-mia/pythia-160m/step3000/.locks/models--EleutherAI--pythia-160m/b55403a0ae8108a8b375ac24fa3be92a15f1f0db.lock
+experiment/testing-mia/pythia-160m/step3000/.locks/models--EleutherAI--pythia-160m/f74dfbfab8f97770a87769c739fb080c21c8bacc.lock
+experiment/testing-mia/pythia-160m/step3000/models--EleutherAI--pythia-160m/snapshots/be18c5a92331ee42b5755fe8de0817acf9f1b580/pytorch_model.bin
+experiment/testing-mia/pythia-160m/step3000/models--EleutherAI--pythia-160m/refs/step3000
+experiment/testing-mia/pythia-160m/step3000/models--EleutherAI--pythia-160m/blobs/f74dfbfab8f97770a87769c739fb080c21c8bacc
+experiment/testing-mia/pythia-160m/step3000/models--EleutherAI--pythia-160m/blobs/b55403a0ae8108a8b375ac24fa3be92a15f1f0db
+experiment/testing-mia/pythia-160m/step3000/models--EleutherAI--pythia-160m/blobs/b8368ff94f3bcf3088de5e9912251fc0208ae524
+experiment/testing-mia/pythia-160m/step3000/models--EleutherAI--pythia-160m/blobs/0204ed10c186a4c7c68f55dff8f26087a45898d6
+experiment/testing-mia/pythia-160m/step3000/models--EleutherAI--pythia-160m/blobs/1a8b2063777e5ad5cf7cef9b9c14bcfefb460bfc267e1fb00a3a9afaff048e9f
+experiment/testing-mia/pythia-160m/step3000/models--EleutherAI--pythia-160m/.no_exist/be18c5a92331ee42b5755fe8de0817acf9f1b580/model.safetensors

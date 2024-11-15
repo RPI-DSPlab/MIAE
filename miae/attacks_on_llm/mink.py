@@ -52,7 +52,7 @@ class MinKProbAttack(Attack):
 
         return -np.mean(min_k_probs)
 
-    def _find_optimal_threshold(self, scores, labels):
+    def find_optimal_threshold(self, scores, labels):
         """
         Find the optimal threshold that maximizes detection accuracy.
 
@@ -85,7 +85,6 @@ class MinKProbAttack(Attack):
         labels = []
 
         for document in train_set:
-            # Directly use the raw text
             log_probs_data = self.target_model.get_signal_llm(
                 text=document['text'],
                 no_grads=True,
@@ -96,10 +95,9 @@ class MinKProbAttack(Attack):
             # Calculate the Min-K% probability score
             score = self._attack(document=document['text'], probs=probs)
             scores.append(score)
-            labels.append(1)  # Assume all samples in the training set are members
+            labels.append(1)  
 
-        # Use a method to find the optimal threshold (e.g., maximize accuracy)
-        best_threshold = self._find_optimal_threshold(scores, labels)
+        best_threshold = self.find_optimal_threshold(scores, labels)
         self.threshold = best_threshold
         return best_threshold
 
