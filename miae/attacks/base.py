@@ -10,6 +10,7 @@ from typing import Optional
 from miae.attacks.attack_classifier import *
 from transformers import AutoTokenizer, AutoModelForQuestionAnswering
 
+
 class ModelAccessType(Enum):
     """ Enum class for model access type. """
     WHITE_BOX = "white_box"
@@ -17,11 +18,13 @@ class ModelAccessType(Enum):
     GRAY_BOX = "gray_box"
     LABEL_ONLY = "label_only"
 
+
 class AttackTrainingSet(Dataset):
     """
     A dataset class for training the attack model. (for shokri, Boundary) It's designed to be used
     with MiAUtils.train_attack_model, as the AttackTrainingSet[1] is class label
     """
+
     def __init__(self, predictions, class_labels, in_out):
         self.predictions = predictions  # Prediction values
         self.class_labels = class_labels  # Class labels
@@ -42,6 +45,7 @@ class AttackTrainingSet(Dataset):
         in_out_indicator = self.in_out[idx]
 
         return prediction, class_label, in_out_indicator
+
 
 class AuxiliaryInfo(ABC):
     """
@@ -145,7 +149,6 @@ class ModelAccess(ABC):
         self.model.eval()
         all_logits = []
 
-
         with torch.inference_mode():
             for images, _ in dataloader:
                 images = images.to(device)
@@ -185,8 +188,6 @@ class ModelAccess(ABC):
         all_logits = all_logits.unsqueeze(1)
         return all_logits
 
-
-
     def __call__(self, data):
         return self.get_signal(data)
 
@@ -216,6 +217,7 @@ class ModelAccess(ABC):
         """
         self.model.eval()
 
+
 class LLM_ModelAccess(ABC):
     def __init__(self, model, tokenizer, device):
         self.model = model
@@ -223,8 +225,8 @@ class LLM_ModelAccess(ABC):
         self.device = device
 
     def get_signal_llm(self, text: Optional[str] = None, tokens: Optional[np.ndarray] = None, no_grads: bool = True,
-                        return_all_probs: bool = False,
-                        pickle_filename: str = 'log_probs.pkl'):
+                       return_all_probs: bool = False,
+                       pickle_filename: str = 'log_probs.pkl'):
         """
         Get the log probabilities for a text under the current model and store them in a pickle file.
         :param text: The input text for which to calculate probabilities.
@@ -300,7 +302,7 @@ class LLM_ModelAccess(ABC):
             pickle.dump(data_to_pickle, f)
 
         return data_to_pickle
-    
+
     def to_device(self, device):
         """
         Move the model to the device.
@@ -394,7 +396,6 @@ class MiAttack(ABC):
         with open(path, 'wb') as f:
             pickle.dump(self, f)
 
-
     @staticmethod
     def load(path: str) -> 'MiAttack':
         """
@@ -421,9 +422,8 @@ class MIAUtils:
         if print_flag:
             print(msg)
 
-
     @classmethod
-    def generate_keeps_lira(cls, dataset_size: int, num_experiment: int, expid:int):
+    def generate_keeps_lira(cls, dataset_size: int, num_experiment: int, expid: int):
         """
         This function generates the keeps for lira and all lira-inspired attacks. It generates keeps
         array to represent the index of datapoints is used for training for this experiment. This
@@ -443,7 +443,8 @@ class MIAUtils:
         return np.where(keep), np.where(~keep)
 
     @classmethod
-    def train_shadow_model(cls, shadow_model, shadow_train_loader, shadow_test_loader, aux_info: AuxiliaryInfo) -> torch.nn.Module:
+    def train_shadow_model(cls, shadow_model, shadow_train_loader, shadow_test_loader,
+                           aux_info: AuxiliaryInfo) -> torch.nn.Module:
         """
         Train the shadow model. (for shokri, Yeom, Boundary)
         :param shadow_model: the shadow model.
@@ -497,12 +498,14 @@ class MIAUtils:
                         total_samples += labels.size(0)
                     train_accuracy = train_correct_predictions / total_samples
 
-                cls.log(aux_info, f"Epoch {epoch}, train_acc: {train_accuracy * 100:.2f}%, test_acc: {test_accuracy * 100:.2f}%, Loss:"
+                cls.log(aux_info,
+                        f"Epoch {epoch}, train_acc: {train_accuracy * 100:.2f}%, test_acc: {test_accuracy * 100:.2f}%, Loss:"
                         f"{train_loss:.4f}, lr: {scheduler.get_last_lr()[0]:.4f}", print_flag=True)
         return shadow_model
 
     @classmethod
-    def train_attack_model(cls, attack_model, attack_train_loader, attack_test_loader, aux_info: AuxiliaryInfo) -> torch.nn.Module:
+    def train_attack_model(cls, attack_model, attack_train_loader, attack_test_loader,
+                           aux_info: AuxiliaryInfo) -> torch.nn.Module:
         """
         Train the attack model. (for shokri, Boundary) Note that loader must be AttackTrainingSet.
         :param attack_model: the attack model.
@@ -557,9 +560,12 @@ class MIAUtils:
                     train_acc = correct / total
 
                 if attack_test_loader != None:
-                    cls.log(aux_info, f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, test_acc: {test_acc * 100:.2f}%, Loss: {train_loss:.4f}", print_flag=True)
+                    cls.log(aux_info,
+                            f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, test_acc: {test_acc * 100:.2f}%, Loss: {train_loss:.4f}",
+                            print_flag=True)
                 else:
-                    cls.log(aux_info, f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, Loss: {train_loss:.4f}", print_flag=True)
+                    cls.log(aux_info, f"Epoch: {epoch}, train_acc: {train_acc * 100:.2f}%, Loss: {train_loss:.4f}",
+                            print_flag=True)
 
         return attack_model
 

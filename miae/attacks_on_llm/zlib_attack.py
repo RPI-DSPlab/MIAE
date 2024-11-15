@@ -42,7 +42,7 @@ class ZLIBAttack(Attack):
 
         with torch.no_grad():
             losses = [-log_prob for log_prob in target_token_log_probs]
-        
+
         avg_loss = np.mean(losses)
 
         # Step 2: Apply ZLIB compression to the document text
@@ -60,6 +60,7 @@ class ZLIBAuxiliaryInfo(AuxiliaryInfo):
     """
     Class to encapsulate the configuration for the ZLIB Attack.
     """
+
     def __init__(self, config):
         """
         Initialize the ZLIBAuxiliaryInfo with the provided configuration dictionary.

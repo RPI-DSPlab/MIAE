@@ -2,13 +2,14 @@ from transformers import GPTNeoXForCausalLM, AutoTokenizer
 
 
 # Get models
-def get_model(model_name):
+def get_model(model_name, device):
     if model_name == 'pythia_160m':
         model = GPTNeoXForCausalLM.from_pretrained(
             "EleutherAI/pythia-160m",
             revision="step3000",
             cache_dir="./pythia-160m/step3000",
         )
+        model.to(device)
 
         tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/pythia-160m",
@@ -21,6 +22,7 @@ def get_model(model_name):
             revision="step3000",
             cache_dir="./pythia-1_4b/step3000",
         )
+        model.to(device)
 
         tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/pythia-1.4b",
@@ -33,6 +35,7 @@ def get_model(model_name):
             revision="step3000",
             cache_dir="./pythia-2_8b/step3000",
         )
+        model.to(device)
 
         tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/pythia-2.8b",
@@ -45,6 +48,7 @@ def get_model(model_name):
             revision="step3000",
             cache_dir="./pythia-6_9b/step3000",
         )
+        model.to(device)
 
         tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/pythia-6.9b",
@@ -57,6 +61,7 @@ def get_model(model_name):
             revision="step3000",
             cache_dir="./pythia-12b/step3000",
         )
+        model.to(device)
 
         tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/pythia-12b",
@@ -69,6 +74,7 @@ def get_model(model_name):
             revision="step3000",
             cache_dir="./pythia-160m-deduped/step3000",
         )
+        model.to(device)
 
         tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/pythia-160m-deduped",
@@ -81,6 +87,7 @@ def get_model(model_name):
             revision="step3000",
             cache_dir="./pythia-1_4b_deduped/step3000",
         )
+        model.to(device)
 
         tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/pythia-1.4b-deduped",
@@ -93,6 +100,7 @@ def get_model(model_name):
             revision="step3000",
             cache_dir="./pythia-2_8b_deduped/step3000",
         )
+        model.to(device)
 
         tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/pythia-2.8b-deduped",
@@ -105,6 +113,7 @@ def get_model(model_name):
             revision="step3000",
             cache_dir="./pythia-6_9b_deduped/step3000",
         )
+        model.to(device)
 
         tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/pythia-6.9b-deduped",
@@ -117,6 +126,7 @@ def get_model(model_name):
             revision="step3000",
             cache_dir="./pythia-12b_deduped/step3000",
         )
+        model.to(device)
 
         tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/pythia-12b-deduped",
