@@ -1,5 +1,5 @@
 import numpy as np
-import torch as ch
+import torch
 import zlib
 from miae.attacks.base import ModelAccessType, AuxiliaryInfo
 from miae.attacks_on_llm.all_attacks import Attack
@@ -28,19 +28,27 @@ class ZLIBAttack(Attack):
 
         :return: ZLIB-normalized likelihood score.
         """
-        # Compute model loss (likelihood)
-        loss = self.target_model.get_signal_llm(
+         # Retrieve log probabilities for each token in the document
+        log_probs_data = self.target_model.get_signal_llm(
             text=document,
             tokens=tokens,
             no_grads=True,
             return_all_probs=False
-        )['loss']
+        )
+        target_token_log_probs = log_probs_data['target_token_log_probs']
 
+        # Convert log probabilities to losses (negative log likelihoods)
+        with torch.no_grad():
+            losses = [-log_prob for log_prob in target_token_log_probs]
+
+        # Calculate the average loss over the document
+        avg_loss = np.mean(losses)
+        
         # Compute zlib compression entropy of the document
         zlib_entropy = len(zlib.compress(bytes(document, "utf-8")))
 
         # Normalize the loss using zlib entropy
-        zlib_normalized_score = loss / zlib_entropy
+        zlib_normalized_score = avg_loss / zlib_entropy
 
         return zlib_normalized_score
 
@@ -58,7 +66,7 @@ class ZLIBAttackAuxiliaryInfo(AuxiliaryInfo):
         """
         super().__init__(config)
         self.config = config
-        self.device = config.get("device", 'cuda' if ch.cuda.is_available() else 'cpu')
+        self.device = config.get("device", 'cuda' if torch.cuda.is_available() else 'cpu')
 
     def save_config_to_dict(self):
         """

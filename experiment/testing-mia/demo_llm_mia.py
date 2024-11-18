@@ -167,7 +167,7 @@ def run_zlib_attack(attack_config, target_model, train_set, test_set, device):
         member_scores.append(score)
         
     # Use tqdm to display progress for the test set
-    for idx, document in enumerate(tqdm(test_set, desc="Processing Test Set for LOSS")):
+    for idx, document in enumerate(tqdm(test_set, desc="Processing Test Set for ZLIB")):
         tokens = zlib_attack.target_model.tokenizer.encode(document['text'])
         score = zlib_attack._attack(document=document['text'], tokens=tokens)
         non_member_scores.append(score)
@@ -280,6 +280,7 @@ def main():
         "load_from_cache": False,
         "load_from_hf": True,
         "batch_size": 50,
+        "threshold" : 2.6,
     }
     run_zlib_attack(zlib_config, target_model, train, test, device)
     print("\n")
