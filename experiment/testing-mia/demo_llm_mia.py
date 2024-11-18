@@ -13,6 +13,7 @@ from miae.attacks.base import LLM_ModelAccess
 from miae.attacks_on_llm.mink import MinKProbAttack, MinKAuxiliaryInfo
 from miae.attacks_on_llm.loss import LossAttack, LossAttackAuxiliaryInfo
 from miae.attacks_on_llm.zlib import ZLIBAttack, ZLIBAttackAuxiliaryInfo
+from miae.attacks_on_llm.mink_pp import MinKProbAttackPlusPlus, MinKAuxiliaryInfoPlusPlus
 
 
 
@@ -115,7 +116,7 @@ def run_minK_attack(attack_config, target_model, train_set, test_set, device):
 
     # Plot the AUC-ROC curve
     print("Ready to plot AUC ROC")
-    save_path = "/data/public/llm_mia_comp/demo_results/graphs/auc_roc_mink.png"
+    save_path = "/data/public/llm_mia_comp/demo_results/graphs/github/auc_roc_mink.png"
     auc_score = plot_auc_roc("Min K", member_scores, non_member_scores, save_path)
 
     print("MinK Attack Results:")
@@ -146,7 +147,7 @@ def run_loss_attack(attack_config, target_model, train_set, test_set):
     non_member_classifications = [0 if score < threshold else 1 for score in non_member_scores]
 
     # Plot the AUC-ROC curve
-    save_path = "/data/public/llm_mia_comp/demo_results/graphs/auc_roc_loss.png"
+    save_path = "/data/public/llm_mia_comp/demo_results/graphs/github/auc_roc_loss.png"
     auc_score = plot_auc_roc("LOSS", member_scores, non_member_scores, save_path)
 
     print("Loss Attack Results:")
@@ -177,13 +178,67 @@ def run_zlib_attack(attack_config, target_model, train_set, test_set, device):
     non_member_classifications = [0 if score < threshold else 1 for score in non_member_scores]
 
     # Plot the AUC-ROC curve
-    save_path = "/data/public/llm_mia_comp/demo_results/graphs/auc_roc_zlib.png"
+    save_path = "/data/public/llm_mia_comp/demo_results/graphs/github/auc_roc_zlib.png"
     auc_score = plot_auc_roc("ZLIB", member_scores, non_member_scores, save_path)
 
     print("ZLIB Attack Results:")
     print(f"AUC-ROC Score: {auc_score}")
     
+def run_mink_pp_attack(attack_config, target_model, train_set, test_set, device):
+    """
+    Run the MinK++ attack on the target model.
 
+    :param attack_config: The configuration for the attack
+    :param target_model: The target model to attack
+    :param train_set: The training set to use
+    :param test_set: The test set to use
+    :param device: The device to use
+    """
+    # Initialize MinK++ Auxiliary Info and Attack
+    mink_info = MinKAuxiliaryInfoPlusPlus(attack_config)
+    min_info_dict = mink_info.save_config_to_dict()
+    mink_attack = MinKProbAttackPlusPlus(target_model, min_info_dict)
+
+    member_scores = []
+    labels = []
+    non_member_scores = []
+
+    # Use tqdm to display progress for the train set
+    for idx, document in enumerate(tqdm(train_set, desc="Processing Train Set")):
+        log_probs_data = mink_attack.target_model.get_signal_llm(
+            text=document['text'],
+            no_grads=True,
+            return_all_probs=True
+        )
+        probs = torch.tensor(log_probs_data['all_token_log_probs'], device=device)
+        score = mink_attack._attack(document=document['text'], probs=probs)
+        member_scores.append(score)
+        labels.append(1)
+
+    # Use tqdm to display progress for the test set
+    for idx, document in enumerate(tqdm(test_set, desc="Processing Test Set")):
+        log_probs_data = mink_attack.target_model.get_signal_llm(
+            text=document['text'],
+            no_grads=True,
+            return_all_probs=True
+        )
+        probs = torch.tensor(log_probs_data['all_token_log_probs'], device=device)
+        score = mink_attack._attack(document=document['text'], probs=probs)
+        non_member_scores.append(score)
+
+    # Find the best threshold using the enhanced method
+    best_threshold = mink_attack.find_optimal_threshold(member_scores, labels)
+    member_classifications = [1 if score < best_threshold else 0 for score in member_scores]
+    non_member_classifications = [0 if score < best_threshold else 1 for score in non_member_scores]
+
+    # Plot the AUC-ROC curve
+    print("Ready to plot AUC ROC")
+    save_path = "/data/public/llm_mia_comp/demo_results/graphs/github/auc_roc_mink_plus_plus.png"
+    auc_score = plot_auc_roc("Min K++", member_scores, non_member_scores, save_path)
+
+    # Output results
+    print("MinK++ Attack Results:")
+    print(f"AUC-ROC Score: {auc_score}")
 
 def main():
     # Set up
@@ -198,7 +253,7 @@ def main():
 
     # Load the dataset
     cache_dir = "/data/public/huggingface_datasets"
-    split_dataset = load_mimir_dataset("arxiv", "ngram_13_0.8", cache_dir, test_size=0.5, seed=1)
+    split_dataset = load_mimir_dataset("github", "ngram_13_0.8", cache_dir, test_size=0.5, seed=1)
     train = split_dataset['train']
     test = split_dataset['test']
 
@@ -258,9 +313,37 @@ def main():
 #     print("\n")
 
     # ZLib Attack
-    print("Running the ZLIB Attack")
-    zlib_config = {
-        "experiment_name": "zlib_attack_experiment",
+    # print("Running the ZLIB Attack")
+    # zlib_config = {
+    #     "experiment_name": "zlib_attack_experiment",
+    #     "base_model": "EleutherAI/pythia-160m",
+    #     "dataset_member": "the_pile",
+    #     "dataset_nonmember": "the_pile",
+    #     "min_words": 100,
+    #     "max_words": 200,
+    #     "max_tokens": 512,
+    #     "max_data": 100000,
+    #     "output_name": "zlib_attack_results",
+    #     "n_samples": 1000,
+    #     "blackbox_attacks": ["zlib"],
+    #     "env_config": {
+    #         "results": "results_zlib",
+    #         "device": "cuda:0",
+    #         "device_aux": "cuda:0"
+    #     },
+    #     "dump_cache": False,
+    #     "load_from_cache": False,
+    #     "load_from_hf": True,
+    #     "batch_size": 50,
+    #     "threshold" : 2.6,
+    # }
+    # run_zlib_attack(zlib_config, target_model, train, test, device)
+    # print("\n")
+
+    # MinK Attack
+    print("Running the MinK Plus Plus attack")
+    mink_config = {
+        "experiment_name": "min_k_pp_prob_attack_experiment",
         "base_model": "EleutherAI/pythia-160m",
         "dataset_member": "the_pile",
         "dataset_nonmember": "the_pile",
@@ -268,21 +351,20 @@ def main():
         "max_words": 200,
         "max_tokens": 512,
         "max_data": 100000,
-        "output_name": "zlib_attack_results",
+        "output_name": "min_k_pp_prob_attack_results",
         "n_samples": 1000,
-        "blackbox_attacks": ["zlib"],
+        "blackbox_attacks": ["min_k_pp"],
         "env_config": {
-            "results": "results_zlib",
+            "results": "results_mink_pp",
             "device": "cuda:0",
             "device_aux": "cuda:0"
         },
         "dump_cache": False,
         "load_from_cache": False,
         "load_from_hf": True,
-        "batch_size": 50,
-        "threshold" : 2.6,
+        "batch_size": 50
     }
-    run_zlib_attack(zlib_config, target_model, train, test, device)
+    run_mink_pp_attack(mink_config, target_model, train, test, device)
     print("\n")
 
 if __name__ == "__main__":
