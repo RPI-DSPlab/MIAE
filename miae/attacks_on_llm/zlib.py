@@ -49,8 +49,29 @@ class ZLIBAttack(Attack):
 
         # Normalize the loss using zlib entropy
         zlib_normalized_score = avg_loss / zlib_entropy
-
         return zlib_normalized_score
+    
+    def find_optimal_threshold(self, scores, labels):
+        """
+        Find the optimal threshold that maximizes detection accuracy.
+
+        :param scores: List of Zlib scores.
+        :param labels: List of labels (1 for member, 0 for non-member).
+        :return: The optimal threshold value.
+        """
+        # Example approach: Choose a threshold that maximizes accuracy
+        best_threshold = 0.0
+        best_accuracy = 0.0
+
+        for threshold in np.linspace(min(scores), max(scores), 100):
+            predictions = [1 if score > threshold else 0 for score in scores]
+            accuracy = np.mean([pred == label for pred, label in zip(predictions, labels)])
+            if accuracy > best_accuracy:
+                best_accuracy = accuracy
+                best_threshold = threshold
+
+        return best_threshold
+
 
 
 class ZLIBAttackAuxiliaryInfo(AuxiliaryInfo):

@@ -166,14 +166,15 @@ def run_zlib_attack(attack_config, target_model, train_set, test_set, device):
         tokens = zlib_attack.target_model.tokenizer.encode(document['text'])
         score = zlib_attack._attack(document=document['text'], tokens=tokens)
         member_scores.append(score)
-        
+        labels.append(1)
+
     # Use tqdm to display progress for the test set
     for idx, document in enumerate(tqdm(test_set, desc="Processing Test Set for ZLIB")):
         tokens = zlib_attack.target_model.tokenizer.encode(document['text'])
         score = zlib_attack._attack(document=document['text'], tokens=tokens)
         non_member_scores.append(score)
 
-    threshold = attack_config['threshold']
+    threshold = zlib_attack.find_optimal_threshold(member_scores, labels)
     member_classifications = [1 if score < threshold else 0 for score in member_scores]
     non_member_classifications = [0 if score < threshold else 1 for score in non_member_scores]
 
@@ -284,33 +285,33 @@ def main():
 #     run_minK_attack(mink_config, target_model, train, test, device)
 #     print("\n")
 
-#    # Loss Attack
-#     print("Running the Loss Attack")
-#     loss_config = {
-#         "experiment_name": "loss_attack_experiment",
-#         "base_model": "EleutherAI/pythia-160m",
-#         "dataset_member": "the_pile",
-#         "dataset_nonmember": "the_pile",
-#         "min_words": 100,
-#         "max_words": 200,
-#         "max_tokens": 512,
-#         "max_data": 100000,
-#         "output_name": "loss_attack_results",
-#         "n_samples": 1000,
-#         "blackbox_attacks": ["loss"],
-#         "env_config": {
-#             "results": "results_loss",
-#             "device": "cuda:0",
-#             "device_aux": "cuda:0"
-#         },
-#         "dump_cache": False,
-#         "load_from_cache": False,
-#         "load_from_hf": True,
-#         "batch_size": 50,
-#         "threshold": 2.6  # Adjust based on testing
-#     }
-#     run_loss_attack(loss_config, target_model, train, test)
-#     print("\n")
+   # Loss Attack
+    print("Running the Loss Attack")
+    loss_config = {
+        "experiment_name": "loss_attack_experiment",
+        "base_model": "EleutherAI/pythia-160m",
+        "dataset_member": "the_pile",
+        "dataset_nonmember": "the_pile",
+        "min_words": 100,
+        "max_words": 200,
+        "max_tokens": 512,
+        "max_data": 100000,
+        "output_name": "loss_attack_results",
+        "n_samples": 1000,
+        "blackbox_attacks": ["loss"],
+        "env_config": {
+            "results": "results_loss",
+            "device": "cuda:0",
+            "device_aux": "cuda:0"
+        },
+        "dump_cache": False,
+        "load_from_cache": False,
+        "load_from_hf": True,
+        "batch_size": 50,
+        "threshold": .5  # Adjust based on testing
+    }
+    run_loss_attack(loss_config, target_model, train, test)
+    print("\n")
 
     # ZLib Attack
     # print("Running the ZLIB Attack")
