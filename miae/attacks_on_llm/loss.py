@@ -43,7 +43,8 @@ class LossAttack(Attack):
         # print(f"Normalized Probability-Like Score: {np.exp(-avg_loss)}")
 
         # Return the continuous likelihood score directly
-        return avg_loss  # Higher score indicates lower likelihood, i.e., more likely non-member
+        return np.exp(-avg_loss)
+        # return avg_loss  # Higher score indicates lower likelihood, i.e., more likely non-member
 
 
 class LossAttackAuxiliaryInfo(AuxiliaryInfo):
