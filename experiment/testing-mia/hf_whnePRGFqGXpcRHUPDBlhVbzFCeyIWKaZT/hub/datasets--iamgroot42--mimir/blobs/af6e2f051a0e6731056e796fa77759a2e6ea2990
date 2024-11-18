@@ -1,0 +1,52 @@
+---
+license: mit
+language:
+- en
+tags:
+- membership inference
+- privacy
+pretty_name: MIMIR
+size_categories:
+- 1K<n<10K
+---
+
+# MIMIR
+
+These datasets serve as a benchmark designed to evaluate membership inference attack (MIA) methods, specifically in detecting pretraining data from extensive large language models.
+
+## 📌 Applicability
+
+The datasets can be applied to any model trained on The Pile, including (but not limited to):
+- GPTNeo
+- Pythia
+- OPT
+
+## Loading the datasets
+To load the dataset:
+
+```python
+from datasets import load_dataset
+
+dataset = load_dataset("iamgroot42/mimir", "pile_cc", split="ngram_7_0.2")
+```
+
+- Available Names: `arxiv`, `dm_mathematics`, `github`, `hackernews`, `pile_cc`, `pubmed_central`, `wikipedia_(en)`, `full_pile`, `c4`, `temporal_arxiv`, `temporal_wiki`
+- Available Splits: `ngram_7_0.2`, `ngram_13_0.2`, `ngram_13_0.8` (for most sources), 'none' (for other sources)
+- Available Features: `member` (str), `nonmember` (str), `member_neighbors` (List[str]), `nonmember_neighbors` (List[str])
+
+## 🛠️ Codebase
+For evaluating MIA methods on our datasets, visit our [GitHub repository](http://github.com/iamgroot42/mimir).
+
+
+## ⭐ Citing our Work
+
+If you find our codebase and datasets beneficial, kindly cite [our work](https://arxiv.org/pdf/2402.07841.pdf):
+
+```bibtex
+@inproceedings{duan2024membership,
+      title={Do Membership Inference Attacks Work on Large Language Models?}, 
+      author={Michael Duan and Anshuman Suri and Niloofar Mireshghallah and Sewon Min and Weijia Shi and Luke Zettlemoyer and Yulia Tsvetkov and Yejin Choi and David Evans and Hannaneh Hajishirzi},
+      year={2024},
+      booktitle={Conference on Language Modeling (COLM)},
+}
+```

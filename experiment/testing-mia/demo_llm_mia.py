@@ -12,6 +12,7 @@ from miae.utils.dataset_utils import load_mimir_dataset
 from miae.attacks.base import LLM_ModelAccess
 from miae.attacks_on_llm.mink import MinKProbAttack, MinKAuxiliaryInfo
 from miae.attacks_on_llm.loss import LossAttack, LossAttackAuxiliaryInfo
+from miae.attacks_on_llm.zlib import ZLIBAttack, ZLIBAttackAuxiliaryInfo
 
 
 
@@ -151,6 +152,38 @@ def run_loss_attack(attack_config, target_model, train_set, test_set):
     print("Loss Attack Results:")
     print(f"AUC-ROC Score: {auc_score}")
 
+def run_zlib_attack(attack_config, target_model, train_set, test_set, device):
+    zlib_info = ZLIBAttackAuxiliaryInfo(attack_config)
+    config_dict = zlib_info.save_config_to_dict()
+    zlib_attack = ZLIBAttack(target_model, config_dict)
+    
+    member_scores = []
+    non_member_scores = []
+    
+    # Use tqdm to display progress for the train set
+    for idx, document in enumerate(tqdm(train_set, desc="Processing Train Set for ZLIB")):
+        tokens = zlib_attack.target_model.tokenizer.encode(document['text'])
+        score = zlib_attack._attack(document=document['text'], tokens=tokens)
+        member_scores.append(score)
+        
+    # Use tqdm to display progress for the test set
+    for idx, document in enumerate(tqdm(test_set, desc="Processing Test Set for LOSS")):
+        tokens = zlib_attack.target_model.tokenizer.encode(document['text'])
+        score = zlib_attack._attack(document=document['text'], tokens=tokens)
+        non_member_scores.append(score)
+
+    threshold = attack_config['threshold']
+    member_classifications = [1 if score < threshold else 0 for score in member_scores]
+    non_member_classifications = [0 if score < threshold else 1 for score in non_member_scores]
+
+    # Plot the AUC-ROC curve
+    save_path = "/data/public/llm_mia_comp/demo_results/graphs/auc_roc_zlib.png"
+    auc_score = plot_auc_roc("ZLIB", member_scores, non_member_scores, save_path)
+
+    print("ZLIB Attack Results:")
+    print(f"AUC-ROC Score: {auc_score}")
+    
+
 
 def main():
     # Set up
@@ -169,37 +202,65 @@ def main():
     train = split_dataset['train']
     test = split_dataset['test']
 
-    # MinK Attack
-    print("Running the MinK attack")
-    mink_config = {
-        "experiment_name": "min_k_prob_attack_experiment",
-        "base_model": "EleutherAI/pythia-160m",
-        "dataset_member": "the_pile",
-        "dataset_nonmember": "the_pile",
-        "min_words": 100,
-        "max_words": 200,
-        "max_tokens": 512,
-        "max_data": 100000,
-        "output_name": "mink_prob_attack_results",
-        "n_samples": 1000,
-        "blackbox_attacks": ["min_k"],
-        "env_config": {
-            "results": "results_mink",
-            "device": "cuda:0",
-            "device_aux": "cuda:0"
-        },
-        "dump_cache": False,
-        "load_from_cache": False,
-        "load_from_hf": True,
-        "batch_size": 50
-    }
-    run_minK_attack(mink_config, target_model, train, test, device)
-    print("\n")
+#     # MinK Attack
+#     print("Running the MinK attack")
+#     mink_config = {
+#         "experiment_name": "min_k_prob_attack_experiment",
+#         "base_model": "EleutherAI/pythia-160m",
+#         "dataset_member": "the_pile",
+#         "dataset_nonmember": "the_pile",
+#         "min_words": 100,
+#         "max_words": 200,
+#         "max_tokens": 512,
+#         "max_data": 100000,
+#         "output_name": "mink_prob_attack_results",
+#         "n_samples": 1000,
+#         "blackbox_attacks": ["min_k"],
+#         "env_config": {
+#             "results": "results_mink",
+#             "device": "cuda:0",
+#             "device_aux": "cuda:0"
+#         },
+#         "dump_cache": False,
+#         "load_from_cache": False,
+#         "load_from_hf": True,
+#         "batch_size": 50
+#     }
+#     run_minK_attack(mink_config, target_model, train, test, device)
+#     print("\n")
 
-   # Loss Attack
-    print("Running the Loss Attack")
-    loss_config = {
-        "experiment_name": "loss_attack_experiment",
+#    # Loss Attack
+#     print("Running the Loss Attack")
+#     loss_config = {
+#         "experiment_name": "loss_attack_experiment",
+#         "base_model": "EleutherAI/pythia-160m",
+#         "dataset_member": "the_pile",
+#         "dataset_nonmember": "the_pile",
+#         "min_words": 100,
+#         "max_words": 200,
+#         "max_tokens": 512,
+#         "max_data": 100000,
+#         "output_name": "loss_attack_results",
+#         "n_samples": 1000,
+#         "blackbox_attacks": ["loss"],
+#         "env_config": {
+#             "results": "results_loss",
+#             "device": "cuda:0",
+#             "device_aux": "cuda:0"
+#         },
+#         "dump_cache": False,
+#         "load_from_cache": False,
+#         "load_from_hf": True,
+#         "batch_size": 50,
+#         "threshold": 2.6  # Adjust based on testing
+#     }
+#     run_loss_attack(loss_config, target_model, train, test)
+#     print("\n")
+
+    # ZLib Attack
+    print("Running the ZLIB Attack")
+    zlib_config = {
+        "experiment_name": "zlib_attack_experiment",
         "base_model": "EleutherAI/pythia-160m",
         "dataset_member": "the_pile",
         "dataset_nonmember": "the_pile",
@@ -207,11 +268,11 @@ def main():
         "max_words": 200,
         "max_tokens": 512,
         "max_data": 100000,
-        "output_name": "loss_attack_results",
+        "output_name": "zlib_attack_results",
         "n_samples": 1000,
-        "blackbox_attacks": ["loss"],
+        "blackbox_attacks": ["zlib"],
         "env_config": {
-            "results": "results_loss",
+            "results": "results_zlib",
             "device": "cuda:0",
             "device_aux": "cuda:0"
         },
@@ -219,12 +280,9 @@ def main():
         "load_from_cache": False,
         "load_from_hf": True,
         "batch_size": 50,
-        "threshold": 2.6  # Adjust based on testing
     }
-    run_loss_attack(loss_config, target_model, train, test)
+    run_zlib_attack(zlib_config, target_model, train, test, device)
     print("\n")
-
-
 
 if __name__ == "__main__":
     # print(torch.__version__)
