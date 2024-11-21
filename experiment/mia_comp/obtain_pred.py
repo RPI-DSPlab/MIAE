@@ -28,25 +28,13 @@ from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
 from experiment import models
 from experiment.mia_comp import datasets
-from torchvision import transforms
+from scipy.sparse import csr_matrix
 
 # adding mia that's not in MIAE package
 from experiment.mia_comp.same_attack_different_signal import top_k_shokri_mia
 
 
-class CINIC10(data.Dataset):
-    def __init__(self, image_folder):
-        self.image_folder = image_folder
-        self.transform = transforms.Compose([transforms.ToTensor()])
-
-    def __len__(self):
-        return len(self.image_folder)
-
-    def __getitem__(self, idx):
-        img, label = self.image_folder[idx]
-        return (self.transform(img), label)
-
-def get_dataset(datset_name, aug, targetset_ratio, train_test_ratio, shuffle_seed=1) -> tuple:
+def get_dataset(dataset_name, aug, targetset_ratio, train_test_ratio, shuffle_seed=1) -> tuple:
     """
     Get the datasets for the target model and MIA
     :param datset_name: name of the dataset
@@ -56,18 +44,26 @@ def get_dataset(datset_name, aug, targetset_ratio, train_test_ratio, shuffle_see
     :param shuffle_seed: seed for shuffling the dataset, default to 1
     :return:
     """
-    if datset_name == "cifar10":
+    if dataset_name == "cifar10":
         dataset = datasets.get_cifar10(aug)
         num_classes = 10
         input_size = 32
-    elif datset_name == "cifar100":
+    elif dataset_name == "cifar100":
         dataset = datasets.get_cifar100(aug)
         num_classes = 100
         input_size = 32
-    elif datset_name == "cinic10":
+    elif dataset_name == "cinic10":
         dataset = datasets.get_cinic10(aug)
         num_classes = 10
         input_size = 32
+    elif dataset_name == "purchase100":
+        dataset = datasets.get_purchase100()
+        num_classes = 100
+        input_size = dataset.n_features
+    elif dataset_name == "texas100":
+        dataset = datasets.get_texas100()
+        num_classes = 100
+        input_size = dataset.n_features
     else:
         raise ValueError("Invalid dataset")
 
@@ -97,6 +93,12 @@ def load_dataset_info(datset_name):
     elif datset_name == "cinic10":
         num_classes = 10
         input_size = 32
+    elif datset_name == "purchase100":
+        num_classes = 100
+        input_size = 600
+    elif datset_name == "texas100":
+        num_classes = 100
+        input_size = 6169
     else:
         raise ValueError("Invalid dataset")
 
@@ -238,10 +240,14 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path,
              'top_k': 3})
     if args.attack == "lira":
+        if args.dataset == "purchase100" or args.dataset == "texas100":
+            n_augmentation = 1
+        else:
+            n_augmentation = 18
         return lira_mia.LiraAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
             'batch_size': args.batch_size, 'lr': 0.1, "num_shadow_models": 20, 'epochs': args.attack_epochs, 'log_path': args.result_path,
-             'shadow_path': args.lira_shadow_path, 'shadow_diff_init': False})
+             'shadow_path': args.lira_shadow_path, 'shadow_diff_init': False, "augmentation_query": n_augmentation})
 
     if args.attack == "reference":
         return reference_mia.ReferenceAuxiliaryInfo(
@@ -310,8 +316,8 @@ if __name__ == '__main__':
     # mandatory arguments
     parser.add_argument('--attack', type=str, default=None, help='MIA type: [losstraj, yeom, shokri ,lira, aug, calibration, top_k_shokri, reference]')
     parser.add_argument('--target_model', type=str, default=None,
-                        help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet]')
-    parser.add_argument('--dataset', type=str, default=None, help='dataset: [cifar10, cifar100, cinic10]')
+                        help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet, mlp]')
+    parser.add_argument('--dataset', type=str, default=None, help='dataset: [cifar10, cifar100, cinic10, purchase100, texas100]')
     parser.add_argument('--result_path', type=str, default=None, help='path to save the prediction')
     parser.add_argument('--data_path', type=str, default=None, help='path to the dataset')
     parser.add_argument('--dataset_file_root', type=str, default=None, help='path to the dataset on the server, used as a root for custom datasets')
@@ -363,13 +369,17 @@ if __name__ == '__main__':
         with open(os.path.join(dataset_save_path, "aux_set.pkl"), "wb") as f:
             pickle.dump(aux_set, f)
 
+
         # concat the target trainset and testset and then attack
         dataset_to_attack = ConcatDataset([target_trainset, target_testset])
         target_membership = np.concatenate([np.ones(len(target_trainset)), np.zeros(len(target_testset))])
         # Save the index - data mapping
         index_to_data = {}
         for i in range(len(dataset_to_attack)):
-            index_to_data[i] = dataset_to_attack[i]
+            if args.dataset == "purchase100" or args.dataset == "texas100": # handle sparse matrix
+                index_to_data[i] = csr_matrix(dataset_to_attack[i][0].numpy())
+            else:
+                index_to_data[i] = dataset_to_attack[i]
 
         with open(os.path.join(dataset_save_path, "index_to_data.pkl"), "wb") as f:
             pickle.dump(index_to_data, f)

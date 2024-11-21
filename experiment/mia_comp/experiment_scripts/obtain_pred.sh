@@ -7,20 +7,20 @@ fi
 
 echo "obtain_pred.sh seed = $seed"
 
-data_dir="/data/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_3/target"
+data_dir="/home/data/wangz56/miae_experiment_aug_more_target_data/target"
 
-preds_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data/preds_sd${seed}"
+preds_dir="/home/data/wangz56/miae_experiment_aug_more_target_data/preds_sd${seed}"
 mkdir -p "$preds_dir"
 
 
 
-#datasets=("cifar10" "cifar100" "cinic10")
-datasets=("cinic10")
+#datasets=("cifar10" "cifar100" "cinic10" "purchase100 taxes100")
+datasets=("purchase100" "texas100")
 #archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-archs=("resnet56")
-mias=("losstraj" "shokri" "yeom" "aug" "calibration" "lira" "reference")
+archs=("mlp_for_texas_purchase")
+mias=("lira" "reference" "shokri" "losstraj" "calibration" "yeom")
 
-prepare_path="/data/public/prepare_sd${seed}"
+prepare_path="/home/data/wangz56/prepare_sd${seed}"
 
 target_model_path="$data_dir/target_models"
 
@@ -36,6 +36,10 @@ for dataset in "${datasets[@]}"; do
     num_epoch=150
   elif [ "$dataset" == "cinic10" ]; then
     num_epoch=100
+  elif [ "$dataset" == "purchase100" ]; then
+    num_epoch=30
+  elif [ "$dataset" == "texas100" ]; then
+    num_epoch=30
 fi
 
 

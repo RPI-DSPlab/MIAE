@@ -88,6 +88,7 @@ class ReferenceAuxiliaryInfo(AuxiliaryInfo):
         self.num_shadow_models = config.get('num_shadow_models', 29)  # paper default is 29
         self.shadow_path = config.get('shadow_path', f"{self.save_path}/weights/shadow/")
         self.query_batch_size = config.get('query_batch_size', 512)
+        self.shadow_diff_init = config.get('shadow_diff_init', False)
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)

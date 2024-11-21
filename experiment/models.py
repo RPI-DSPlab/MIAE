@@ -19,9 +19,33 @@ def get_model(model_name, num_classes, input_size):
         return create_vgg16(num_classes=num_classes, input_size=input_size)
     elif model_name == 'mobilenet':
         return create_mobilenet(num_classes=num_classes, input_size=input_size)
+    elif model_name == 'mlp_for_texas_purchase':
+        return create_mlp(input_size=input_size, num_classes=num_classes, layer_sizes=[512, 256, 128, 64])
     else:
         raise ValueError('Unknown model name')
+    
 
+
+def create_mlp(input_size, num_classes, layer_sizes):
+    layers = []
+    for i in range(len(layer_sizes)):
+        if i == 0:
+            layers.append(nn.Linear(input_size, layer_sizes[i]))
+        else:
+            layers.append(nn.Linear(layer_sizes[i - 1], layer_sizes[i]))
+        layers.append(nn.ReLU())
+    layers.append(nn.Linear(layer_sizes[-1], num_classes))
+    
+    model = nn.Sequential(*layers)
+    
+    # Initialize weights with Glorot uniform (Xavier uniform)
+    for layer in model:
+        if isinstance(layer, nn.Linear):
+            nn.init.xavier_uniform_(layer.weight)
+            if layer.bias is not None:
+                nn.init.constant_(layer.bias, 0)
+    
+    return model
 
 def create_resnet56(num_classes=10, input_size=32):
     num_blocks = [9, 9, 9]

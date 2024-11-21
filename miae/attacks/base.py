@@ -22,6 +22,8 @@ class AttackTrainingSet(Dataset):
     with MiAUtils.train_attack_model, as the AttackTrainingSet[1] is class label
     """
     def __init__(self, predictions, class_labels, in_out):
+        if not (predictions.shape[0] == class_labels.shape[0] == in_out.shape[0]):
+            raise ValueError("Lengths of inputs should match")
         self.predictions = predictions  # Prediction values
         self.class_labels = class_labels  # Class labels
         self.in_out = in_out  # "in" or "out" indicator
@@ -149,7 +151,7 @@ class ModelAccess(ABC):
             for images, _ in dataloader:
                 images = images.to(device)
                 outputs = []
-                if augmentation == 'none' or augmentation == 0:
+                if augmentation == 'none' or augmentation == 0 or augmentation == 1:
                     outputs = [self.model(images)]  # (batch_size, num_classes)
 
                 # Apply mirror augmentation

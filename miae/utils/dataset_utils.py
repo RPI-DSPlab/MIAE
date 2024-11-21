@@ -16,7 +16,10 @@ def get_xy_from_dataset(dataset: Dataset) -> (np.ndarray, np.ndarray):
 
     for item in dataset:
         data, label = item
-        x.append(data.numpy())
+        if isinstance(data, torch.Tensor):
+            data = data.numpy()
+        else:
+            x.append(data)
         y.append(label)
 
     # Convert lists to numpy arrays
@@ -32,7 +35,7 @@ def get_num_classes(dataset: torch.utils.data.TensorDataset) -> int:
     :param dataset: dataset
     :return: number of classes
     """
-    labels = [label for _, label in dataset]
+    labels = [int(label) for _, label in dataset]
     unique_classes = set(labels)
     return len(unique_classes)
 

@@ -6,8 +6,7 @@ import os
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, TensorDataset, Dataset, Subset
-from sklearn.metrics import roc_curve
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 import torch.nn as nn
 import torch.nn.functional as F
@@ -305,6 +304,7 @@ class ShokriAttack(MiAttack):
                                                      shuffle=True) if attack_test_dataset else None
                 untrained_attack_model = self.auxiliary_info.attack_model(self.auxiliary_info.num_classes)
                 untrained_attack_model.to(self.auxiliary_info.device)
+
                 trained_attack_model = ShokriUtil.train_attack_model(untrained_attack_model, self.attack_train_loader,
                                                                      self.attack_test_loader,
                                                                      self.auxiliary_info)

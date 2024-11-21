@@ -13,12 +13,10 @@ import torch
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import ConcatDataset, DataLoader, Subset, Dataset
 import torch.nn as nn
-from torchvision.transforms import transforms
 from tqdm import tqdm
 
 from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils
 from miae.utils.dataset_utils import get_xy_from_dataset
-from torch.cuda.amp import GradScaler, autocast
 from miae.utils.set_seed import set_seed
 
 
@@ -67,7 +65,8 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
         self.online = config.get('online', True)
         self.fix_variance = config.get('fix_variance', True)
         self.query_batch_size = config.get('query_batch_size', 256)
-        self.shadow_diff_init = config.get('shadow_diff_init', True) # whether to re-init every shadow model
+        self.shadow_diff_init = config.get('shadow_diff_init', False) # whether to re-init every shadow model
+        self.augmentation_query = config.get('augmentation_query', 18)
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
@@ -317,12 +316,12 @@ class LIRAUtil(MIAUtils):
         return np.array(prediction)
 
     @classmethod
-    def _generate_logits(cls, model, data_loader, device):
+    def _generate_logits(cls, model, data_loader, augmentation, device):
         """
         warpper function for get_signal_lira
         """
         model_access = LiraModelAccess(model, model)
-        return model_access.get_signal_lira(data_loader, device, 18)
+        return model_access.get_signal_lira(data_loader, device, augmentation=augmentation)
 
     @classmethod
     def process_shadow_models(cls, info: LiraAuxiliaryInfo, auxiliary_dataset: Dataset, shadow_model_arch) \
@@ -355,6 +354,7 @@ class LIRAUtil(MIAUtils):
                 # print(shadow_model_arch, model_path)
                 scores, mean_acc = cls._calculate_score(cls._generate_logits(model,
                                                                              fullsetloader,
+                                                                             info.augmentation_query,
                                                                              info.device).cpu().numpy(),
                                                         fullset_targets)
                 cls.log(info, f"Model {index} mean acc: {mean_acc}", print_flag=True)
@@ -392,7 +392,7 @@ class LIRAUtil(MIAUtils):
         cls.log(info, f"processing target model", print_flag=True)
         target_model_access.to_device(info.device)
         scores, mean_acc = cls._calculate_score(
-            target_model_access.get_signal_lira(dataset_loader, info.device, 18).cpu().numpy(), fullset_targets)
+            target_model_access.get_signal_lira(dataset_loader, info.device, info.augmentation_query).cpu().numpy(), fullset_targets)
 
         # Convert the numpy array to a PyTorch tensor and add a new dimension
         scores = torch.unsqueeze(torch.from_numpy(scores), 0)
