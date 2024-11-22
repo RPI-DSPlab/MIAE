@@ -1,9 +1,8 @@
 ## This script generates Venn diagrams for the MIAE experiment
-datasets=("cifar10" "cifar100" "cinic10") # "purchase100" "texas100"
+datasets=("cifar10" "cifar100" "cinic10") # "purchase100" "texas100" "cifar100" "cinic10"
 archs=("resnet56" "mobilenet" "wrn32_4" "vgg16")
-mias=("lira" "losstraj" "reference" "shokri" "yeom" "calibration" "aug")
-#mias=("shokri")
-categories=("single_attack" "fpr" "threshold") # "threshold" "fpr" "single_attack"
+mias=("lira" "losstraj" "reference" "shokri" "yeom" "calibration" "aug") # "losstraj" "reference" "shokri" "yeom" "calibration" "aug"
+categories=("single_attack") # "threshold" "fpr" "single_attack"
 subcategories=("pairwise") # "common_tp"
 
 # For different distributions
@@ -21,7 +20,7 @@ subcategories=("pairwise") # "common_tp"
 
 
 option=("TPR")
-seeds=(0 1 2 3 4 5)
+seeds=(0 1 2)
 fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 # Prepare the parameter lists for the experiment
 mialist=""
@@ -50,7 +49,7 @@ experiment_dir="/home/data/wangz56/miae_experiment_aug_more_target_data/"
 # For different distributions
 #experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"
 
-graph_dir="$experiment_dir/graphs_rebuttal/instances6"
+graph_dir="$experiment_dir/graphs_rebuttal/instances3"
 mkdir -p "$graph_dir"
 
 # Check if directory creation was successful

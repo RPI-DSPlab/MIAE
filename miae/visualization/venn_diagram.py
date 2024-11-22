@@ -190,58 +190,66 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
     circle_colors = [mia_color_mapping.get(pred.name, default_colors[i % len(default_colors)]) for i, pred in
                      enumerate(pred_list)]
 
-    # Plotting unweighted Venn diagram
-    plt.figure(figsize=(6, 6))
-    ax = plt.gca()
-    ax.axis('off')
-    total = len(set.union(*venn_sets))
-    venn = venn_unweighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors[:len(pred_list)],
-                           subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x / total):.1%}" + ")")
+    subset_sizes = [len(s) for s in venn_sets]
+    total = sum(subset_sizes)
+    if total == 0:
+        print("Skip plotting because all sets are empty.")
+    else:
+        # Plotting unweighted Venn diagram
+        plt.figure(figsize=(6, 6))
+        ax = plt.gca()
+        ax.axis('off')
 
-    # Adjust text positions and sizes
-    for text in venn.set_labels:
-        text.set_fontsize(16)
-        text.set_fontweight('bold')
+        venn = venn_unweighted(subsets=venn_sets, set_labels=venn_labels, 
+                                set_colors=circle_colors[:len(pred_list)],
+                                subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x / total):.1%}" + ")")
 
-    for text in venn.subset_labels:
-        if text is not None:
+        # Adjust text positions and sizes
+        for text in venn.set_labels:
             text.set_fontsize(16)
             text.set_fontweight('bold')
 
-    plt.tight_layout()
-    os.makedirs(save_path, exist_ok=True)
-    fpr = save_path.split('/')[-1].split('_')[-1]
-    att = save_path.split('/')[-2]
-    file_name = f"venn_{att}_{fpr}_unweighted.pdf"
-    full_save_path = os.path.join(save_path, file_name)
-    plt.savefig(full_save_path, bbox_inches='tight', pad_inches=0.1)
-    plt.close()
+        for text in venn.subset_labels:
+            if text is not None:
+                text.set_fontsize(16)
+                text.set_fontweight('bold')
 
-    # Plotting weighted Venn diagram
-    plt.figure(figsize=(6, 6))
-    ax = plt.gca()
-    ax.axis('off')
-    venn = venn_weighted(subsets=venn_sets, set_labels=venn_labels, set_colors=circle_colors[:len(pred_list)],
-                         subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x / total):.1%}" + ")")
+        plt.tight_layout()
+        os.makedirs(save_path, exist_ok=True)
+        fpr = save_path.split('/')[-1].split('_')[-1]
+        att = save_path.split('/')[-2]
+        file_name = f"venn_{att}_{fpr}_unweighted.pdf"
+        full_save_path = os.path.join(save_path, file_name)
+        plt.savefig(full_save_path, bbox_inches='tight', pad_inches=0.1)
+        plt.close()
 
-    # Adjust text positions and sizes
-    for text in venn.set_labels:
-        text.set_fontsize(16)
-        text.set_fontweight('bold')
+        # Plotting weighted Venn diagram
+        plt.figure(figsize=(6, 6))
+        ax = plt.gca()
+        ax.axis('off')
 
-    for text in venn.subset_labels:
-        if text is not None:
+        venn = venn_weighted(subsets=venn_sets, set_labels=venn_labels, 
+                            set_colors=circle_colors[:len(pred_list)],
+                            subset_label_formatter=lambda x: str(x) + "\n(" + f"{(x / total):.1%}" + ")")
+
+        # Adjust text positions and sizes
+        for text in venn.set_labels:
             text.set_fontsize(16)
             text.set_fontweight('bold')
 
-    plt.tight_layout()
-    os.makedirs(save_path, exist_ok=True)
-    fpr = save_path.split('/')[-1].split('_')[-1]
-    att = save_path.split('/')[-2]
-    file_name = f"venn_{att}_{fpr}_weighted.pdf"
-    full_save_path = os.path.join(save_path, file_name)
-    plt.savefig(full_save_path, bbox_inches='tight', pad_inches=0.1)
-    plt.close()
+        for text in venn.subset_labels:
+            if text is not None:
+                text.set_fontsize(16)
+                text.set_fontweight('bold')
+
+        plt.tight_layout()
+        os.makedirs(save_path, exist_ok=True)
+        fpr = save_path.split('/')[-1].split('_')[-1]
+        att = save_path.split('/')[-2]
+        file_name = f"venn_{att}_{fpr}_weighted.pdf"
+        full_save_path = os.path.join(save_path, file_name)
+        plt.savefig(full_save_path, bbox_inches='tight', pad_inches=0.1)
+        plt.close()
 
 def plot_venn_single_for_all_seeds(pred_list: List[Predictions], graph_title: str, save_path: str):
     """
