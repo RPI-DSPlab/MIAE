@@ -29,16 +29,12 @@ class LossAttack(Attack):
             text=document,
             tokens=tokens,
             no_grads=True,
-            return_all_probs=False
+            return_all_probs=True
         )
         target_token_log_probs = log_probs_data['target_token_log_probs']
 
-        # Convert log probabilities to losses (negative log likelihoods)
-        with torch.no_grad():
-            losses = [-log_prob for log_prob in target_token_log_probs]
-
-        # Calculate the average loss over the document
-        avg_loss = np.mean(losses)
+        # Calculate the average loss over the document negative log probs
+        avg_loss = -np.mean([target_token_log_probs])
         # print(f"Average Loss (Likelihood Score): {avg_loss}")
         # print(f"Normalized Probability-Like Score: {np.exp(-avg_loss)}")
 

@@ -253,7 +253,7 @@ def main():
     target_model = LLM_ModelAccess(model, tokenizer, device)
 
     # Load the dataset
-    cache_dir = "/data/public/huggingface_datasets"
+    cache_dir = "/data/public/huggingface_datasets2"
     split_dataset = load_mimir_dataset("github", "ngram_13_0.8", cache_dir, test_size=0.5, seed=1)
     train = split_dataset['train']
     test = split_dataset['test']
@@ -313,38 +313,10 @@ def main():
     run_loss_attack(loss_config, target_model, train, test)
     print("\n")
 
-    # ZLib Attack
-    # print("Running the ZLIB Attack")
-    # zlib_config = {
-    #     "experiment_name": "zlib_attack_experiment",
-    #     "base_model": "EleutherAI/pythia-160m",
-    #     "dataset_member": "the_pile",
-    #     "dataset_nonmember": "the_pile",
-    #     "min_words": 100,
-    #     "max_words": 200,
-    #     "max_tokens": 512,
-    #     "max_data": 100000,
-    #     "output_name": "zlib_attack_results",
-    #     "n_samples": 1000,
-    #     "blackbox_attacks": ["zlib"],
-    #     "env_config": {
-    #         "results": "results_zlib",
-    #         "device": "cuda:0",
-    #         "device_aux": "cuda:0"
-    #     },
-    #     "dump_cache": False,
-    #     "load_from_cache": False,
-    #     "load_from_hf": True,
-    #     "batch_size": 50,
-    #     "threshold" : 2.6,
-    # }
-    # run_zlib_attack(zlib_config, target_model, train, test, device)
-    # print("\n")
-
-    # MinK Attack
-    print("Running the MinK Plus Plus attack")
-    mink_config = {
-        "experiment_name": "min_k_pp_prob_attack_experiment",
+    #ZLib Attack
+    print("Running the ZLIB Attack")
+    zlib_config = {
+        "experiment_name": "zlib_attack_experiment",
         "base_model": "EleutherAI/pythia-160m",
         "dataset_member": "the_pile",
         "dataset_nonmember": "the_pile",
@@ -352,21 +324,48 @@ def main():
         "max_words": 200,
         "max_tokens": 512,
         "max_data": 100000,
-        "output_name": "min_k_pp_prob_attack_results",
+        "output_name": "zlib_attack_results",
         "n_samples": 1000,
-        "blackbox_attacks": ["min_k_pp"],
+        "blackbox_attacks": ["zlib"],
         "env_config": {
-            "results": "results_mink_pp",
+            "results": "results_zlib",
             "device": "cuda:0",
             "device_aux": "cuda:0"
         },
         "dump_cache": False,
         "load_from_cache": False,
         "load_from_hf": True,
-        "batch_size": 50
+        "batch_size": 50,
     }
-    run_mink_pp_attack(mink_config, target_model, train, test, device)
+    run_zlib_attack(zlib_config, target_model, train, test, device)
     print("\n")
+
+    # # MinK Attack
+    # print("Running the MinK Plus Plus attack")
+    # mink_config = {
+    #     "experiment_name": "min_k_pp_prob_attack_experiment",
+    #     "base_model": "EleutherAI/pythia-160m",
+    #     "dataset_member": "the_pile",
+    #     "dataset_nonmember": "the_pile",
+    #     "min_words": 100,
+    #     "max_words": 200,
+    #     "max_tokens": 512,
+    #     "max_data": 100000,
+    #     "output_name": "min_k_pp_prob_attack_results",
+    #     "n_samples": 1000,
+    #     "blackbox_attacks": ["min_k_pp"],
+    #     "env_config": {
+    #         "results": "results_mink_pp",
+    #         "device": "cuda:0",
+    #         "device_aux": "cuda:0"
+    #     },
+    #     "dump_cache": False,
+    #     "load_from_cache": False,
+    #     "load_from_hf": True,
+    #     "batch_size": 50
+    # }
+    # run_mink_pp_attack(mink_config, target_model, train, test, device)
+    # print("\n")
 
 if __name__ == "__main__":
     # print(torch.__version__)
