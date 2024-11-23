@@ -75,7 +75,8 @@ The code is divided into three primary categories: Data Loading, Plot Diagram, a
 
   
 ### `obtain_jaccard.py`
-   The `obtain_jaccard.py` is designed to save the Jaccard similarity between different MIAs and plot a heatmap to visualize the Jaccard similarity matrix.
+   The `obtain_jaccard.py` is designed to save the Jaccard similarity between different MIAs and plot a heatmap to visualize the Jaccard similarity matrix. Before running this shell script, make sure you have already have the 
+   pair-wise jaccard similarity, which can be calculated via running obtain_venn.sh 
    ```bash
    bash experiment_scripts/obtain_jaccard.sh
 
