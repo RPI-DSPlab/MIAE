@@ -309,22 +309,30 @@ def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
 
         name1 = pred_1.name.split('_')[0]
         name2 = pred_2.name.split('_')[0]
-        circle_colors = [mia_color_mapping[name1], mia_color_mapping[name2]]
+        circle_colors = [mia_color_mapping.get(name1, default_colors[0]),
+                         mia_color_mapping.get(name2, default_colors[1])]
 
-        if weighted:
-            venn = venn2(subsets=(attacked_points_1, attacked_points_2), set_labels=(name1, name2),
-                         set_colors=circle_colors)
-        else:
-            venn = venn2_unweighted(subsets=(attacked_points_1, attacked_points_2), set_labels=(name1, name2),
-                                    set_colors=circle_colors)
+        venn_func = venn2 if weighted else venn2_unweighted
+
+        subset_sizes = [len(attacked_points_1 - attacked_points_2),
+                        len(attacked_points_2 - attacked_points_1),
+                        len(attacked_points_1 & attacked_points_2)]
+        total = sum(subset_sizes)
+
+        venn = venn_func(subsets=(attacked_points_1, attacked_points_2),
+                         set_labels=(name1, name2),
+                         set_colors=circle_colors,
+                         subset_label_formatter=lambda x: f"{x}\n({(x / total):.1%})" if total > 0 else "0\n(0.0%)")
 
         # Adjust text positions and sizes
         for text in venn.set_labels:
             text.set_fontsize(16)
             text.set_fontweight('bold')
+
         for text in venn.subset_labels:
             if text is not None:
                 text.set_fontsize(16)
+                text.set_fontweight('bold')
 
         plt.tight_layout()
         attacks = folder_path.split('/')[-1]

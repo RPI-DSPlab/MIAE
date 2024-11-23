@@ -3,7 +3,7 @@ archs=("resnet56")
 seeds_for_file=(0 1 2 3)
 option=("TPR")
 fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
-experiment_dir="/data/public/comp_mia_data/repeat_exp_set"
+experiment_dir="/home/data/wangz56/repeat_exp_set"
 plot_dir="$experiment_dir/jaccard_similarity"
 mkdir -p "$plot_dir"
 

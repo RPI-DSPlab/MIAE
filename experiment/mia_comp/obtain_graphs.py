@@ -80,6 +80,7 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
         for s in seeds:
             att_npy = att
 
+            # pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att_npy}.npy"
             pred_path = f"{data_path}/preds_sd{s}/{dataset}/{architecture}/{att}/pred_{att_npy}.npy"
             pred_arr = experiment.load_predictions(pred_path)
             new_attack_name = name_mapping.get(att, att)
