@@ -1,6 +1,9 @@
-experiment_dir='/data/public/comp_mia_data/multiseed_convergence'
+# modify this to set up directory:
+DATA_DIR = "/home/data/wangz56"
 
-plot_dir='/data/public/comp_mia_data/multiseed_convergence/graphs/multiseed_convergence'
+experiment_dir='${DATA_DIR}/multiseed_convergence'
+
+plot_dir='${DATA_DIR}/multiseed_convergence/graphs/multiseed_convergence'
 
 datasets=("cifar10")
 archs=("resnet56")

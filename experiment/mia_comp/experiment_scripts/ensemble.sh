@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# modify this to set up directory:
+DATA_DIR = "/home/data/wangz56"
+
 # This script is used for experiments regarding to inter-attack ensemble, there's these arguments:
 # -train_shadow: Train shadow-target data
 # -train_ensemble: Train ensemble methods on shadow-target data
@@ -32,7 +35,7 @@ done
 num_epoch=100
 ensemble_method=("avg" "pairwise_max")
 
-preds_path="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
+preds_path="${DATA_DIR}/miae_experiment_aug_more_target_data"
 
 data_dir="${preds_path}/target/${dataset}"
 

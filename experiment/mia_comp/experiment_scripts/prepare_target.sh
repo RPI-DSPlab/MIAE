@@ -1,8 +1,11 @@
+# modify this to set up directory:
+DATA_DIR = "/home/data/wangz56"
+
 # This script is used to partition the dataset into target dataset and shadow dataset, then train the target model
 seed=0
-# for repeat training, we do shuffle_seed from 2 to 5
-shuffle_seed=1
-data_dir="/home/data/wangz56/miae_experiment_aug_more_target_data/target"
+# for repeat training, we do shuffle_seed from 2 to 5. for repeat training0 and regular training, we do shuffle_seed=1
+shuffle_seed=4
+data_dir="${DATA_DIR}/repeat_exp_set/miae_experiment_aug_more_target_data_3/target"
 mkdir -p "$data_dir"
 
 
@@ -13,13 +16,9 @@ datasets=("purchase100" "texas100")
 # archs=("resnet56" "wrn32_4" "vgg16" "mobilenet" "mlp_for_texas_purchase")
 archs=("mlp_for_texas_purchase")
 
-prepare_path="/home/data/wangz56/prepare_sd${seed}"
+prepare_path="${DATA_DIR}/prepare_sd${seed}"
 
 target_model_path="$data_dir/target_models"
-
-cd /home/wangz56/MIAE/experiment/mia_comp
-
-conda activate miae
 
 for dataset in "${datasets[@]}"; do
   # if assign different num_epoch for different dataset

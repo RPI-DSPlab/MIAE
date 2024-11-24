@@ -1,3 +1,5 @@
+# modify this to set up directory:
+DATA_DIR = "/home/data/wangz56"
 # This script generates UpSet diagrams for the MIAE experiment
 datasets=("cifar10")
 archs=("resnet56")
@@ -40,7 +42,8 @@ for fpr in "${fprs[@]}"; do
 done
 
 
-experiment_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
+
+experiment_dir="${DATA_DIR}/miae_experiment_aug_more_target_data"
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 if [ -d "$graph_dir" ]; then
@@ -69,7 +72,6 @@ for category in "${categories[@]}"; do
     fi
 done
 
-cd /home/zhangc26/MIAE/experiment/mia_comp
 
 # Generate Venn diagrams for the MIAE experiment when the goal is common_tp
 for category in "${categories[@]}"; do

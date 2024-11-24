@@ -2,37 +2,32 @@
 This script is used to generate ROC curve for the 2 stage ensemble in the paper.
 """
 
+# modify this to set up directory:
+DATA_DIR = "/home/data/wangz56"
+
 import os
 import numpy as np
 from typing import List, Tuple, Dict
 import itertools
 from copy import deepcopy
-from matplotlib.lines import Line2D
+from sklearn.metrics import auc
+import pickle
 
 
 import sys
 sys.path.append("../../../")
 sys.path.append("../../")
 sys.path.append("../")
-from miae.eval_methods.experiment import ExperimentSet, TargetDataset
-from miae.eval_methods.prediction import Predictions, HardPreds, plot_roc_hard_preds, get_fpr_tpr_hard_label
 from pandas import DataFrame
 import pandas as pd
 import seaborn as sns
 from tqdm import tqdm
 import argparse
 
-datasets = ["cifar10", "cifar100"]
-attack_list = ["losstraj", "reference", "lira", "calibration"]
-seeds = [0, 1, 2, 3, 4, 5]
-model = "resnet56"
-ensemble_method = "intersection" # "intersection" or "union" or "majority_vote"
-pred_path = None
-path_to_data = None
-comp_with = None
-tp_or_tpr = None
-seed_to_retrieve = None
-num_fpr_for_table_ensemble = None
+from miae.eval_methods.experiment import ExperimentSet, TargetDataset
+from miae.eval_methods.prediction import Predictions, HardPreds, plot_roc_hard_preds, get_fpr_tpr_hard_label
+from experiment.mia_comp.datasets import *
+
 
 target_datasets = []
 
@@ -119,52 +114,6 @@ def ensemble_hardpreds(hardpreds_dict: Dict[str, HardPreds], ensemble_method: st
 
 
 
-def smooth_roc_main(args):
-    """
-    This main function would plot smooth ROC plots of the
-    ensemble predictions for logspace sampled FPR values.
-    """
-    experiment_dict = {}
-    for ds in target_datasets:
-        experiment_dict[ds.dataset_name] = ExperimentSet.from_dir(ds, attack_list, pred_path, seeds, model)
-
-    gt = experiment_dict[datasets[0]].retrieve_preds(attack_list[0], 0).ground_truth_arr
-    
-    # constructing HardPreds and ensemble for Multi-instances ensemble step
-    multi_instance_hardpreds = {}
-    for ds in target_datasets:
-        multi_instance_hardpreds[ds] = experiment_set_to_hardpreds(experiment_dict[ds.dataset_name], ensemble_method, seeds)
-
-    
-    # multi-attack ensemble
-    multi_attack_ensemble_each_ds = {}
-    for ds in target_datasets:
-        multi_attack_ensemble_each_ds[ds] = ensemble_hardpreds(multi_instance_hardpreds[ds], "intersection")
-
-    # roc curve
-    for ds in target_datasets:
-        hard_preds_to_plot = []
-        # include the base prediction from each attack
-        if comp_with == 'single_instance':
-            for attack in attack_list:
-                hard_preds_to_plot.append(HardPreds.from_pred(experiment_dict[ds.dataset_name].retrieve_preds(attack, 1), attack, desired_fpr_values))
-        elif comp_with == 'multi_instance':
-            for attack in multi_instance_hardpreds[ds]:
-                hard_preds_to_plot.append(multi_instance_hardpreds[ds][attack])
-        else:
-            raise ValueError("comp_with should be either 'single_instance' or 'multi_instance'")
-        
-        # include the multi-attack ensemble with most attacks
-        hard_preds_to_plot.append(multi_attack_ensemble_each_ds[ds][max(multi_attack_ensemble_each_ds[ds].keys(), key=lambda x: len(x))])
-        # include all ensemble predictions
-        # for attack in multi_attack_ensemble_each_ds[ds]:
-        #     hard_preds_to_plot.append(multi_attack_ensemble_each_ds[ds][attack])
-        plot_roc_hard_preds(hard_preds_to_plot, output_dir + '/' + f"{ds.dataset_name}_{ensemble_method}_{comp_with}_ensemble_roc.pdf", tp_or_tpr)
-
-
-"""Below are the functions for the alternative main to match observation in the ensemble result presented
-in the paper body."""
-
 def ensemble_with_base_FPR(experiment_set: ExperimentSet, ensemble_method: str, seed_list: List[int], base_fpr: float):
     """
     Given an experiment set, carry out multi-instances ensemble with base predictions at base_fpr, then carry out multi-instance ensemble.
@@ -209,130 +158,172 @@ def ensemble_with_base_FPR(experiment_set: ExperimentSet, ensemble_method: str, 
 
     return single_instance, multi_instance, multi_attacks
 
+
+def sweep(fpr, tpr) -> Tuple[np.ndarray, np.ndarray, float, float]:
+    """
+    Modified sweep adapted from 
+    https://github.com/tensorflow/privacy/blob/637f17ea4e8326cba1ea4a2ca76fef14b14e51db/research/mi_lira_2021/plot.py
+    This is used for the paper Membership Inference Attacks From First Principles by Carlini et al.
+    It finds the best balance accuracy at each FPR.
+    """
+    zip(*sorted(zip(fpr, tpr)))
+    fpr, tpr = np.array(fpr), np.array(tpr)
+    acc = np.max(1-(fpr+(1-tpr))/2)
+    return fpr, tpr, auc(fpr, tpr), acc
     
     
 
-def table_roc_main(args):
+def table_roc_main(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_ensemble, ensemble_method,
+                   log_scale: bool = True, overwrite: bool = False, marker=False, verbose: bool = False):
     """
     This main function would ensemble attacks at some specified FPR values,
     it could be considered as repeating the experiment in the table of the paper for
     different FPRs.
+
+    :param ds: TargetDataset object
+    :param log_scale: whether to use log scale for FPR values
     """
 
-    fprs_for_base = np.logspace(-6, 0, num=args.num_fpr_for_table_ensemble)
+    fprs_for_base = np.logspace(-6, 0, num=num_fpr_for_table_ensemble) if log_scale else np.linspace(0, 1, num=num_fpr_for_table_ensemble)
     experiment_dict = {}
-    for ds in target_datasets:
-        experiment_dict[ds.dataset_name] = ExperimentSet.from_dir(ds, args.attack_list, pred_path, args.seeds, args.model)
 
-        gt = experiment_dict[ds.dataset_name].retrieve_preds(args.attack_list[0], 0).ground_truth_arr
+    experiment_dict[ds.dataset_name] = ExperimentSet.from_dir(ds, attack_list, pred_path, seeds, model)
 
+    gt = experiment_dict[ds.dataset_name].retrieve_preds(attack_list[0], 0).ground_truth_arr
+
+    path_to_roc_df = f"{save_dir}/ensemble_tpr_fpr.pkl"
+    path_to_attack_perf_df = f"{save_dir}/ensemble_perf.pkl"
+
+    if (not os.path.exists(path_to_roc_df) or not os.path.exists(path_to_attack_perf_df)) or overwrite:
+        os.makedirs(save_dir + '/' + f"{ds.dataset_name}/{ensemble_method}", exist_ok=True)
         # dataframe to store the results
         """Attack: str, Ensemble Level: str, FPR: float, TPR: float"""
-        df = DataFrame(columns=["Attack", "Ensemble Level", "FPR", "TPR"])
+        roc_df = DataFrame(columns=["Attack", "Ensemble Level", "FPR", "TPR"])
 
         for fpr in fprs_for_base:
-            single_instance, multi_instance, multi_attacks = ensemble_with_base_FPR(experiment_dict[ds.dataset_name], args.ensemble_method, args.seeds, fpr)
+            single_instance, multi_instance, multi_attacks = ensemble_with_base_FPR(experiment_dict[ds.dataset_name], ensemble_method, seeds, fpr)
             for (name, pred) in single_instance.items():
                 calc_fpr, calc_tpr = get_fpr_tpr_hard_label(pred.pred_arr, gt)
-                df = pd.concat([df, DataFrame([{"Attack": name, "Ensemble Level": "Single Instance", "FPR": calc_fpr, "TPR": calc_tpr}])], ignore_index=True)
+                roc_df = pd.concat([roc_df, DataFrame([{"Attack": name, "Ensemble Level": "Single Instance", "FPR": calc_fpr, "TPR": calc_tpr}])], ignore_index=True)
             for (name, pred) in multi_instance.items():
                 calc_fpr, calc_tpr = get_fpr_tpr_hard_label(pred.pred_arr, gt)
-                df = pd.concat([df, DataFrame([{"Attack": name, "Ensemble Level": "Multi Instances", "FPR": calc_fpr, "TPR": calc_tpr}])], ignore_index=True)
+                roc_df = pd.concat([roc_df, DataFrame([{"Attack": name, "Ensemble Level": "Multi Instances", "FPR": calc_fpr, "TPR": calc_tpr}])], ignore_index=True)
             for (name, pred) in multi_attacks.items():
                 fpr, calc_tpr = get_fpr_tpr_hard_label(pred.pred_arr, gt)
-                df = pd.concat([df, DataFrame([{"Attack": name, "Ensemble Level": "Multi Attacks", "FPR": calc_fpr, "TPR": calc_tpr}])], ignore_index=True)
+                roc_df = pd.concat([roc_df, DataFrame([{"Attack": name, "Ensemble Level": "Multi Attacks", "FPR": calc_fpr, "TPR": calc_tpr}])], ignore_index=True)
 
+        roc_df.to_pickle(path_to_roc_df)
 
-        df.to_csv(output_dir + '/' + f"{ds.dataset_name}_{ensemble_method}_ensemble_roc_table.csv", index=False)
+        # Another dataframe to store auc
+        attack_perf_df = DataFrame(columns=["Attack", "Ensemble Level", "AUC", "ACC"])
         
+        # find all pairs of (attack, ensemble_level) in tpr_fpr_df
+        attack_ensemble_set = set([(row["Attack"], row["Ensemble Level"]) for _, row in roc_df.iterrows()])
 
+        # retrieve the TPR and FPR values for each pair for calculating AUC
+        for (attack, ensemble_level) in attack_ensemble_set:
+            filtered_df = roc_df[(roc_df["Attack"] == attack) & (roc_df["Ensemble Level"] == ensemble_level)]
+            fpr = []
+            tpr = []
+            for entry in filtered_df.iterrows():
+                fpr.append(entry[1]["FPR"])
+                tpr.append(entry[1]["TPR"])
+            
+            _, _, auc, acc = sweep(fpr, tpr)
+            
+            attack_perf_df = pd.concat([attack_perf_df, DataFrame([{"Attack": attack, "Ensemble Level": ensemble_level, "AUC": auc, "ACC": acc}])], ignore_index=True)
+            if verbose:
+                print(f"Attack: {attack}, Ensemble Level: {ensemble_level}, AUC: {auc}, ACC: {acc}")
         
-        # Plotting the data from df with seaborn
-        plt.figure()
+        attack_perf_df.to_pickle(path_to_attack_perf_df)
+    else:
+        roc_df = pd.read_pickle(path_to_roc_df)
+        attack_perf_df = pd.read_pickle(path_to_attack_perf_df)
+    
 
-        # Plot Single Instance
-        single_instance_df = df[df['Ensemble Level'] == 'Single Instance']
-        sns.lineplot(data=single_instance_df, x='FPR', y='TPR', hue='Attack', style='Ensemble Level', dashes=[(2, 2)], palette=mia_color_mapping, errorbar=None)
+    
+    # Plotting the data from df with seaborn
+    plt.figure()
 
-        # Plot Multi Instances
-        multi_instance_df = df[df['Ensemble Level'] == 'Multi Instances']
-        sns.lineplot(data=multi_instance_df, x='FPR', y='TPR', hue='Attack', style='Ensemble Level', dashes=[(1, 0)], palette=mia_color_mapping, errorbar=None)
+    # Plot Single Instance
+    single_instance_df = roc_df[roc_df['Ensemble Level'] == 'Single Instance']
+    sns.lineplot(data=single_instance_df, x='FPR', y='TPR', hue='Attack', style='Ensemble Level', dashes=[(2, 2)], markers=marker, palette=mia_color_mapping, errorbar=None)
 
-        # Plot Multi Attacks (ensemble of all attacks)
-        multi_attacks_df = df[df['Ensemble Level'] == 'Multi Attacks']
-        longest_name = max(multi_attacks_df['Attack'], key=len)
-        longest_name_df = multi_attacks_df[multi_attacks_df['Attack'] == longest_name]
+    # Plot Multi Instances
+    multi_instance_df = roc_df[roc_df['Ensemble Level'] == 'Multi Instances']
+    sns.lineplot(data=multi_instance_df, x='FPR', y='TPR', hue='Attack', style='Ensemble Level', dashes=[(1, 0)], markers=marker, palette=mia_color_mapping, errorbar=None)
+
+    # Plot Multi Attacks (ensemble of all attacks)
+    multi_attacks_df = roc_df[roc_df['Ensemble Level'] == 'Multi Attacks']
+    longest_name = max(multi_attacks_df['Attack'], key=len)
+    longest_name_df = multi_attacks_df[multi_attacks_df['Attack'] == longest_name]
+    if marker:
+        sns.lineplot(data=longest_name_df, x='FPR', y='TPR', color='black', marker='o', label='Multi Attacks (All)')
+    else:
         sns.lineplot(data=longest_name_df, x='FPR', y='TPR', color='black', label='Multi Attacks (All)')
 
-        plt.plot([0, 1], [0, 1], ls='--', color='gray')
+    plt.plot([0, 1], [0, 1], ls='--', color='gray')
 
+    if log_scale:
         plt.xlim(1e-4, 1)
         plt.ylim(1e-5, 1)
 
         plt.xscale('log')
         plt.yscale('log')
-        plt.xlabel('False Positive Rate (FPR)')
-        plt.ylabel('True Positive Rate (TPR)')
+    else: 
+        plt.xlim(0, 1)
+        plt.ylim(0, 1)
 
-        plt.legend()
+    plt.xlabel('False Positive Rate (FPR)')
+    plt.ylabel('True Positive Rate (TPR)')
 
-        plt.tight_layout()
+    plt.legend()
 
-        # Save the plot
-        plt.savefig(output_dir + '/' + f"{ds.dataset_name}_{ensemble_method}_{comp_with}_ensemble_roc_plot.pdf", format="pdf", bbox_inches='tight')
-        plt.close()
-        print(f"Saved plot at {output_dir + '/' + f'{ds.dataset_name}_{ensemble_method}_{comp_with}_ensemble_roc_plot.pdf'}")
+    plt.tight_layout()
 
+    # Save the plot
+    filename = f"{ds.dataset_name}_{ensemble_method}_roc_plot_liner.pdf" if not log_scale else f"{ds.dataset_name}_{ensemble_method}_roc_plot_log.pdf"
+    plt.savefig(save_dir + '/' + filename, format="pdf", bbox_inches='tight')
+    plt.close()
+    
+    print(f"Saved plot at {save_dir + '/' + filename}")
 
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate ROC curve for the 2 stage ensemble.")
-    parser.add_argument('--mode', type=str, default="table", choices=["smooth", "table"], help='Mode to run the script.')
-    parser.add_argument('--datasets', nargs='+', default=["cifar10", "cifar100"], help='List of datasets to process.')
+    parser.add_argument('--datasets', nargs='+', default=["purchase100", "texas100"], help='List of datasets to process.')
     parser.add_argument('--attack_list', nargs='+', default=["losstraj", "reference", "lira", "calibration"], help='List of attacks to process.')
     parser.add_argument('--seeds', nargs='+', type=int, default=[0, 1, 2, 3, 4, 5], help='List of seeds to use.')
-    parser.add_argument('--model', type=str, default="resnet56", help='Model name.')
-    parser.add_argument('--ensemble_method', type=str, default="intersection", choices=["intersection", "union", "majority_vote"], help='Ensemble method to use.')
-    parser.add_argument('--path_to_data', type=str, default='/home/data/wangz56/miae_experiment_aug_more_target_data', help='Path to the data directory.')
-    parser.add_argument('--comp_with', type=str, default='single_instance', help='compare our ensemble with single instance or multi-instances ensemble.')
-    parser.add_argument('--tp_or_tpr', type=str, default='TPR', help='Output directory to save the ROC curve.')
-    parser.add_argument('--seed_to_retrieve', type=int, default=0, help='Seed to retrieve the predictions for comparison.')
-    parser.add_argument('--num_fpr_for_table_ensemble', type=int, default=30, help='Number of FPR values to ensemble for table.')
+    parser.add_argument('--model', type=str, default="mlp_for_texas_purchase", help='Model name.')
+    parser.add_argument('--path_to_data', type=str, default=f'{DATA_DIR}/miae_experiment_aug_more_target_data', help='Path to the data directory.')
+    parser.add_argument('--num_fpr_for_table_ensemble', type=int, default=100, help='Number of FPR values to ensemble for table.')
     args = parser.parse_args()
 
 
-    # -- update the global variables for plotting --
     datasets = args.datasets
     attack_list = args.attack_list
     seeds = args.seeds
     model = args.model
-    ensemble_method = args.ensemble_method
     path_to_data = args.path_to_data
-    comp_with = args.comp_with
-    tp_or_tpr = args.tp_or_tpr
-    seed_to_retrieve = args.seed_to_retrieve
-
-    if args.mode == "smooth":
-        output_dir = f"{path_to_data}/ensemble_roc_smooth" if tp_or_tpr == 'TPR' else f"{path_to_data}/ensemble_roc_smooth_tp_count"
-    else:
-        output_dir = f"{path_to_data}/ensemble_roc_table"
-
     pred_path = path_to_data
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
 
     target_datasets = []
     for ds in datasets:
+        print(f"Loading from {path_to_data}/target/{ds}")
         target_datasets.append(TargetDataset.from_dir(ds, f"{path_to_data}/target/{ds}"))
 
-    desired_fpr_values = np.logspace(-6, 0, num=15000)  # Adjust 'num' for resolution
-
-    if args.mode == "smooth":
-        main = smooth_roc_main
-    elif args.mode == "table":
-        main = table_roc_main
-    else:
-        raise ValueError("Invalid mode, should be either 'smooth' or 'table'.")
     
-    main(args)
+    # for num_seed in range(2, len(seeds)+1):
+    for num_seed in range(2, len(seeds)+1):
+        seeds_consider = seeds[:num_seed]
+        for ds in target_datasets:
+            for ensemble_method in ["intersection", "union"]:
+                print(f"Processing {ds.dataset_name} with {num_seed} seeds and ensemble method {ensemble_method}")
+                save_dir = f"{path_to_data}/ensemble/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
+                os.makedirs(save_dir, exist_ok=True)
+
+                table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=True, overwrite=False, marker=False)
+                table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=False, overwrite=False, marker=False)
+
+    

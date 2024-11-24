@@ -1,3 +1,8 @@
+# modify this to set up directory:
+DATA_DIR = "/home/data/wangz56"
+
+
+
 # This script is used to obtain the predictions of the attack on the target models
 seed=0
 
@@ -7,25 +12,24 @@ fi
 
 echo "obtain_pred.sh seed = $seed"
 
-data_dir="/home/data/wangz56/miae_experiment_aug_more_target_data/target"
+data_dir="${DATA_DIR}/repeat_exp_set/miae_experiment_aug_more_target_data_0/target"
 
-preds_dir="/home/data/wangz56/miae_experiment_aug_more_target_data/preds_sd${seed}"
+preds_dir="${DATA_DIR}/repeat_exp_set/miae_experiment_aug_more_target_data_0/preds_sd${seed}"
 mkdir -p "$preds_dir"
 
 
 
-#datasets=("cifar10" "cifar100" "cinic10" "purchase100 taxes100")
-datasets=("purchase100" "texas100")
-#archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-archs=("mlp_for_texas_purchase")
-mias=("lira" "reference" "shokri" "losstraj" "calibration" "yeom")
+# datasets=("cifar10" "cifar100" "cinic10" "purchase100 taxes100")
+# datasets=("purchase100" "texas100")
+datasets=("cifar10" "cifar100")
+# archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+# archs=("mlp_for_texas_purchase")
+archs=("resnet56" "mobilenet")
+mias=("lira" "reference" "shokri" "losstraj" "calibration" "yeom" "aug")
 
 prepare_path="/home/data/wangz56/prepare_sd${seed}"
 
 target_model_path="$data_dir/target_models"
-
-cd /home/wangz56/MIAE_training_dir/MIAE/experiment/mia_comp
-
 
 
 for dataset in "${datasets[@]}"; do

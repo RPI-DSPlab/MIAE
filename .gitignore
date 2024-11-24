@@ -172,3 +172,4 @@ experiment/mia_comp/data/
 *.npy
 *.pth
 *.png
+*.out

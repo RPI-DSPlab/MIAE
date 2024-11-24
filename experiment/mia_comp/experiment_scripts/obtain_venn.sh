@@ -1,3 +1,6 @@
+# modify this to set up directory:
+DATA_DIR = "/home/data/wangz56"
+
 ## This script generates Venn diagrams for the MIAE experiment
 #datasets=("cifar10")
 #archs=("resnet56")
@@ -46,10 +49,9 @@ for dataset in "${datasets[@]}"; do
 done
 
 
-#experiment_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
 
 # For different distributions
-experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"
+experiment_dir="${DATA_DIR}/same_attack_different_signal"
 
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
@@ -81,7 +83,6 @@ for category in "${categories[@]}"; do
     fi
 done
 
-cd /home/zhangc26/MIAE/experiment/mia_comp
 
 # Generate Venn diagrams for the MIAE experiment when the goal is common_tp
 for category in "${categories[@]}"; do
