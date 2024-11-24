@@ -27,7 +27,7 @@ base_dirs=()
 for seed in "${seeds_for_file[@]}"; do
     for dataset in "${datasets[@]}"; do
         for arch in "${archs[@]}"; do
-            tmp_dir="${experiment_dir}/miae_experiment_aug_more_target_data_${seed}/graphs/venn/fpr/pairwise/${dataset}/${arch}/TPR"
+            tmp_dir="${experiment_dir}/miae_experiment_aug_more_target_data_${seed}/graphs_rebuttal/instances3/venn/fpr/pairwise/${dataset}/${arch}/TPR"
             if [ -d "$tmp_dir" ]; then
                 base_dirs+=("$tmp_dir")
             else
@@ -42,6 +42,6 @@ base_dirs_string=$(printf " %s" "${base_dirs[@]}")
 base_dirs_string=${base_dirs_string:1}  # Remove leading space
 
 
-python obtain_jaccard.py --fpr "${fprs[@]}" \
+python ../obtain_jaccard.py --fpr "${fprs[@]}" \
                          --base_dir "${base_dirs_string}" \
                          --plot_dir "${plot_dir}"
