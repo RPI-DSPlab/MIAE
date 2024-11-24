@@ -110,6 +110,7 @@ def plot_similarity_matrix(dir_path: str, fpr_list: List[float], process_opt_lis
             # Create an empty matrix
             matrix = pd.DataFrame(np.nan, index=attacks, columns=attacks)
 
+
             # Fill the matrix with the data
             for i, row in filtered_df.iterrows():
                 p1, p2, value = row['Pair 1'], row['Pair 2'], row['Value']
@@ -138,7 +139,6 @@ def plot_similarity_matrix(dir_path: str, fpr_list: List[float], process_opt_lis
             save_path = os.path.join(dir_path, f'fpr_{fpr}/Jaccard_fpr_{fpr}_{process_option}.pdf')
             plt.savefig(save_path, bbox_inches='tight')  # Save with tight bounding box to reduce white space
             plt.close()
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='obtain_mia_jaccard_similarity_matrix')

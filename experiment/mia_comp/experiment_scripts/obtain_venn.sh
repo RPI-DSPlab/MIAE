@@ -2,12 +2,17 @@
 DATA_DIR = "/home/data/wangz56"
 
 ## This script generates Venn diagrams for the MIAE experiment
-#datasets=("cifar10")
-#archs=("resnet56")
-#mias=("lira" "losstraj" "reference" "shokri" "yeom" "calibration" "aug")
-##mias=("shokri")
-#categories=("single_attack") # "threshold" "fpr" "single_attack"
-#subcategories=("common_tp") # "common_tp"
+# datasets=("cifar100" "cinic10" "cifar10") # "cifar100" "cinic10" "cifar10"
+# archs=("resnet56" "mobilenet" "wrn32_4" "vgg16") #"mobilenet" "wrn32_4" "vgg16"
+# mias=("losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira") # "losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira"
+# categories=("fpr" "threshold" "single_attack") # "threshold" "fpr" "single_attack"
+# subcategories=("pairwise") # "common_tp"
+
+datasets=("purchase100" "texas100") # "purchase100" "texas100"
+archs=("mlp_for_texas_purchase")
+mias=("losstraj" "reference" "shokri" "yeom" "calibration" "lira") 
+categories=("fpr" "threshold" "single_attack")
+subcategories=("pairwise")
 
 # For different distributions
 #datasets=("cifar10" "cinic10")
@@ -16,17 +21,17 @@ DATA_DIR = "/home/data/wangz56"
 #categories=("dif_distribution")
 
 # For same attack different signal
-datasets=("cifar10")
-archs=("resnet56")
-mias=("shokri" "top_1_shokri" "top_3_shokri")
-categories=("fpr")
-subcategories=("common_tp")
+#datasets=("cifar10")
+#archs=("resnet56")
+#mias=("shokri" "top_1_shokri" "top_3_shokri")
+#categories=("fpr")
+#subcategories=("common_tp")
 
 
 option=("TPR")
-seeds=(0 1 2 3 4 5)
-#fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
-fprs=(0.1)
+seeds=(0 1)
+fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
+
 # Prepare the parameter lists for the experiment
 mialist=""
 for mia in "${mias[@]}"; do
@@ -53,7 +58,7 @@ done
 # For different distributions
 experiment_dir="${DATA_DIR}/same_attack_different_signal"
 
-graph_dir="$experiment_dir/graphs"
+graph_dir="$experiment_dir/graphs_rebuttal/instances2"
 mkdir -p "$graph_dir"
 
 # Check if directory creation was successful
@@ -89,6 +94,7 @@ for category in "${categories[@]}"; do
     if [ "$category" == "threshold" ]; then
         for dataset in "${datasets[@]}"; do
             for arch in "${archs[@]}"; do
+                echo "Running threshold on $dataset, $arch"
                 for subcategory in "${subcategories[@]}"; do
                     for opt in "${option[@]}"; do
                         threshold=0.5
@@ -130,6 +136,7 @@ for category in "${categories[@]}"; do
                 for subcategory in "${subcategories[@]}"; do
                     for opt in "${option[@]}"; do
                         for fpr in ${fprlist}; do
+                            echo "Running fpr on $dataset, $arch on fpr = $fpr"
                             if [ "$subcategory" == "common_tp" ]; then
                                 plot_dir="$venn_dir/$category/common_tp/$dataset/$arch/$opt/fpr_${fpr}"
                                 rm -rf "$plot_dir"
@@ -168,6 +175,7 @@ for category in "${categories[@]}"; do
         for dataset in "${datasets[@]}"; do
             for arch in "${archs[@]}"; do
                 for mia in "${mias[@]}"; do
+                    echo "Running single_attack on $dataset, $arch, $mia"
                     for opt in "${option[@]}"; do
                         for fpr in ${fprlist}; do
                             plot_dir="$venn_dir/$category/$dataset/$arch/$opt/$mia/fpr_$fpr"
