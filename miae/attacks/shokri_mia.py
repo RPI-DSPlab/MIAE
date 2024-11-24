@@ -168,6 +168,8 @@ class ShokriAttack(MiAttack):
         self.attack_model = self.auxiliary_info.attack_model(self.auxiliary_info.num_classes)
         self.attack_model_dict = {}
 
+        ShokriUtil.log(self.auxiliary_info, "Start preparing the attack...", print_flag=True)
+
         # set seed
         set_seed(self.auxiliary_info.seed)
 
@@ -312,6 +314,7 @@ class ShokriAttack(MiAttack):
                 torch.save(trained_attack_model.state_dict(),
                            f"{self.auxiliary_info.attack_model_path}/attack_model_{label}.pt")
 
+        ShokriUtil.log(self.auxiliary_info, "Finish preparing the attack...", print_flag=True)
         self.prepared = True
 
     def infer(self, target_data) -> np.ndarray:
@@ -322,6 +325,8 @@ class ShokriAttack(MiAttack):
         set_seed(self.auxiliary_info.seed)
         if not self.prepared:
             raise ValueError("The attack has not been prepared!")
+        
+        ShokriUtil.log(self.aux_info, "Start membership inference...", print_flag=True)
 
         # load the attack models
         labels = np.unique(self.attack_dataset.class_labels)
@@ -348,4 +353,5 @@ class ShokriAttack(MiAttack):
                 member_pred = member_pred.cpu().detach().numpy()
                 membership.append(member_pred.reshape(-1))
 
+        ShokriUtil.log(self.aux_info, "Finish membership inference...", print_flag=True)
         return np.array(np.transpose(membership)[1])

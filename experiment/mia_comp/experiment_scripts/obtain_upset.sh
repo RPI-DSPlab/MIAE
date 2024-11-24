@@ -1,5 +1,5 @@
 # modify this to set up directory:
-DATA_DIR = "/home/data/wangz56"
+DATA_DIR="/home/data/wangz56"
 # This script generates UpSet diagrams for the MIAE experiment
 datasets=("cifar10")
 archs=("resnet56")

@@ -1,5 +1,5 @@
 # modify this to set up directory:
-DATA_DIR = "/home/data/wangz56"
+DATA_DIR="/home/data/wangz56"
 
 
 
@@ -12,9 +12,9 @@ fi
 
 echo "obtain_pred.sh seed = $seed"
 
-data_dir="${DATA_DIR}/repeat_exp_set/miae_experiment_aug_more_target_data_0/target"
+data_dir="${DATA_DIR}/miae_experiment_aug_more_target_data/target"
 
-preds_dir="${DATA_DIR}/repeat_exp_set/miae_experiment_aug_more_target_data_0/preds_sd${seed}"
+preds_dir="${DATA_DIR}/miae_experiment_aug_more_target_data/preds_sd${seed}"
 mkdir -p "$preds_dir"
 
 
@@ -27,7 +27,7 @@ datasets=("cifar10" "cifar100")
 archs=("resnet56" "mobilenet")
 mias=("lira" "reference" "shokri" "losstraj" "calibration" "yeom" "aug")
 
-prepare_path="/home/data/wangz56/prepare_sd${seed}"
+prepare_path="${DATA_DIR}/prepare_sd${seed}"
 
 target_model_path="$data_dir/target_models"
 

@@ -147,6 +147,8 @@ class YeomAttack(MiAttack):
         if self.prepared:
             print("The attack has already prepared!")
             return
+        
+        YeomUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
 
         set_seed(self.aux_info.seed)
 
@@ -163,6 +165,8 @@ class YeomAttack(MiAttack):
 
         YeomUtil.log(self.aux_info, f"Loss threshold: {self.threshold}", print_flag=True)
 
+        YeomUtil.log(self.aux_info, "Finish preparing the attack...", print_flag=True)
+
         self.prepared = True
 
     def infer(self, target_data) -> np.ndarray:
@@ -173,6 +177,8 @@ class YeomAttack(MiAttack):
         if not self.prepared:
             raise ValueError("The attack has not been prepared!")
         losses_threshold_diff = []
+
+        YeomUtil.log(self.aux_info, "Start membership inference...", print_flag=True)
 
         # load the attack models
         target_data_loader = DataLoader(target_data, batch_size=self.aux_info.batch_size, shuffle=False, num_workers=2)
@@ -196,5 +202,7 @@ class YeomAttack(MiAttack):
         losses_threshold_diff = (losses_threshold_diff - min_diff) / (max_diff - min_diff)
 
         predictions = 1 - losses_threshold_diff
+
+        YeomUtil.log(self.aux_info, "Finish membership inference...", print_flag=True)
 
         return predictions

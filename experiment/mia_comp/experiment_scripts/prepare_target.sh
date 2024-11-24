@@ -1,5 +1,5 @@
 # modify this to set up directory:
-DATA_DIR = "/home/data/wangz56"
+DATA_DIR="/home/data/wangz56"
 
 # This script is used to partition the dataset into target dataset and shadow dataset, then train the target model
 seed=0

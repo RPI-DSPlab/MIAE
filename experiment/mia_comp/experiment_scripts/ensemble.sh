@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # modify this to set up directory:
-DATA_DIR = "/home/data/wangz56"
+DATA_DIR="/home/data/wangz56"
 
 # This script is used for experiments regarding to inter-attack ensemble, there's these arguments:
 # -train_shadow: Train shadow-target data

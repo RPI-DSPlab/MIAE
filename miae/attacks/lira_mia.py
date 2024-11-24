@@ -456,6 +456,7 @@ class LiraAttack(MiAttack):
 
         :param auxiliary_dataset: The auxiliary dataset to be used for the attack.
         """
+        LIRAUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
         self.auxiliary_dataset = auxiliary_dataset
 
         # create directories
@@ -466,6 +467,7 @@ class LiraAttack(MiAttack):
         if self.auxiliary_info.online is False:
             raise NotImplementedError("LIRA does not support offline training yet.")
         self.prepared = True
+        LIRAUtil.log(self.aux_info, "Finish preparing the attack...", print_flag=True)
 
     def infer(self, dataset: torch.utils.data.Dataset) -> np.ndarray:
         """
@@ -475,6 +477,8 @@ class LiraAttack(MiAttack):
         :return: The inferred membership status of the data point.
         """
         TEST = False  # if True, we save scores and keep to the file
+
+        LiraAuxiliaryInfo.log(self.aux_info, "Start membership inference...", print_flag=True)
 
         set_seed(self.auxiliary_info.seed)
 
@@ -518,5 +522,7 @@ class LiraAttack(MiAttack):
         predictions = LIRAUtil.lira_mia(np.array(self.shadow_keeps), np.array(self.shadow_scores),
                                         np.array(target_scores), fix_variance=self.auxiliary_info.fix_variance)
 
+        LIRAUtil.log(self.aux_info, "Finish membership inference...", print_flag=True)
+        
         # return the predictions on the target data
         return -predictions[-len(dataset):]

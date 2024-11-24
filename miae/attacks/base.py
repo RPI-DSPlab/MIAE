@@ -5,8 +5,8 @@ import torch
 from torch.utils.data import Dataset, Subset
 from tqdm import tqdm
 import pickle
-
-from miae.attacks.attack_classifier import *
+from enum import Enum
+from abc import ABC, abstractmethod
 
 
 class ModelAccessType(Enum):
@@ -253,28 +253,6 @@ class MiAttack(ABC):
         :return: everything that is needed for building attack model or decision function.
         """
         pass
-
-    def build_attack_classifier(self, classifer_config: dict) -> AttackClassifier:
-        """
-        Build the attack model. This function is called after the prepare method. It uses the signals from the
-        auxiliary information to build the attack model.
-        :param config: the configuration/hyperparameters of the attack model. It is a dictionary containing the necessary
-        information for building the classifier including the type of the classifier, the hyperparameters of the classifier,
-        parameter grid for grid search, etc. see attack_classifier.py for more details.
-        :return: the attack model.
-        """
-        attack_classifier_type = classifer_config.get('attack_classifier_type')
-        if attack_classifier_type is None:
-            raise ValueError("Attack classifier type is not specified.")
-        if attack_classifier_type == AttackType.LOGISTIC_REGRESSION.value:
-            attack_classifier = LrAC(classifer_config)
-        elif attack_classifier_type == AttackType.MULTI_LAYERED_PERCEPTRON.value:
-            attack_classifier = MlpAC(classifer_config)
-        elif attack_classifier_type == AttackType.RANDOM_FOREST.value:
-            attack_classifier = RandomForestAC(classifer_config)
-        attack_classifier.build_classifier(self.aux_sample_signals, self.aux_member_labels, self.aux_sample_weights)
-        self.attack_classifier = attack_classifier
-        return attack_classifier
 
     @abstractmethod
     def infer(self, target_data):

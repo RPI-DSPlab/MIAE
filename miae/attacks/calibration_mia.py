@@ -139,6 +139,9 @@ class CalibrationAttack(MiAttack):
         test_set_len = len(auxiliary_dataset) - train_set_len
         train_set, test_set = dataset_split(auxiliary_dataset, [train_set_len, test_set_len])
 
+        # log the start of the attack
+        CalibrationUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
+
         # train the shadow model
         self.shadow_model = self.target_model_access.untrained_model
         if os.path.exists(self.aux_info.save_path + '/shadow_model.pth'):
@@ -169,6 +172,7 @@ class CalibrationAttack(MiAttack):
         self.threshold = thresholds[np.argmax(accuracies)]
 
         self.prepared = True
+        CalibrationUtil.log(self.aux_info, "Finish preparing the attack...", print_flag=True)
 
     def infer(self, target_data) -> np.ndarray:
         """
@@ -178,6 +182,8 @@ class CalibrationAttack(MiAttack):
         if not self.prepared:
             raise ValueError("The attack has not been prepared!")
         losses_threshold_diff = []
+
+        CalibrationUtil.log(self.aux_info, "Start membership inference...", print_flag=True)
 
         # load the attack models
         self.target_model_access.to_device(self.aux_info.device)
@@ -193,5 +199,7 @@ class CalibrationAttack(MiAttack):
         losses_threshold_diff = (losses_threshold_diff - min_diff) / (max_diff - min_diff)
 
         predictions = 1 - losses_threshold_diff
+
+        CalibrationUtil.log(self.aux_info, "Finish membership inference...", print_flag=True)
 
         return predictions

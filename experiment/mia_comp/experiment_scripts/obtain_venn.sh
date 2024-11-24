@@ -1,5 +1,5 @@
 # modify this to set up directory:
-DATA_DIR = "/home/data/wangz56"
+DATA_DIR="/home/data/wangz56"
 
 ## This script generates Venn diagrams for the MIAE experiment
 # datasets=("cifar100" "cinic10" "cifar10") # "cifar100" "cinic10" "cifar10"

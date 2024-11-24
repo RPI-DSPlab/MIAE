@@ -277,6 +277,9 @@ class ReferenceAttack(MiAttack):
         for dir in [self.auxiliary_info.save_path, self.auxiliary_info.shadow_path, self.auxiliary_info.log_path]:
             if dir is not None:
                 os.makedirs(dir, exist_ok=True)
+
+        ReferenceUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
+        ReferenceUtil.log(self.aux_info, "Finish preparing the attack...", print_flag=True)
         self.prepared = True
         
 
@@ -288,6 +291,8 @@ class ReferenceAttack(MiAttack):
         :return: The inferred membership status of the data point.
         """
         TEST = False  # if True, we save scores and keep to the file
+
+        ReferenceUtil.log(self.aux_info, "Start membership inference...", print_flag=True)
 
         shadow_model = self.target_model_access.get_untrained_model()
         # concatenate the target dataset and the auxiliary dataset
@@ -329,5 +334,6 @@ class ReferenceAttack(MiAttack):
         predictions = ReferenceUtil.reference_mia(self.shadow_losses, target_losses)
 
 
+        ReferenceUtil.log(self.aux_info, "Finish membership inference...", print_flag=True)
         # return the predictions on the target data
         return -predictions[-len(dataset):]

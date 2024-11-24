@@ -555,6 +555,8 @@ class LosstrajAttack(MiAttack):
         with open(self.auxiliary_info.save_path + '/losstraj_attack_config.json', 'w') as f:
             json.dump(self.auxiliary_info.save_config_to_dict(), f)
 
+        LosstrajUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
+
         # set the seed
         set_seed(self.auxiliary_info.seed)
         print(f"LOSSTRAJ: setting seed to {self.auxiliary_info.seed}")
@@ -645,6 +647,7 @@ class LosstrajAttack(MiAttack):
                                                             self.auxiliary_info, self.attack_model)
 
         self.prepared = True
+        LosstrajUtil.log(self.auxiliary_info, "Finish preparing the attack...", print_flag=True)
 
     def infer(self, dataset) -> np.ndarray:
         """
@@ -656,6 +659,8 @@ class LosstrajAttack(MiAttack):
             raise ValueError("The attack is not prepared yet!")
 
         set_seed(self.auxiliary_info.seed)
+
+        LosstrajUtil.log(self.aux_info, "Start membership inference...", print_flag=True)
 
         # obtain the loss trajectory of the target model
         print("INFER: Obtaining loss trajectory of the target model...")
@@ -674,4 +679,6 @@ class LosstrajAttack(MiAttack):
 
         target_pred = target_pred.detach().cpu().numpy()
         target_pred = -np.transpose(target_pred)[0]
+
+        LosstrajUtil.log(self.aux_info, "Finish membership inference...", print_flag=True)
         return target_pred
