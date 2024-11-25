@@ -2,22 +2,44 @@
 
 This directory contains the code for the experiments in the paper *Membership Inference Attacks as Privacy Tools: Reliability, Disparity and Ensemble*. Note that throughout this repo, we refer coverage and stability (2 definition defined in the paper) as union and intersection respectively. We also refer instances and seeds, since each instance is `prepared` with a different seed.
 
+NOTE: Scripts in this directory that are not explicitly mentioned in the section below are not guaranteed to be correct or up-to-date.
+
 ## Table of Contents
 
 - [Membership Inference Attacks as Privacy Tools: Reliability, Disparity and Ensemble](#membership-inference-attacks-as-privacy-tools-reliability-disparity-and-ensemble)
   - [Table of Contents](#table-of-contents)
   - [Abstract](#abstract)
+  - [Set up the environment](#set-up-the-environment)
   - [Preparing Predictions of Multi-instances MIAs](#preparing-predictions-of-multi-instances-mias)
     - [`obtain_pred.py`](#obtain_predpy)
-    - [`obtain_accuracy.py`](#obtain_accuracypy)
+    - [`obtain_accuracy.py` # expired](#obtain_accuracypy--expired)
+    - [`ensemble.py` # expired](#ensemblepy--expired)
     - [`process_CINIC10.ipynb`](#process_cinic10ipynb)
+  - [`/ensemble` Directory](#ensemble-directory)
+    - [`max_ensemble_low_fpr.ipynb`](#max_ensemble_low_fpripynb)
+    - [`ensemble_roc.py`](#ensemble_rocpy)
+    - [`ensemble_performance.ipynb`](#ensemble_performanceipynb)
+    - [`same_attack_different_signal/same_attack_different_signal.ipynb`](#same_attack_different_signalsame_attack_different_signalipynb)
+    - [`disparity_empirical_analysis.ipynb`](#disparity_empirical_analysisipynb)
 
 ## Abstract
 
 > Membership inference attacks not only demonstrate a significant threat to the privacy of machine learning models but are also widely utilized as tools for privacy assessment, auditing, and machine unlearning. While prior research has focused primarily on developing new attacks with improved performance metrics such as AUC and TPR@low FPR, it often overlooks the disparities among different attacks and their reliability, which are crucial when MIAs are employed as privacy tools. This paper proposes a systematic evaluation of membership inference attacks from a novel perspective, highlighting significant issues of instability and disparity. We delve into the potential impacts and causes of these issues through extensive evaluations and discuss their implications. Furthermore, we introduce two ensemble strategies that harness the strengths of multiple existing attacks, and our experiment demonstrates their advantages in enhancing the effectiveness of membership inference.
 
 
-To be able to set up the directory correctly, please replace the `DATA_DIR` in all the scripts with the path to the directory where you want to store the attack predictions and results.
+
+
+⚠️ **NOTE**: To be able to set up the directory correctly, please replace the `DATA_DIR` in all the scripts with the path to the directory where you want to store the attack predictions and results. We also recommend to run all scripts (especially those bash script) in the `miae/experiment/mia_comp` directory. 
+
+
+## Set up the environment
+```bash
+conda env create -f miae_env.yml
+conda activate miae
+```
+
+
+
 
 
 -------------------
@@ -73,21 +95,50 @@ The code is divided into three primary categories: Data Loading, Plot Diagram, a
      bash experiment_scripts/obtain_multi_seed_conv.sh
        ```
 
-
   
 ### `obtain_jaccard.py`
    The `obtain_jaccard.py` is designed to save the Jaccard similarity between different MIAs and plot a heatmap to visualize the Jaccard similarity matrix. Before running this shell script, make sure you have already have the 
    pair-wise jaccard similarity, which can be calculated via running obtain_venn.sh 
    ```bash
    bash experiment_scripts/obtain_jaccard.sh
-
    ```
 
-### `obtain_accuracy.py`
+
+### `obtain_accuracy.py` # expired
    The `obtain_accuracy.py` is designed to save the accuracy of different MIAs under TPR@FPRs and balanced accuracy.
    ```bash
     bash experiment_scripts/obtain_accuracy.sh
    ```
+
+### `ensemble.py` # expired
+   The `ensemble.py` is designed to adaptively ensemble the MIAs based on the performance of the individual MIAs or the target model's output on different samples
+   ```bash
+    python ensemble.py
+   ```
    
 ### `process_CINIC10.ipynb`
-   The `process_CINIC10.ipynb` is designed to process the CINIC10 dataset 30,000 ImageNet samples and 30,000 CIFAR10 samples._
+   The `process_CINIC10.ipynb` is designed to process the CINIC10 dataset 30,000 ImageNet samples and 30,000 CIFAR10 samples.
+
+## `/ensemble` Directory
+
+This directory contains the code for the ensemble strategies proposed in the paper: Coverage Ensemble and Stability ensemble. 
+
+### `max_ensemble_low_fpr.ipynb`
+   This notebook is designed to performs Coverage Ensemble and Stability Ensemble. It starts with thresholding the predictions of the base instances at the same low FPR, then ensemble the predictions follows our paper's definition of 2 step ensemble approach.
+
+### `ensemble_roc.py` 
+   Ensemble roc samples n thresholds for n FPRs for each base instance. Then each attack goes through the steps of ensemble in `max_ensemble_low_fpr.ipynb` for n times with different thresholds to get n samples for each ensemble TPR@FPR. It also calculates the AUC and ACC for each ensemble.
+
+___
+
+### `ensemble_performance.ipynb`
+
+This notebook is designed to compare the performance of the ensemble strategies proposed in the paper. It organize the performance result with respect to the number of instances used in the ensemble. 
+
+### `same_attack_different_signal/same_attack_different_signal.ipynb`
+
+This notebook is designed to compare the performance of the same attack on different signals. Corresponding to the paper's *Attack Signals of A-covered Samples*.
+
+### `disparity_empirical_analysis.ipynb`
+
+THis notebook is designed to analyze the disparity of MIAs in the empirical study. Corresponding to the paper's *Output Distribution of A-Vulnerable Samples:*.
