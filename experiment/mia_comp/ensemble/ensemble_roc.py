@@ -174,7 +174,9 @@ def sweep(fpr, tpr) -> Tuple[np.ndarray, np.ndarray, float, float]:
     
 
 def table_roc_main(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_ensemble, ensemble_method,
-                   log_scale: bool = True, overwrite: bool = False, marker=False, verbose: bool = False):
+                   log_scale: bool = True, overwrite: bool = False, marker=False, verbose: bool = False,
+                   additional_command: List[str] = None
+                   ):
     """
     This main function would ensemble attacks at some specified FPR values,
     it could be considered as repeating the experiment in the table of the paper for
@@ -246,21 +248,30 @@ def table_roc_main(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_en
     plt.figure()
 
     # Plot Single Instance
-    single_instance_df = roc_df[roc_df['Ensemble Level'] == 'Single Instance']
-    sns.lineplot(data=single_instance_df, x='FPR', y='TPR', hue='Attack', style='Ensemble Level', dashes=[(2, 2)], markers=marker, palette=mia_color_mapping, errorbar=None)
+    if "don't show single instance" not in additional_command:
+        single_instance_df = roc_df[roc_df['Ensemble Level'] == 'Single Instance']
+        sns.lineplot(data=single_instance_df, x='FPR', y='TPR', hue='Attack', style='Ensemble Level', dashes=[(2, 2)], markers=marker, palette=mia_color_mapping, errorbar=None)
 
     # Plot Multi Instances
-    multi_instance_df = roc_df[roc_df['Ensemble Level'] == 'Multi Instances']
-    sns.lineplot(data=multi_instance_df, x='FPR', y='TPR', hue='Attack', style='Ensemble Level', dashes=[(1, 0)], markers=marker, palette=mia_color_mapping, errorbar=None)
+    if "don't show multi instance" not in additional_command:
+        multi_instance_df = roc_df[roc_df['Ensemble Level'] == 'Multi Instances']
+        sns.lineplot(data=multi_instance_df, x='FPR', y='TPR', hue='Attack', style='Ensemble Level', dashes=[(1, 0)], markers=marker, palette=mia_color_mapping, errorbar=None)
 
     # Plot Multi Attacks (ensemble of all attacks)
     multi_attacks_df = roc_df[roc_df['Ensemble Level'] == 'Multi Attacks']
     longest_name = max(multi_attacks_df['Attack'], key=len)
-    longest_name_df = multi_attacks_df[multi_attacks_df['Attack'] == longest_name]
-    if marker:
-        sns.lineplot(data=longest_name_df, x='FPR', y='TPR', color='black', marker='o', label='Multi Attacks (All)')
+
+    if "show all multi attack" not in additional_command: # by default, only show the longest attack name (using all attacks)
+        multi_attacks_df = multi_attacks_df[multi_attacks_df['Attack'] == longest_name]
+        if marker:
+            sns.lineplot(data=multi_attacks_df, x='FPR', y='TPR', color='black', marker='o', label='Multi Attacks (All)')
+        else:
+            sns.lineplot(data=multi_attacks_df, x='FPR', y='TPR', color='black', label='Multi Attacks (All)')
     else:
-        sns.lineplot(data=longest_name_df, x='FPR', y='TPR', color='black', label='Multi Attacks (All)')
+        if marker:
+            sns.lineplot(data=multi_attacks_df, x='FPR', y='TPR', hue='Attack', style='Ensemble Level', markers=marker, errorbar=None)
+        else:
+            sns.lineplot(data=multi_attacks_df, x='FPR', y='TPR', hue='Attack', style='Ensemble Level', errorbar=None)
 
     plt.plot([0, 1], [0, 1], ls='--', color='gray')
 
@@ -292,13 +303,15 @@ def table_roc_main(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_en
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate ROC curve for the 2 stage ensemble.")
-    parser.add_argument('--datasets', nargs='+', default=["purchase100", "texas100"], help='List of datasets to process.')
+    parser.add_argument('--datasets', nargs='+', default=["cifar100", "cinic10", "cifar10"], help='List of datasets to process.')
     parser.add_argument('--attack_list', nargs='+', default=["losstraj", "reference", "lira", "calibration"], help='List of attacks to process.')
     parser.add_argument('--seeds', nargs='+', type=int, default=[0, 1, 2, 3, 4, 5], help='List of seeds to use.')
-    parser.add_argument('--model', type=str, default="mlp_for_texas_purchase", help='Model name.')
+    parser.add_argument('--model', type=str, default="resnet56", help='Model name.')
     parser.add_argument('--path_to_data', type=str, default=f'{DATA_DIR}/miae_experiment_aug_more_target_data', help='Path to the data directory.')
     parser.add_argument('--num_fpr_for_table_ensemble', type=int, default=100, help='Number of FPR values to ensemble for table.')
     args = parser.parse_args()
+
+    # additional_command = ["show all multi attack", "don't show single instance", "don't show multi instance"]
 
 
     datasets = args.datasets
@@ -320,10 +333,10 @@ if __name__ == "__main__":
         for ds in target_datasets:
             for ensemble_method in ["intersection", "union"]:
                 print(f"Processing {ds.dataset_name} with {num_seed} seeds and ensemble method {ensemble_method}")
-                save_dir = f"{path_to_data}/ensemble/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
+                save_dir = f"{path_to_data}/ensemble_roc_all_multi_attack/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
                 os.makedirs(save_dir, exist_ok=True)
 
-                table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=True, overwrite=False, marker=False)
-                table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=False, overwrite=False, marker=False)
+                table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=True, overwrite=False, marker=False, additional_command=additional_command)
+                table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=False, overwrite=False, marker=False, additional_command=additional_command)
 
     
