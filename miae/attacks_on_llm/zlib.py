@@ -35,7 +35,7 @@ class ZLIBAttack(Attack):
             no_grads=True,
             return_all_probs=False
         )
-        target_token_log_probs = log_probs_data['target_token_log_probs']
+        target_token_log_probs = log_probs_data['target_log_probs']
 
         # Convert log probabilities to losses (negative log likelihoods)
         with torch.no_grad():

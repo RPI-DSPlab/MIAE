@@ -160,6 +160,7 @@ def run_zlib_attack(attack_config, target_model, train_set, test_set, device):
     
     member_scores = []
     non_member_scores = []
+    labels = []
     
     # Use tqdm to display progress for the train set
     for idx, document in enumerate(tqdm(train_set, desc="Processing Train Set for ZLIB")):

@@ -29,12 +29,12 @@ class LossAttack(Attack):
             text=document,
             tokens=tokens,
             no_grads=True,
-            return_all_probs=True
+            return_all_probs=False
         )
-        target_token_log_probs = log_probs_data['target_token_log_probs']
+        log_probs = log_probs_data['target_log_probs']
 
         # Calculate the average loss over the document negative log probs
-        avg_loss = -np.mean([target_token_log_probs])
+        avg_loss = -np.mean([log_probs])
         # print(f"Average Loss (Likelihood Score): {avg_loss}")
         # print(f"Normalized Probability-Like Score: {np.exp(-avg_loss)}")
 
