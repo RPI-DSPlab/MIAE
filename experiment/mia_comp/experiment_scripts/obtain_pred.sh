@@ -12,20 +12,21 @@ fi
 
 echo "obtain_pred.sh seed = $seed"
 
-data_dir="${DATA_DIR}/miae_experiment_aug_more_target_data/target"
+data_dir="${DATA_DIR}/miae_standard_exp/target"
 
-preds_dir="${DATA_DIR}/miae_experiment_aug_more_target_data/preds_sd${seed}"
+preds_dir="${DATA_DIR}/miae_standard_exp/preds_sd${seed}"
 mkdir -p "$preds_dir"
 
 
-
-# datasets=("cifar10" "cifar100" "cinic10" "purchase100 taxes100")
-# datasets=("purchase100" "texas100")
-datasets=("cifar10" "cifar100")
+# datasets=("purchase100" "taxes100")
+datasets=("cifar10" "cifar100" "cinic10")
+# datasets=("cifar10" "cifar100")
 # archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
 # archs=("mlp_for_texas_purchase")
-archs=("resnet56" "mobilenet")
+archs=("resnet56" "vgg16")
 mias=("lira" "reference" "shokri" "losstraj" "calibration" "yeom" "aug")
+
+
 
 prepare_path="${DATA_DIR}/prepare_sd${seed}"
 
@@ -35,11 +36,11 @@ target_model_path="$data_dir/target_models"
 for dataset in "${datasets[@]}"; do
   # if assign different num_epoch for different dataset
   if [ "$dataset" == "cifar10" ]; then
-    num_epoch=100
+    num_epoch=60
   elif [ "$dataset" == "cifar100" ]; then
-    num_epoch=150
-  elif [ "$dataset" == "cinic10" ]; then
     num_epoch=100
+  elif [ "$dataset" == "cinic10" ]; then
+    num_epoch=60
   elif [ "$dataset" == "purchase100" ]; then
     num_epoch=30
   elif [ "$dataset" == "texas100" ]; then

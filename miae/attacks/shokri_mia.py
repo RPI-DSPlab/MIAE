@@ -145,11 +145,11 @@ class ShokriAttack(MiAttack):
         self.shadow_test_loader = None
         self.attack_train_loader = None
         self.attack_test_loader = None
-        self.auxiliary_info = auxiliary_info
+        self.aux_info = auxiliary_info
         self.target_model_access = target_model_access
 
         # directories:
-        for dir in [self.auxiliary_info.shadow_model_path, self.auxiliary_info.attack_model_path]:
+        for dir in [self.aux_info.shadow_model_path, self.aux_info.attack_model_path]:
             if not os.path.exists(dir):
                 os.makedirs(dir)
 
@@ -165,67 +165,67 @@ class ShokriAttack(MiAttack):
             print("The attack has already prepared!")
             return
 
-        self.attack_model = self.auxiliary_info.attack_model(self.auxiliary_info.num_classes)
+        self.attack_model = self.aux_info.attack_model(self.aux_info.num_classes)
         self.attack_model_dict = {}
 
-        ShokriUtil.log(self.auxiliary_info, "Start preparing the attack...", print_flag=True)
+        ShokriUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
 
         # set seed
-        set_seed(self.auxiliary_info.seed)
+        set_seed(self.aux_info.seed)
 
         # create shadow datasets
-        sub_shadow_dataset_list = ShokriUtil.split_dataset(auxiliary_dataset, self.auxiliary_info.num_shadow_models)
+        sub_shadow_dataset_list = ShokriUtil.split_dataset(auxiliary_dataset, self.aux_info.num_shadow_models)
         # log/print the shadow dataset sizes
-        ShokriUtil.log(self.auxiliary_info, f"Shadow dataset[0] size: {sub_shadow_dataset_list[0].__len__()}")
+        ShokriUtil.log(self.aux_info, f"Shadow dataset[0] size: {sub_shadow_dataset_list[0].__len__()}")
 
         # step 1: train shadow models
-        if not os.path.exists(self.auxiliary_info.attack_dataset_path):
+        if not os.path.exists(self.aux_info.attack_dataset_path):
             # if attack dataset exists, then there's no need to retrain shadow models
             in_prediction_set_pred = None
             in_prediction_set_label = None
             out_prediction_set_pred = None
             out_prediction_set_label = None
 
-            for i in range(self.auxiliary_info.num_shadow_models):
+            for i in range(self.aux_info.num_shadow_models):
                 # train k shadows models to build attack dataset
                 model_name = f"shadow_model_{i}.pt"
-                model_path = os.path.join(self.auxiliary_info.shadow_model_path, model_name)
+                model_path = os.path.join(self.aux_info.shadow_model_path, model_name)
 
                 shadow_model_i = self.target_model_access.get_untrained_model()
-                shadow_model_i.to(self.auxiliary_info.device)
+                shadow_model_i.to(self.aux_info.device)
 
 
-                if self.auxiliary_info.shadow_diff_init:
+                if self.aux_info.shadow_diff_init:
                     try:
-                        set_seed((self.auxiliary_info.seed + i)*100) # *100 to avoid overlapping of different instances
+                        set_seed((self.aux_info.seed + i)*100) # *100 to avoid overlapping of different instances
                         shadow_model_i.initialize_weights()
                     except:
                         raise NotImplementedError("the model doesn't have .initialize_weights method")
 
-                train_len = int(len(sub_shadow_dataset_list[i]) * self.auxiliary_info.shadow_train_ratio)
+                train_len = int(len(sub_shadow_dataset_list[i]) * self.aux_info.shadow_train_ratio)
                 test_len = len(sub_shadow_dataset_list[i]) - train_len
                 shadow_train_dataset, shadow_test_dataset = torch.utils.data.random_split(sub_shadow_dataset_list[i],
                                                                                           [train_len, test_len])
 
-                shadow_train_loader = DataLoader(shadow_train_dataset, batch_size=self.auxiliary_info.shadow_batch_size,
+                shadow_train_loader = DataLoader(shadow_train_dataset, batch_size=self.aux_info.shadow_batch_size,
                                                  shuffle=True)
-                shadow_test_loader = DataLoader(shadow_test_dataset, batch_size=self.auxiliary_info.shadow_batch_size,
+                shadow_test_loader = DataLoader(shadow_test_dataset, batch_size=self.aux_info.shadow_batch_size,
                                                 shuffle=False)
                 if os.path.exists(model_path):
-                    ShokriUtil.log(self.auxiliary_info,
-                                   f"Loading shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
+                    ShokriUtil.log(self.aux_info,
+                                   f"Loading shadow model {i + 1}/{self.aux_info.num_shadow_models}...")
                     shadow_model_i.load_state_dict(torch.load(model_path))
                 else:
-                    ShokriUtil.log(self.auxiliary_info,
-                                   f"Training shadow model {i + 1}/{self.auxiliary_info.num_shadow_models}...")
+                    ShokriUtil.log(self.aux_info,
+                                   f"Training shadow model {i + 1}/{self.aux_info.num_shadow_models}...")
                     shadow_model_i = ShokriUtil.train_shadow_model(shadow_model_i, shadow_train_loader,
                                                                    shadow_test_loader,
-                                                                   self.auxiliary_info)
+                                                                   self.aux_info)
                     torch.save(shadow_model_i.state_dict(), model_path)
 
                 # building the attack dataset
                 for data, target in shadow_train_loader:
-                    data, target = data.to(self.auxiliary_info.device), target.to(self.auxiliary_info.device)
+                    data, target = data.to(self.aux_info.device), target.to(self.aux_info.device)
                     output = shadow_model_i(data)
                     if in_prediction_set_pred is None:  # first entry
                         in_prediction_set_pred = output.cpu().detach().numpy()
@@ -236,7 +236,7 @@ class ShokriAttack(MiAttack):
                             (in_prediction_set_label, target.cpu().detach().numpy()))
 
                 for data, target in shadow_test_loader:
-                    data, target = data.to(self.auxiliary_info.device), target.to(self.auxiliary_info.device)
+                    data, target = data.to(self.aux_info.device), target.to(self.aux_info.device)
                     output = shadow_model_i(data)
                     if out_prediction_set_pred is None:  # first entry
                         out_prediction_set_pred = output.cpu().detach().numpy()
@@ -266,14 +266,15 @@ class ShokriAttack(MiAttack):
             # build the dataset for attack model training
             self.attack_dataset = AttackTrainingSet(prediction_set_pred, prediction_set_label,
                                                     prediction_set_membership)
-            torch.save(self.attack_dataset, self.auxiliary_info.attack_dataset_path)
+            torch.save(self.attack_dataset, self.aux_info.attack_dataset_path)
 
         # step 3: train attack model
-        self.attack_dataset = torch.load(self.auxiliary_info.attack_dataset_path)
-        train_len = int(len(self.attack_dataset) * self.auxiliary_info.attack_train_ratio)
+        set_seed(self.aux_info.seed)
+        self.attack_dataset = torch.load(self.aux_info.attack_dataset_path)
+        train_len = int(len(self.attack_dataset) * self.aux_info.attack_train_ratio)
         test_len = len(self.attack_dataset) - train_len
 
-        if self.auxiliary_info.attack_train_ratio < 1.0:
+        if self.aux_info.attack_train_ratio < 1.0:
             attack_train_dataset, attack_test_dataset = torch.utils.data.random_split(self.attack_dataset,
                                                                                       [train_len, test_len])
         else:
@@ -283,38 +284,38 @@ class ShokriAttack(MiAttack):
         # train attack models for each label
         labels = np.unique(self.attack_dataset.class_labels)
         # if attack model exists, then there's no need to retrain attack models
-        if len(labels) == len(os.listdir(self.auxiliary_info.attack_model_path)):
-            ShokriUtil.log(self.auxiliary_info, "Loading attack models...")
+        if len(labels) == len(os.listdir(self.aux_info.attack_model_path)):
+            ShokriUtil.log(self.aux_info, "Loading attack models...")
             for i, label in enumerate(labels):
-                model = self.auxiliary_info.attack_model(self.auxiliary_info.num_classes)
-                model.load_state_dict(torch.load(f"{self.auxiliary_info.attack_model_path}/attack_model_{label}.pt"))
-                model.to(self.auxiliary_info.device)
+                model = self.aux_info.attack_model(self.aux_info.num_classes)
+                model.load_state_dict(torch.load(f"{self.aux_info.attack_model_path}/attack_model_{label}.pt"))
+                model.to(self.aux_info.device)
                 self.attack_model_dict[label] = model
         else:
             for i, label in enumerate(labels):
-                ShokriUtil.log(self.auxiliary_info, f"Training attack model for {i}/{len(labels)} label \"{label}\" ..."
+                ShokriUtil.log(self.aux_info, f"Training attack model for {i}/{len(labels)} label \"{label}\" ..."
                                , print_flag=True)
                 # filter the dataset with the label
                 attack_train_dataset_filtered = ShokriUtil.filter_dataset(attack_train_dataset, label)
                 attack_test_dataset_filtered = ShokriUtil.filter_dataset(attack_test_dataset,
                                                                          label) if attack_test_dataset else None
                 self.attack_train_loader = DataLoader(attack_train_dataset_filtered,
-                                                      batch_size=self.auxiliary_info.attack_batch_size,
+                                                      batch_size=self.aux_info.attack_batch_size,
                                                       shuffle=True)
                 self.attack_test_loader = DataLoader(attack_test_dataset_filtered,
-                                                     batch_size=self.auxiliary_info.attack_batch_size,
+                                                     batch_size=self.aux_info.attack_batch_size,
                                                      shuffle=True) if attack_test_dataset else None
-                untrained_attack_model = self.auxiliary_info.attack_model(self.auxiliary_info.num_classes)
-                untrained_attack_model.to(self.auxiliary_info.device)
+                untrained_attack_model = self.aux_info.attack_model(self.aux_info.num_classes)
+                untrained_attack_model.to(self.aux_info.device)
 
                 trained_attack_model = ShokriUtil.train_attack_model(untrained_attack_model, self.attack_train_loader,
                                                                      self.attack_test_loader,
-                                                                     self.auxiliary_info)
+                                                                     self.aux_info)
                 self.attack_model_dict[label] = trained_attack_model
                 torch.save(trained_attack_model.state_dict(),
-                           f"{self.auxiliary_info.attack_model_path}/attack_model_{label}.pt")
+                           f"{self.aux_info.attack_model_path}/attack_model_{label}.pt")
 
-        ShokriUtil.log(self.auxiliary_info, "Finish preparing the attack...", print_flag=True)
+        ShokriUtil.log(self.aux_info, "Finish preparing the attack...", print_flag=True)
         self.prepared = True
 
     def infer(self, target_data) -> np.ndarray:
@@ -322,7 +323,7 @@ class ShokriAttack(MiAttack):
         Infer the membership of the target data.
         """
         super().infer(target_data)
-        set_seed(self.auxiliary_info.seed)
+        set_seed(self.aux_info.seed)
         if not self.prepared:
             raise ValueError("The attack has not been prepared!")
         
@@ -332,24 +333,24 @@ class ShokriAttack(MiAttack):
         labels = np.unique(self.attack_dataset.class_labels)
         for label in labels:
             if label not in self.attack_model_dict:
-                model = self.auxiliary_info.attack_model(self.auxiliary_info.num_classes)
-                model.load_state_dict(torch.load(f"{self.auxiliary_info.attack_model_path}/attack_model_{label}.pt"))
-                model.to(self.auxiliary_info.device)
+                model = self.aux_info.attack_model(self.aux_info.num_classes)
+                model.load_state_dict(torch.load(f"{self.aux_info.attack_model_path}/attack_model_{label}.pt"))
+                model.to(self.aux_info.device)
                 self.attack_model_dict[label] = model
 
         # infer the membership
-        self.target_model_access.model.to(self.auxiliary_info.device)
+        self.target_model_access.model.to(self.aux_info.device)
         membership = []
 
-        target_data_loader = DataLoader(target_data, batch_size=self.auxiliary_info.batch_size, shuffle=False)
+        target_data_loader = DataLoader(target_data, batch_size=self.aux_info.batch_size, shuffle=False)
 
         for data, target in target_data_loader:
-            data = data.to(self.auxiliary_info.device)
+            data = data.to(self.aux_info.device)
             output = self.target_model_access.model(data)
             output = output.cpu().detach().numpy()
             for i, label in enumerate(target):
                 label = label.item()
-                member_pred = self.attack_model_dict[label](torch.tensor(output[i]).to(self.auxiliary_info.device))
+                member_pred = self.attack_model_dict[label](torch.tensor(output[i]).to(self.aux_info.device))
                 member_pred = member_pred.cpu().detach().numpy()
                 membership.append(member_pred.reshape(-1))
 

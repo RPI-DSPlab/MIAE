@@ -1,11 +1,9 @@
 import torch
 import numpy as np
 from torch.utils.data import Dataset
-from typing import List
-from copy import deepcopy
+from typing import Tuple
 
-
-def get_xy_from_dataset(dataset: Dataset) -> (np.ndarray, np.ndarray):
+def get_xy_from_dataset(dataset: Dataset) -> Tuple[np.ndarray, np.ndarray]:
     """
     Get x and y from a dataset
     :param dataset: dataset
@@ -16,10 +14,7 @@ def get_xy_from_dataset(dataset: Dataset) -> (np.ndarray, np.ndarray):
 
     for item in dataset:
         data, label = item
-        if isinstance(data, torch.Tensor):
-            data = data.numpy()
-        else:
-            x.append(data)
+        x.append(data.numpy())
         y.append(label)
 
     # Convert lists to numpy arrays

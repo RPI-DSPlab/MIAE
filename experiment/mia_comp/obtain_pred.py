@@ -28,6 +28,7 @@ from miae.attacks import base as mia_base
 from miae.utils import roc_auc, dataset_utils
 from experiment import models
 from experiment.mia_comp import datasets
+from datasets import CINIC10
 from scipy.sparse import csr_matrix
 
 # adding mia that's not in MIAE package
@@ -233,7 +234,7 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
         return shokri_mia.ShokriAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path, 'num_shadow_models': 10, 
-             "shadow_diff_init" : False})
+             "shadow_diff_init" : True})
     if args.attack == "top_k_shokri":
         return top_k_shokri_mia.TopKShokriAuxiliaryInfo(
             {'device': device, 'shadow_seed_base': 50*args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
@@ -247,19 +248,20 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
         return lira_mia.LiraAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
             'batch_size': args.batch_size, 'lr': 0.1, "num_shadow_models": 20, 'epochs': args.attack_epochs, 'log_path': args.result_path,
-             'shadow_path': args.lira_shadow_path, 'shadow_diff_init': False, "augmentation_query": n_augmentation})
+             'shadow_path': args.lira_shadow_path, 'shadow_diff_init': True, "augmentation_query": n_augmentation})
 
     if args.attack == "reference":
         return reference_mia.ReferenceAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
             'batch_size': args.batch_size, 'lr': 0.1, "num_shadow_models": 20, 'epochs': args.attack_epochs, 'log_path': args.result_path,
-             'shadow_path': args.lira_shadow_path, 'shadow_diff_init': False})
+             'shadow_path': args.lira_shadow_path, 'shadow_diff_init': True})
 
     if args.attack == "aug":
+        if args.dataset == "purchase100" or args.dataset == "texas100":
+            raise ValueError("augmentation attack is not supported for non-image datsets")
         return aug_mia.AugAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
-    
     
     else:
         raise ValueError("Invalid attack type")
@@ -289,6 +291,8 @@ def get_attack(args, aux_info: mia_base.AuxiliaryInfo, target_model_access: mia_
     if args.attack == "reference":
         return reference_mia.ReferenceAttack(target_model_access, aux_info)
     if args.attack == "aug":
+        if args.dataset == "purchase100" or args.dataset == "texas100":
+            raise ValueError("augmentation attack is not supported for non-image datsets")
         return aug_mia.AugAttack(target_model_access, aux_info)
     else:
         raise ValueError("Invalid attack type")

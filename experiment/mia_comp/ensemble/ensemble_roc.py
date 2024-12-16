@@ -143,6 +143,12 @@ def ensemble_with_base_FPR(experiment_set: ExperimentSet, ensemble_method: str, 
             for instance in all_instances:
                 result_pred = np.logical_or(result_pred, instance.pred_arr)
             multi_instance[attack] = Predictions(result_pred, single_instance[attack].ground_truth_arr, f"{attack}_union")
+        elif ensemble_method == "majority_vote":
+            result_pred = np.zeros_like(all_instances[0].pred_arr)
+            for instance in all_instances:
+                result_pred += instance.pred_arr
+            result_pred = result_pred >= len(all_instances) // 2
+            multi_instance[attack] = Predictions(result_pred, single_instance[attack].ground_truth_arr, f"{attack}_majority_vote")
         else:
             raise ValueError("Invalid ensemble method.")
         
@@ -217,7 +223,7 @@ def table_roc_main(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_en
         roc_df.to_pickle(path_to_roc_df)
 
         # Another dataframe to store auc
-        attack_perf_df = DataFrame(columns=["Attack", "Ensemble Level", "AUC", "ACC"])
+        attack_perf_df = DataFrame(columns=["Attack", "Ensemble Level", "AUC", "ACC", "TPR@0.001FPR"])
         
         # find all pairs of (attack, ensemble_level) in tpr_fpr_df
         attack_ensemble_set = set([(row["Attack"], row["Ensemble Level"]) for _, row in roc_df.iterrows()])
@@ -232,8 +238,11 @@ def table_roc_main(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_en
                 tpr.append(entry[1]["TPR"])
             
             _, _, auc, acc = sweep(fpr, tpr)
+
+            TPRat001FPR = np.interp(0.001, fpr, tpr)
             
-            attack_perf_df = pd.concat([attack_perf_df, DataFrame([{"Attack": attack, "Ensemble Level": ensemble_level, "AUC": auc, "ACC": acc}])], ignore_index=True)
+            attack_perf_df = pd.concat([attack_perf_df, DataFrame([{"Attack": attack, "Ensemble Level": ensemble_level, "AUC": auc, 
+                                                                    "ACC": acc, "TPR@0.001FPR": TPRat001FPR}])], ignore_index=True)
             if verbose:
                 print(f"Attack: {attack}, Ensemble Level: {ensemble_level}, AUC: {auc}, ACC: {acc}")
         
@@ -306,18 +315,19 @@ if __name__ == "__main__":
     parser.add_argument('--datasets', nargs='+', default=["cifar100", "cinic10", "cifar10"], help='List of datasets to process.')
     parser.add_argument('--attack_list', nargs='+', default=["losstraj", "reference", "lira", "calibration"], help='List of attacks to process.')
     parser.add_argument('--seeds', nargs='+', type=int, default=[0, 1, 2, 3, 4, 5], help='List of seeds to use.')
-    parser.add_argument('--model', type=str, default="resnet56", help='Model name.')
+    parser.add_argument('--models', nargs='+', type=str, default="resnet56", help='Model name.')
     parser.add_argument('--path_to_data', type=str, default=f'{DATA_DIR}/miae_experiment_aug_more_target_data', help='Path to the data directory.')
     parser.add_argument('--num_fpr_for_table_ensemble', type=int, default=100, help='Number of FPR values to ensemble for table.')
     args = parser.parse_args()
 
     # additional_command = ["show all multi attack", "don't show single instance", "don't show multi instance"]
+    additional_command = ["show all multi attack", "don't show single instance", "don't show multi instance"]
 
 
     datasets = args.datasets
     attack_list = args.attack_list
     seeds = args.seeds
-    model = args.model
+    models = args.models
     path_to_data = args.path_to_data
     pred_path = path_to_data
 
@@ -327,16 +337,16 @@ if __name__ == "__main__":
         target_datasets.append(TargetDataset.from_dir(ds, f"{path_to_data}/target/{ds}"))
 
     
-    # for num_seed in range(2, len(seeds)+1):
-    for num_seed in range(2, len(seeds)+1):
-        seeds_consider = seeds[:num_seed]
-        for ds in target_datasets:
-            for ensemble_method in ["intersection", "union"]:
-                print(f"Processing {ds.dataset_name} with {num_seed} seeds and ensemble method {ensemble_method}")
-                save_dir = f"{path_to_data}/ensemble_roc_all_multi_attack/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
-                os.makedirs(save_dir, exist_ok=True)
+    for model in models:
+        for num_seed in range(2, len(seeds)+1):
+            seeds_consider = seeds[:num_seed]
+            for ds in target_datasets:
+                for ensemble_method in ["intersection", "union", "majority_vote"]:
+                    print(f"Processing {ds.dataset_name} with {num_seed} seeds and ensemble method {ensemble_method} and model {model}")
+                    save_dir = f"{path_to_data}/ensemble_roc_all_multi_attack/{model}/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
+                    os.makedirs(save_dir, exist_ok=True)
 
-                table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=True, overwrite=False, marker=False, additional_command=additional_command)
-                table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=False, overwrite=False, marker=False, additional_command=additional_command)
+                    table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=True, overwrite=False, marker=False, additional_command=additional_command)
+                    table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=False, overwrite=False, marker=False, additional_command=additional_command)
 
-    
+        

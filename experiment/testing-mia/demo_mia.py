@@ -247,17 +247,15 @@ def main():
     rmia_target_model_access = rmia_mia.RMIAModelAccess(deepcopy(target_model), untrained_target_model)
 
     attacks = [
-        losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
+        # losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
         # merlin_mia.MerlinAttack(merlin_target_model_access, merlin_aux_info),
-        lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
+        # lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
         # aug_mia.AugAttack(aug_target_model_access, aug_aux_info),
-        calibration_mia.CalibrationAttack(calibration_target_model_access, calibration_aux_info),
-        # shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info),
-        # top_k_shokri_mia.TopKShokriAttack(top_k_shokri_target_model_access, top_k_shokri_aux_info)
-        yeom_mia.YeomAttack(yeom_target_model_access, yeom_aux_info),
+        # calibration_mia.CalibrationAttack(calibration_target_model_access, calibration_aux_info),
         shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info),
         # top_k_shokri_mia.TopKShokriAttack(top_k_shokri_target_model_access, top_k_shokri_aux_info)
-        reference_mia.ReferenceAttack(reference_target_model_access, reference_aux_info),
+        # yeom_mia.YeomAttack(yeom_target_model_access, yeom_aux_info),
+        # reference_mia.ReferenceAttack(reference_target_model_access, reference_aux_info),
         # rmia_mia.RMIAAttack(rmia_target_model_access, rmia_aux_info)
     ]
 
