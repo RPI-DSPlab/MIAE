@@ -215,6 +215,20 @@ class Predictions:
         if (TP + FP) == 0:
             print(f"prediction {self.name} has no positive samples")
         return TP / (TP + FP)
+    
+    def jaccard_similarity(self, other_pred) -> float:
+        """
+        Compute the Jaccard similarity between two predictions.
+        Jaccard similarity = Intersection / Union
+        """
+        if not self.is_hard():
+            raise ValueError("Jaccard similarity metric requires hard label predictions")
+        if not other_pred.is_hard():
+            raise ValueError("Jaccard similarity metric requires hard label predictions")
+
+        intersection = np.sum((self.predictions_to_labels() == 1) & (other_pred.predictions_to_labels() == 1))
+        union = np.sum((self.predictions_to_labels() == 1) | (other_pred.predictions_to_labels() == 1))
+        return intersection / union
 
 
 def _common_tp(preds: List[Predictions], fpr=None, threshold=0.5, set_op="intersection"):

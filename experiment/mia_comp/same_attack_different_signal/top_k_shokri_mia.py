@@ -51,6 +51,8 @@ class TopKShokriAttack(ShokriAttack):
         self.attack_model = self.aux_info.attack_model(self.aux_info.num_classes)
         self.attack_model_dict = {}
 
+        ShokriUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
+
         # set seed
         set_seed(self.aux_info.seed)
 
@@ -74,6 +76,15 @@ class TopKShokriAttack(ShokriAttack):
 
                 shadow_model_i = self.target_model_access.get_untrained_model()
                 shadow_model_i.to(self.aux_info.device)
+
+
+                if self.aux_info.shadow_diff_init:
+                    try:
+                        set_seed((self.aux_info.seed + i)*100) # *100 to avoid overlapping of different instances
+                        shadow_model_i.initialize_weights()
+                    except:
+                        raise NotImplementedError("the model doesn't have .initialize_weights method")
+
                 train_len = int(len(sub_shadow_dataset_list[i]) * self.aux_info.shadow_train_ratio)
                 test_len = len(sub_shadow_dataset_list[i]) - train_len
                 shadow_train_dataset, shadow_test_dataset = torch.utils.data.random_split(sub_shadow_dataset_list[i],
@@ -142,7 +153,8 @@ class TopKShokriAttack(ShokriAttack):
                                                     prediction_set_membership)
             torch.save(self.attack_dataset, self.aux_info.attack_dataset_path)
 
-            # step 3: train attack model
+        # step 3: train attack model
+        set_seed(self.aux_info.seed)
         self.attack_dataset = torch.load(self.aux_info.attack_dataset_path)
         train_len = int(len(self.attack_dataset) * self.aux_info.attack_train_ratio)
         test_len = len(self.attack_dataset) - train_len

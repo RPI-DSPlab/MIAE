@@ -27,25 +27,7 @@ def get_model(model_name, num_classes, input_size):
 
 
 def create_mlp(input_size, num_classes, layer_sizes):
-    layers = []
-    for i in range(len(layer_sizes)):
-        if i == 0:
-            layers.append(nn.Linear(input_size, layer_sizes[i]))
-        else:
-            layers.append(nn.Linear(layer_sizes[i - 1], layer_sizes[i]))
-        layers.append(nn.ReLU())
-    layers.append(nn.Linear(layer_sizes[-1], num_classes))
-    
-    model = nn.Sequential(*layers)
-    
-    # Initialize weights with Glorot uniform (Xavier uniform)
-    for layer in model:
-        if isinstance(layer, nn.Linear):
-            nn.init.xavier_uniform_(layer.weight)
-            if layer.bias is not None:
-                nn.init.constant_(layer.bias, 0)
-    
-    return model
+    return MLP(input_size=input_size, num_classes=num_classes, layer_sizes=layer_sizes)
 
 def create_resnet56(num_classes=10, input_size=32):
     num_blocks = [9, 9, 9]
@@ -573,6 +555,18 @@ class MobileNet(nn.Module):
             fwd = layer(fwd)
 
         return fwd
+    
+    def initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+            elif isinstance(m, nn.Linear):
+                m.weight.data.normal_(0, 0.01)
+                m.bias.data.zero_()
+
 
 class WideResidualBlock(nn.Module):
     def __init__(self, in_planes, out_planes, stride, dropout_rate, widen_factor):
@@ -601,3 +595,28 @@ class WideResidualBlock(nn.Module):
         out = self.relu(out)
         return out
 
+
+class MLP(nn.Module):
+    def __init__(self, input_size, num_classes, layer_sizes):
+        super(MLP, self).__init__()
+        layers = []
+        for i in range(len(layer_sizes)):
+            if i == 0:
+                layers.append(nn.Linear(input_size, layer_sizes[i]))
+            else:
+                layers.append(nn.Linear(layer_sizes[i - 1], layer_sizes[i]))
+            layers.append(nn.ReLU())
+        layers.append(nn.Linear(layer_sizes[-1], num_classes))
+        
+        self.model = nn.Sequential(*layers)
+        self.initialize_weights()
+
+    def forward(self, x):
+        return self.model(x)
+
+    def initialize_weights(self):
+        for layer in self.model:
+            if isinstance(layer, nn.Linear):
+                nn.init.xavier_uniform_(layer.weight)
+                if layer.bias is not None:
+                    nn.init.constant_(layer.bias, 0)

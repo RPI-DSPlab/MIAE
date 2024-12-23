@@ -12,29 +12,26 @@ fi
 
 echo "obtain_pred.sh seed = $seed"
 
-# data_dir="${DATA_DIR}/repeat_miae_standard_exp/miae_standard_exp_3/target"
-data_dir="${DATA_DIR}/miae_standard_exp/target"
+data_dir="${DATA_DIR}/same_shadow_diff_attack/target"
 
-preds_dir="${DATA_DIR}/miae_standard_exp/preds_sd${seed}"
-
-target_model_path="$data_dir/target_models"
-
-prepare_path="${DATA_DIR}/prepare_sd${seed}"
-
+preds_dir="${DATA_DIR}/same_shadow_diff_attack/preds_sd${seed}"
 mkdir -p "$preds_dir"
 
 
 # datasets=("purchase100" "taxes100")
-datasets=("cifar10" "cifar100" "cinic10")
-# datasets=("cifar10" "cifar100")
+# datasets=("cifar10" "cifar100" "cinic10")
+datasets=("cifar10")
 # archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-archs=("resnet56" "vgg16")
 # archs=("mlp_for_texas_purchase")
-# archs=("resnet56")
+archs=("resnet56")
 # mias=("lira" "reference" "shokri" "losstraj" "calibration" "yeom" "aug")
-mias=("top_n_shokri")
+mias=("shokri" "losstraj" "aug")
 
 
+
+prepare_path="${DATA_DIR}/prepare_sd${seed}"
+
+target_model_path="$data_dir/target_models"
 
 
 for dataset in "${datasets[@]}"; do
@@ -70,13 +67,14 @@ fi
                 echo "Predictions not saved for $dataset $arch $mia at $result_dir/pred_$mia.npy"
             fi
 
-            # if the preparation directory is not empty, delete it
-            if [ -d "$prepare_path" ] ; then
-                rm -r "$prepare_path"
-            fi
-
             mkdir -p "$result_dir"
-            prepare_dir="$prepare_path"
+            prepare_dir="$prepare_path/$dataset/$arch/$mia"
+
+            # # if the preparation directory is not empty, delete it
+            # if [ -d "$prepare_path" ] ; then
+            #     rm -r "$prepare_path"
+            # fi
+
 
             echo "Running $dataset $arch $mia"
             target_model_save_path="$target_model_path/$dataset/$arch"
@@ -97,7 +95,7 @@ fi
             --device "cuda:0" \
             --lira_shadow_path "$lira_shadow_dir"
 
-            rm -r "$prepare_path"
+            # rm -r "$prepare_path"
         done
     done
 done

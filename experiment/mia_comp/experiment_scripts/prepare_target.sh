@@ -5,7 +5,7 @@ DATA_DIR="/home/data/wangz56"
 seed=0
 # for repeat training, we do shuffle_seed from 2 to 5. for repeat training0 and regular training, we do shuffle_seed=1
 shuffle_seed=4
-data_dir="${DATA_DIR}/repeat_exp_set/miae_experiment_aug_more_target_data_3/target"
+data_dir="${DATA_DIR}/repeat_miae_standard_exp/miae_standard_exp_3/target"
 mkdir -p "$data_dir"
 
 

@@ -75,7 +75,6 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         self.lr = config.get('lr', 0.1)
         self.momentum = config.get('momentum', 0.9)
         self.weight_decay = config.get('weight_decay', 0.0001)
-
         self.attack_model = attack_model
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
@@ -258,7 +257,7 @@ class LosstrajUtil(MIAUtils):
 
     @classmethod
     def train_shadow_model(cls, shadow_model, shadow_train_dataset, shadow_test_dataset,
-                           auxiliary_info: LosstrajAuxiliaryInfo) -> LosstrajModelAccess:
+                           auxiliary_info: LosstrajAuxiliaryInfo, seed) -> LosstrajModelAccess:
         """
         Train the shadow model if the shadow model is not at auxiliary_info.shadow_model_path.
         :param shadow_model: the shadow model.
@@ -267,6 +266,13 @@ class LosstrajUtil(MIAUtils):
         :param auxiliary_info: the auxiliary information.
         :return: model access to the shadow model.
         """
+
+        try:
+            set_seed(seed)
+            shadow_model.initialize_weights()
+        except:
+            raise NotImplementedError("the model doesn't have .initialize_weights method")
+
 
         print(
             f"obtaining shadow model with trainset len: {len(shadow_train_dataset)} and testset len: {len(shadow_test_dataset)}")
@@ -579,7 +585,7 @@ class LosstrajAttack(MiAttack):
         self.shadow_model = self.target_model_access.get_untrained_model()
         self.shadow_model_access = LosstrajUtil.train_shadow_model(self.shadow_model, self.shadow_train_dataset,
                                                                    self.shadow_test_dataset,
-                                                                   self.aux_info)
+                                                                   self.aux_info, self.aux_info.seed)
         print("PREPARE: Distilling shadow model...")
         if self.aux_info.log_path is not None:
             self.aux_info.logger.info("PREPARE: Distilling shadow model...")

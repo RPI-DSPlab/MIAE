@@ -76,6 +76,7 @@ class ShokriAuxiliaryInfo(AuxiliaryInfo):
         self.attack_model_path = config.get("attack_model_path", f"{self.save_path}/attack_models")
         self.shadow_diff_init = config.get("shadow_diff_init", False)  # different initialization for shadow models
         self.cos_scheduler = config.get("cos_scheduler", True)  # use cosine annealing scheduler for shadow model
+        
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
@@ -187,7 +188,7 @@ class ShokriAttack(MiAttack):
             out_prediction_set_label = None
 
             for i in range(self.aux_info.num_shadow_models):
-                # train k shadows models to build attack dataset
+                # train k shadow models to build attack dataset
                 model_name = f"shadow_model_{i}.pt"
                 model_path = os.path.join(self.aux_info.shadow_model_path, model_name)
 

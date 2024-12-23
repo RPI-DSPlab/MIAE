@@ -144,6 +144,38 @@ class ExperimentSet():
             curr_pred_unique = np.logical_and(curr_pred, np.logical_not(other_attack_preded))
             ret_list.append(Predictions(curr_pred_unique, self.get_preds_stability(attack_names[base_pred_idx]).ground_truth_arr, list_of_base_pred_name[base_pred_idx] + "_unique_TP"))
         return ret_list
+    
+    def attack_pair_wise_jaccard_similarity(self, attack_name: str) -> float:
+        """
+        calculate the pair-wise Jaccard similarity between the predictions of the attack
+
+        Similarity is calculated as:
+
+        Similarity(A) = frac{1}{binom{n}{2}} \sum_{i < j}  J(A_i, A_j)
+
+        For more detail on this, check our paper.
+
+        :param attack_name: the name of the attack
+
+        :return: the Jaccard similarity between the predictions of the attack
+        """
+        # check if the attack exists, and the predictions should be hard predictions
+        if not attack_name in self.attack_preds.keys():
+            raise ValueError(f"The attack {attack_name} is not found in the experiment set.")
+        for seed in range(len(self.attack_preds[attack_name])):
+            if not self.attack_preds[attack_name][seed].is_hard():
+                raise ValueError(f"The predictions for {attack_name} is not hard prediction.")
+        if seed < 2:
+            raise ValueError(f"The attack {attack_name} has less than 2 seeds. Cannot calculate the similarity.")
+
+        n = len(self.attack_preds[attack_name])
+        total_sim = 0
+        for i in range(n):
+            for j in range(i+1, n):
+                total_sim += self.attack_preds[attack_name][i].jaccard_similarity(self.attack_preds[attack_name][j])
+        return total_sim / (n * (n - 1) / 2)
+
+
 
 
 def read_pred(preds_path: str, extend_name: str, sd: int, dataset: str, model: str,

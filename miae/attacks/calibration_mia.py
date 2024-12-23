@@ -17,6 +17,7 @@ from sklearn.metrics import accuracy_score
 from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils
 from miae.utils.set_seed import set_seed
 from miae.utils.dataset_utils import dataset_split
+from miae.attacks.shokri_mia import ShokriUtil # for logging and splitting dataset
 
 
 class CalibrationAuxiliaryInfo(AuxiliaryInfo):
@@ -39,6 +40,7 @@ class CalibrationAuxiliaryInfo(AuxiliaryInfo):
         # note that aux model in this attack is equivalent to the definition of shadow model
         self.num_aux = config.get("num_aux", 1)  # number of auxiliary model, aux model is the model g in the paper
         self.num_shadow_epochs = config.get("epochs", 100)
+        self.num_shadow_models = config.get("num_shadow_models", 1) 
         self.momentum = config.get("momentum", 0.9)
         self.weight_decay = config.get("weight_decay", 0.0001)
         self.num_classes = config.get("num_classes", 10)
@@ -99,6 +101,7 @@ class CalibrationUtil(MIAUtils):
 
         return np.array(loss)
 
+
 class CalibrationAttack(MiAttack):
     """
     Implementation of the Calibration attack.
@@ -115,6 +118,7 @@ class CalibrationAttack(MiAttack):
         self.aux_info = aux_info
         self.target_model_access = target_model_access
         self.shadow_model = None  # this is the shadow model
+        self.shadow_models = [] # this is the list of shadow models
         self.threshold = None  # this is the loss threshold for the attack
 
         self.prepared = False  # this flag indicates whether the attack has been prepared
@@ -132,30 +136,88 @@ class CalibrationAttack(MiAttack):
         set_seed(self.aux_info.seed)
 
         # create directories:
-        for path in [self.aux_info.save_path, self.aux_info.log_path]:
-            if path is not None and not os.path.exists(path):
-                os.makedirs(path)
-        train_set_len = int(len(auxiliary_dataset) * self.aux_info.shadow_train_ratio)
-        test_set_len = len(auxiliary_dataset) - train_set_len
-        train_set, test_set = dataset_split(auxiliary_dataset, [train_set_len, test_set_len])
+        if self.aux_info.num_shadow_models == 1:
+            for path in [self.aux_info.save_path, self.aux_info.log_path]:
+                if path is not None and not os.path.exists(path):
+                    os.makedirs(path)
+            train_set_len = int(len(auxiliary_dataset) * self.aux_info.shadow_train_ratio)
+            test_set_len = len(auxiliary_dataset) - train_set_len
+            train_set, test_set = dataset_split(auxiliary_dataset, [train_set_len, test_set_len])
 
-        # log the start of the attack
-        CalibrationUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
+            # log the start of the attack
+            CalibrationUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
 
-        # train the shadow model
-        self.shadow_model = self.target_model_access.untrained_model
-        if os.path.exists(self.aux_info.save_path + '/shadow_model.pth'):
-            self.shadow_model = torch.load(self.aux_info.save_path + '/shadow_model.pth')
+            # train the shadow model
+            self.shadow_model = self.target_model_access.untrained_model
+            if os.path.exists(self.aux_info.save_path + '/shadow_model.pth'):
+                self.shadow_model = torch.load(self.aux_info.save_path + '/shadow_model.pth')
+            else:
+                trainloader = DataLoader(train_set, batch_size=self.aux_info.batch_size, shuffle=True, num_workers=2)
+                testloader = DataLoader(test_set, batch_size=self.aux_info.batch_size, shuffle=False, num_workers=2)
+
+                try:
+                    set_seed(self.aux_info.seed)
+                    self.shadow_model.initialize_weights()
+                except:
+                    raise NotImplementedError("the model doesn't have .initialize_weights method")
+                
+                self.shadow_model = CalibrationUtil.train_shadow_model(self.shadow_model, trainloader, testloader, self.aux_info)
+                torch.save(self.shadow_model, self.aux_info.save_path + '/shadow_model.pth')
+
         else:
-            trainloader = DataLoader(train_set, batch_size=self.aux_info.batch_size, shuffle=True, num_workers=2)
-            testloader = DataLoader(test_set, batch_size=self.aux_info.batch_size, shuffle=False, num_workers=2)
+            # creating non-overlapping shadow datasets
+            sub_shadow_dataset_list = ShokriUtil.split_dataset(auxiliary_dataset, self.aux_info.num_shadow_models)
+            # log/print the shadow dataset sizes
+            ShokriUtil.log(self.aux_info, f"Shadow dataset[0] size: {sub_shadow_dataset_list[0].__len__()}")
+            for i in range(self.aux_info.num_shadow_models):
+                # train k shadow (reference) models 
+                model_name = f"calibration_shadow_model_{i}.pt"
+                model_path = os.path.join(self.aux_info.shadow_model_path, model_name)
 
-            self.shadow_model = CalibrationUtil.train_shadow_model(self.shadow_model, trainloader, testloader, self.aux_info)
-            torch.save(self.shadow_model, self.aux_info.save_path + '/shadow_model.pth')
+                shadow_model_i = self.target_model_access.get_untrained_model()
+                shadow_model_i.to(self.aux_info.device)
+
+                if self.aux_info.shadow_diff_init:
+                    try:
+                        set_seed((self.aux_info.seed + i)*100) # *100 to avoid overlapping of different instances
+                        shadow_model_i.initialize_weights()
+                    except:
+                        raise NotImplementedError("the model doesn't have .initialize_weights method")
+
+                train_len = int(len(sub_shadow_dataset_list[i]) * self.aux_info.shadow_train_ratio)
+                test_len = len(sub_shadow_dataset_list[i]) - train_len
+                shadow_train_dataset, shadow_test_dataset = torch.utils.data.random_split(sub_shadow_dataset_list[i],
+                                                                                          [train_len, test_len])
+
+                shadow_train_loader = DataLoader(shadow_train_dataset, batch_size=self.aux_info.shadow_batch_size,
+                                                 shuffle=True)
+                shadow_test_loader = DataLoader(shadow_test_dataset, batch_size=self.aux_info.shadow_batch_size,
+                                                shuffle=False)
+                if os.path.exists(model_path):
+                    ShokriUtil.log(self.aux_info,
+                                   f"Loading shadow model {i + 1}/{self.aux_info.num_shadow_models}...")
+                    shadow_model_i.load_state_dict(torch.load(model_path))
+                else:
+                    ShokriUtil.log(self.aux_info,
+                                   f"Training shadow model {i + 1}/{self.aux_info.num_shadow_models}...")
+                    shadow_model_i = ShokriUtil.train_shadow_model(shadow_model_i, shadow_train_loader,
+                                                                   shadow_test_loader,
+                                                                   self.aux_info)
+                    torch.save(shadow_model_i.state_dict(), model_path)
+                
+                self.shadow_models.append(shadow_model_i)
+
 
         # get the loss values of aux set (public set) from shadow model (auxiliary model) and target model
         recombined_aux_set = ConcatDataset([train_set, test_set])  # make sure the order aligned with membership is correct
-        shadow_model_loss = CalibrationUtil.get_loss(recombined_aux_set, self.shadow_model, self.aux_info.device)
+        if self.aux_info.num_shadow_models == 1:
+            shadow_model_loss = CalibrationUtil.get_loss(recombined_aux_set, self.shadow_model, self.aux_info.device)
+        else:
+            shadow_model_loss = []
+            for shadow_model in self.shadow_models:
+                shadow_model_loss.append(CalibrationUtil.get_loss(recombined_aux_set, shadow_model, self.aux_info.device))
+            shadow_model_loss = np.mean(shadow_model_loss, axis=0)
+            
         target_model_loss = CalibrationUtil.get_loss(recombined_aux_set, self.target_model_access.model, self.aux_info.device)
 
         # now target model acts as the calibration model, and shadow model acts as the target model for mimic the real membership inference attack

@@ -133,21 +133,16 @@ def ensemble_with_base_FPR(experiment_set: ExperimentSet, ensemble_method: str, 
     
     for attack in attack_names:
         all_instances = [experiment_set.retrieve_preds(attack, seed) for seed in seed_list]
+        all_preds = np.stack([instance.pred_arr for instance in all_instances], axis=0)
         if ensemble_method == "intersection":
-            result_pred = np.ones_like(all_instances[0].pred_arr)
-            for instance in all_instances:
-                result_pred = np.logical_and(result_pred, instance.pred_arr)
+            result_pred = np.all(all_preds, axis=0)
             multi_instance[attack] = Predictions(result_pred, single_instance[attack].ground_truth_arr, f"{attack}_intersection")
         elif ensemble_method == "union":
-            result_pred = np.zeros_like(all_instances[0].pred_arr)
-            for instance in all_instances:
-                result_pred = np.logical_or(result_pred, instance.pred_arr)
-            multi_instance[attack] = Predictions(result_pred, single_instance[attack].ground_truth_arr, f"{attack}_union")
+            result_pred = np.any(all_preds, axis=0)
+            multi_instance[attack] = Predictions(result_pred, single_instance[attack].ground_truth_arr, f"{attack}_union")  
         elif ensemble_method == "majority_vote":
-            result_pred = np.zeros_like(all_instances[0].pred_arr)
-            for instance in all_instances:
-                result_pred += instance.pred_arr
-            result_pred = result_pred >= len(all_instances) // 2
+            # Threshold at half the number of instances for majority voting
+            result_pred = np.sum(all_preds, axis=0) >= (len(all_instances) / 2)
             multi_instance[attack] = Predictions(result_pred, single_instance[attack].ground_truth_arr, f"{attack}_majority_vote")
         else:
             raise ValueError("Invalid ensemble method.")
@@ -239,12 +234,12 @@ def table_roc_main(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_en
             
             _, _, auc, acc = sweep(fpr, tpr)
 
-            TPRat001FPR = np.interp(0.001, fpr, tpr)
+            TPRat0001FPR = np.interp(0.001, fpr, tpr)
             
             attack_perf_df = pd.concat([attack_perf_df, DataFrame([{"Attack": attack, "Ensemble Level": ensemble_level, "AUC": auc, 
-                                                                    "ACC": acc, "TPR@0.001FPR": TPRat001FPR}])], ignore_index=True)
+                                                                    "ACC": acc, "TPR@0.001FPR": TPRat0001FPR}])], ignore_index=True)
             if verbose:
-                print(f"Attack: {attack}, Ensemble Level: {ensemble_level}, AUC: {auc}, ACC: {acc}")
+                print(f"Attack: {attack}, Ensemble Level: {ensemble_level}, AUC: {auc}, ACC: {acc}, TPR@0.001FPR: {TPRat0001FPR}")
         
         attack_perf_df.to_pickle(path_to_attack_perf_df)
     else:
@@ -321,7 +316,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # additional_command = ["show all multi attack", "don't show single instance", "don't show multi instance"]
-    additional_command = ["show all multi attack", "don't show single instance", "don't show multi instance"]
+    additional_command = []
 
 
     datasets = args.datasets
@@ -343,7 +338,8 @@ if __name__ == "__main__":
             for ds in target_datasets:
                 for ensemble_method in ["intersection", "union", "majority_vote"]:
                     print(f"Processing {ds.dataset_name} with {num_seed} seeds and ensemble method {ensemble_method} and model {model}")
-                    save_dir = f"{path_to_data}/ensemble_roc_all_multi_attack/{model}/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
+                    # save_dir = f"{path_to_data}/ensemble_roc_all_multi_attack/{model}/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
+                    save_dir = f"{path_to_data}/ensemble_roc/{model}/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
                     os.makedirs(save_dir, exist_ok=True)
 
                     table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=True, overwrite=False, marker=False, additional_command=additional_command)
