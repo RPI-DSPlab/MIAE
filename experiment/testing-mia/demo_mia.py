@@ -38,7 +38,7 @@ attack_dir = os.path.join(current_dir, "attack")
 savedir = os.path.join(current_dir, "results")
 seed = 0
 
-aug = False
+aug = True
 
 
 def print_key_stats(predictions: np.ndarray, ground_truth: np.ndarray, attack_name: str, savedir: str):
@@ -180,7 +180,7 @@ def main():
 
     # initialize the dataset
 
-    dataset = datasets.get_purchase100()
+    dataset = datasets.get_cifar10()
     target_len = int(len(dataset) * targetset_ratio)
     shadow_len = len(dataset) - target_len
     target_set, aux_set = dataset_utils.dataset_split(dataset, [target_len, shadow_len])
@@ -190,7 +190,7 @@ def main():
                                                                                    len(target_set) * train_test_ratio)])
 
     # -- STEP 1: train target model
-    target_model = models.get_model("mlp_for_texas_purchase", 100, 600)
+    target_model = models.get_model("resnet56", 10, 32)
     untrained_target_model = deepcopy(target_model)
     print("Target model: ", target_model.__class__.__name__, " is being trained with ", target_trainset.__class__.__name__, "len: ", len(target_trainset), " and ", target_testset.__class__.__name__, "len: ", len(target_testset))
     if not os.path.exists(os.path.join(target_model_dir, target_model.__class__.__name__ + "_target_model.pkl")):
@@ -221,7 +221,7 @@ def main():
          'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir + '/shokri'})
     calibration_aux_info = calibration_mia.CalibrationAuxiliaryInfo(
         {'device': device, 'seed': seed, 'save_path': attack_dir + '/calibration', 'num_classes': num_classes, 'batch_size': batch_size,
-         'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir + '/calibration'})
+         'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir + '/calibration', 'num_shadow_models': 3})
 
     top_k_shokri_aux_info = top_k_shokri_mia.TopKShokriAuxiliaryInfo(
         {'num_shadow_models': 10, 'device': device, 'seed': seed, 'save_path': attack_dir + '/top_k_shokri',
@@ -251,8 +251,8 @@ def main():
         # merlin_mia.MerlinAttack(merlin_target_model_access, merlin_aux_info),
         # lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
         # aug_mia.AugAttack(aug_target_model_access, aug_aux_info),
-        # calibration_mia.CalibrationAttack(calibration_target_model_access, calibration_aux_info),
-        shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info),
+        calibration_mia.CalibrationAttack(calibration_target_model_access, calibration_aux_info),
+        # shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info),
         # top_k_shokri_mia.TopKShokriAttack(top_k_shokri_target_model_access, top_k_shokri_aux_info)
         # yeom_mia.YeomAttack(yeom_target_model_access, yeom_aux_info),
         # reference_mia.ReferenceAttack(reference_target_model_access, reference_aux_info),

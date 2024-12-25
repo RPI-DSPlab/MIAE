@@ -47,7 +47,9 @@ class CalibrationAuxiliaryInfo(AuxiliaryInfo):
         self.shadow_train_ratio = config.get("shadow_train_ratio", 0.5)
 
         # -- other parameters --
+        self.shadow_diff_init = config.get("shadow_diff_init", True)  # different initialization for shadow models
         self.save_path = config.get("save_path", "calibration")
+        self.shadow_model_path = config.get("shadow_model_path", f"{self.save_path}/shadow_models")
         self.device = config.get("device", 'cuda' if torch.cuda.is_available() else 'cpu')
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
@@ -189,9 +191,9 @@ class CalibrationAttack(MiAttack):
                 shadow_train_dataset, shadow_test_dataset = torch.utils.data.random_split(sub_shadow_dataset_list[i],
                                                                                           [train_len, test_len])
 
-                shadow_train_loader = DataLoader(shadow_train_dataset, batch_size=self.aux_info.shadow_batch_size,
+                shadow_train_loader = DataLoader(shadow_train_dataset, batch_size=self.aux_info.batch_size,
                                                  shuffle=True)
-                shadow_test_loader = DataLoader(shadow_test_dataset, batch_size=self.aux_info.shadow_batch_size,
+                shadow_test_loader = DataLoader(shadow_test_dataset, batch_size=self.aux_info.batch_size,
                                                 shuffle=False)
                 if os.path.exists(model_path):
                     ShokriUtil.log(self.aux_info,
@@ -217,7 +219,7 @@ class CalibrationAttack(MiAttack):
             for shadow_model in self.shadow_models:
                 shadow_model_loss.append(CalibrationUtil.get_loss(recombined_aux_set, shadow_model, self.aux_info.device))
             shadow_model_loss = np.mean(shadow_model_loss, axis=0)
-            
+
         target_model_loss = CalibrationUtil.get_loss(recombined_aux_set, self.target_model_access.model, self.aux_info.device)
 
         # now target model acts as the calibration model, and shadow model acts as the target model for mimic the real membership inference attack

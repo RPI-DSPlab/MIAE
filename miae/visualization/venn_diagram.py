@@ -183,7 +183,7 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
     plt.style.use('seaborn-v0_8-paper')
     mia_color_mapping = {
         "losstraj": '#1f77b4', "Class-NN": '#ff7f0e', "LOSS": '#2ca02c',
-        "LIRA": '#d62728', "aug": '#9467bd', "loss-cali": '#8c564b',
+        "LiRA": '#d62728', "aug": '#9467bd', "loss-cali": '#8c564b',
         "reference": '#e377c2'
     }
     default_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
@@ -294,7 +294,7 @@ def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
     plt.style.use('seaborn-v0_8-paper')
     mia_color_mapping = {
         "losstraj": '#1f77b4', "Class-NN": '#ff7f0e', "LOSS": '#2ca02c',
-        "LIRA": '#d62728', "aug": '#9467bd', "loss-cali": '#8c564b',
+        "LiRA": '#d62728', "aug": '#9467bd', "loss-cali": '#8c564b',
         "reference": '#e377c2'
     }
     default_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
@@ -546,7 +546,7 @@ def compare_models(pred_dict: Dict[str, List[Predictions]], FPR: float, architec
     attack_name_mapping = {
         "aug": "Augmentation attack",
         "losstraj": "Loss trajectory attack",
-        "LIRA": "LiRA",
+        "LiRA": "LiRA",
         "reference": "Reference attack",
         "Class-NN": "Class-NN",
         "LOSS": "LOSS",

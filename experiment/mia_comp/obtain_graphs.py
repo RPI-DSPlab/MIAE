@@ -32,8 +32,11 @@ COLUMNWIDTH_INCH = 0.01384 * COLUMNWIDTH
 TEXTWIDTH = 506.295
 TEXTWIDTH_INCH = 0.01384 * TEXTWIDTH
 
-mia_name_mapping = {"losstraj": "losstraj", "shokri": "Class-NN", "yeom": "LOSS", "lira": "LIRA", "aug": "aug", "calibration": "calibrated-loss", "reference": "reference"}
-mia_color_mapping = {"losstraj": '#1f77b4', "shokri": '#ff7f0e', "yeom": '#2ca02c', "lira": '#d62728', "aug": '#9467bd', "calibration": '#8c564b', "reference": '#e377c2'}
+mia_name_mapping = {"losstraj": "losstraj", "shokri": "Class-NN", "yeom": "LOSS", "lira": "LiRA", "aug": "aug", "calibration": "loss-cali", "reference": "reference"}
+mia_color_mapping = {
+    "losstraj": '#1f77b4', "shokri": '#ff7f0e', "yeom": '#2ca02c', "lira": '#d62728', "aug": '#9467bd', "calibration": '#8c564b', "reference": '#e377c2',
+    "losstraj": '#1f77b4', "Class-NN": '#ff7f0e', "LOSS": '#2ca02c', "LiRA": '#d62728', "aug": '#9467bd', "loss-cali": '#8c564b', "reference": '#e377c2'
+                     }
 
 plt.style.use('seaborn-v0_8-paper')
 # set fontsize
@@ -63,7 +66,7 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
         "losstraj": "losstraj",
         "shokri": "Class-NN",
         "yeom": "LOSS",
-        "lira": "LIRA",
+        "lira": "LiRA",
         "aug": "aug",
         "calibration": "loss-cali",
         "reference": "reference"
@@ -132,7 +135,7 @@ def load_diff_distribution(attack_list: List[str], dataset_list: List[str], arch
         "losstraj": "losstraj",
         "shokri": "Class-NN",
         "yeom": "LOSS",
-        "lira": "LIRA",
+        "lira": "LiRA",
         "aug": "aug",
         "calibration": "loss-cali",
         "reference": "reference"
@@ -379,7 +382,7 @@ def multi_seed_convergence(predictions: Dict[str, List[prediction.Predictions]],
 
         for idx, (attack, y) in enumerate(y_dict.items()):  # y here is the data to plot on the y-axis
             color = mia_color_mapping[attack]
-            plt.plot(y, label=mia_name_mapping[attack], color=color, markerfacecolor='none')
+            plt.plot(y, label=attack, color=color, markerfacecolor='none')
             # annotate the last point
             if y_axis_option == "Number of True Positives":  # integer values
                 plt.annotate(f"{int(y[-1])}", (num_seed - 1, y[-1]), textcoords="offset points", xytext=(0, 5),
@@ -455,7 +458,7 @@ if __name__ == '__main__':
         "losstraj": "losstraj",
         "shokri": "Class-NN",
         "yeom": "LOSS",
-        "lira": "LIRA",
+        "lira": "LiRA",
         "aug": "aug",
         "calibration": "loss-cali",
         "reference": "reference"
@@ -590,8 +593,8 @@ if __name__ == '__main__':
         plot_hardness_distribution_unique(pred_dict, hardness, args.graph_title, args.graph_path, args.fpr)
 
     elif args.graph_type == "multi_seed_convergence_intersection":
-        pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR,
-                                           args.seed)
+        pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path,
+                                                args.seed)
         for fpr in args.fpr:
             graph_title = args.graph_title + f" FPR = {fpr}"
             graph_path = args.graph_path

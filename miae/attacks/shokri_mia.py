@@ -74,7 +74,7 @@ class ShokriAuxiliaryInfo(AuxiliaryInfo):
         self.shadow_model_path = config.get("shadow_model_path", f"{self.save_path}/shadow_models")
         self.attack_dataset_path = config.get("attack_dataset_path", f"{self.save_path}/attack_dataset")
         self.attack_model_path = config.get("attack_model_path", f"{self.save_path}/attack_models")
-        self.shadow_diff_init = config.get("shadow_diff_init", False)  # different initialization for shadow models
+        self.shadow_diff_init = config.get("shadow_diff_init", True)  # different initialization for shadow models
         self.cos_scheduler = config.get("cos_scheduler", True)  # use cosine annealing scheduler for shadow model
         
 

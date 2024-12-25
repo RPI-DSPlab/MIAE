@@ -27,12 +27,12 @@ mkdir -p "$preds_dir"
 # datasets=("purchase100" "taxes100")
 datasets=("cifar10" "cifar100" "cinic10")
 # datasets=("cifar10" "cifar100")
-# archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-archs=("resnet56" "vgg16")
+archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+# archs=("resnet56" "vgg16")
 # archs=("mlp_for_texas_purchase")
 # archs=("resnet56")
-# mias=("lira" "reference" "shokri" "losstraj" "calibration" "yeom" "aug")
-mias=("top_n_shokri")
+mias=("lira" "reference" "shokri" "losstraj" "calibration" "yeom" "aug")
+# mias=("top_n_shokri")
 
 
 
