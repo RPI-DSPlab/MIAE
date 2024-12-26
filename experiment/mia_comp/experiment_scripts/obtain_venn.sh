@@ -1,15 +1,15 @@
 ## This script generates Venn diagrams for the MIAE experiment
-# datasets=("cifar100" "cinic10" "cifar10") # "cifar100" "cinic10" "cifar10"
-# archs=("resnet56" "mobilenet" "wrn32_4" "vgg16") #"mobilenet" "wrn32_4" "vgg16"
-# mias=("losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira") # "losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira"
-# categories=("fpr" "threshold" "single_attack") # "threshold" "fpr" "single_attack"
-# subcategories=("pairwise") # "common_tp"
+datasets=("cifar100" "cifar10") # "cifar100" "cinic10" "cifar10"
+archs=("resnet56" "vgg16") #"mobilenet" "wrn32_4" "vgg16"
+mias=("losstraj" "reference" "lira") # "losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira"
+categories=("fpr" "single_attack" "threshold") # "threshold" "fpr" "single_attack"
+subcategories=("pairwise" "common_tp") # "common_tp"
 
-datasets=("purchase100" "texas100") # "purchase100" "texas100"
-archs=("mlp_for_texas_purchase")
-mias=("losstraj" "reference" "shokri" "yeom" "calibration" "lira") 
-categories=("fpr" "threshold" "single_attack")
-subcategories=("pairwise")
+#datasets=("purchase100" "texas100") # "purchase100" "texas100"
+#archs=("mlp_for_texas_purchase")
+#mias=("losstraj" "reference" "shokri" "yeom" "calibration" "lira")
+#categories=("fpr" "threshold" "single_attack")
+#subcategories=("pairwise")
 
 # For different distributions
 #datasets=("cifar10" "cinic10")
@@ -20,14 +20,17 @@ subcategories=("pairwise")
 # For same attack different signal
 #datasets=("cifar10")
 #archs=("resnet56")
-#mias=("shokri" "top_1_shokri" "top_3_shokri")
+#mias=("shokri_top_1" "shokri_top_3" "shokri_top_10")
 #categories=("fpr")
-#subcategories=("common_tp")
+#subcategories=("common_tp" "pairwise")
 
 
 option=("TPR")
-seeds=(0 1)
+seeds=(0)
 fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
+#fprs=(0.01 0.1)
+
+
 
 # Prepare the parameter lists for the experiment
 mialist=""
@@ -54,12 +57,12 @@ done
 # experiment_dir="/home/data/wangz56/miae_experiment_aug_more_target_data/"
 
 # For Jacarrd similarity
-experiment_dir="/home/data/wangz56/repeat_exp_set/miae_experiment_aug_more_target_data_0"
+experiment_dir="/home/data/wangz56/miae_standard_exp"
 
 # For different distributions
 #experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"
 
-graph_dir="$experiment_dir/graphs_rebuttal/instances2"
+graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 
 # Check if directory creation was successful
@@ -70,7 +73,7 @@ else
     exit 1
 fi
 
-venn_dir="$graph_dir/venn"
+venn_dir="$graph_dir/venn/SingleSeed"
 mkdir -p "$venn_dir"
 if [ -d "$venn_dir" ]; then
     echo "Successfully created directory '$venn_dir'."

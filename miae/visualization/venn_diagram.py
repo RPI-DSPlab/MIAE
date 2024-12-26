@@ -134,15 +134,13 @@ def single_seed_process_for_venn(pred_dict: Dict[str, List[Predictions]], thresh
         for attack, pred_obj_list in pred_dict.items():
             pred = Predictions(pred_obj_list[0].pred_arr, pred_obj_list[0].ground_truth_arr, attack)
             result.append(pred)
-    elif target_fpr != 0:
+    else:
         result = []
         for attack, pred_obj_list in pred_dict.items():
             adjusted_pred_arr = pred_obj_list[0].adjust_fpr(target_fpr)
             name = pred_obj_list[0].name.rsplit('_', 1)[0]
             adjusted_pred_obj = Predictions(adjusted_pred_arr, pred_obj_list[0].ground_truth_arr, name)
             result.append(adjusted_pred_obj)
-    else:
-        raise ValueError("Either threshold or target_fpr should be provided.")
 
     return result
 
@@ -171,10 +169,13 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
     :param save_path: path to save the graphs
     """
     attacked_points = {pred.name: set() for pred in pred_list}
+    venn_sets = []
     for pred in pred_list:
         attacked_points[pred.name] = set(np.where((pred.pred_arr == 1) & (pred.ground_truth_arr == 1))[0].tolist())
+        venn_sets.append(attacked_points[pred.name])
 
-    venn_sets = tuple(attacked_points[pred.name] for pred in pred_list)
+
+    # venn_sets = tuple(attacked_points[pred.name] for pred in pred_list)
     venn_labels = [pred.name for pred in pred_list]
     venn_unweighted = venn3_unweighted if len(pred_list) == 3 else venn2_unweighted
     venn_weighted = venn3 if len(pred_list) == 3 else venn2
@@ -190,8 +191,9 @@ def plot_venn_single(pred_list: List[Predictions], save_path: str):
     circle_colors = [mia_color_mapping.get(pred.name, default_colors[i % len(default_colors)]) for i, pred in
                      enumerate(pred_list)]
 
-    subset_sizes = [len(s) for s in venn_sets]
-    total = sum(subset_sizes)
+    # subset_sizes = [len(s) for s in venn_sets]
+    # total = sum(subset_sizes)
+    total = len(set.union(*venn_sets))
     if total == 0:
         print("Skip plotting because all sets are empty.")
     else:
@@ -380,7 +382,6 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
             result_and.append(common_and)
 
     elif target_fpr != None:
-        adjusted_pred_dict = {}
         result_or = []
         result_and = []
 
@@ -398,7 +399,7 @@ def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Op
 
     return result_or, result_and
 
-def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], save_path: str, signal: bool = False):
+def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], save_path: str, signal: bool = False, top_k: bool = False):
     """
     plot venn diagrams based on the goal including both unweighted and weighted venn diagrams for at most 3 attacks.
     :param pred_or: list of Predictions for the 'pred_or' set
@@ -406,6 +407,7 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], s
     :param title: title of the graph
     :param save_path: path to save the graph
     :param signal: whether the signal is included in the attack
+    :param top_k: whether the top_k is included in the attack
     """
     # if signal, mapped the attack name to the signal name
     attacked_points_or = {pred.name: set() for pred in pred_or}
@@ -413,6 +415,8 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], s
 
     venn_sets_or = []
     if signal:
+        venn_labels_or = [pred.name.rsplit('_', 1)[0] for pred in pred_or]
+    elif top_k:
         venn_labels_or = [pred.name.rsplit('_', 1)[0] for pred in pred_or]
     else:
         venn_labels_or = [pred.name.split('_')[0] for pred in pred_or]
@@ -423,6 +427,8 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], s
     venn_sets_and = []
     if signal:
         venn_labels_and = [pred.name.rsplit('_', 1)[0] for pred in pred_and]
+    elif top_k:
+        venn_labels_and = [pred.name.rsplit('_', 1)[0] for pred in pred_and]
     else:
         venn_labels_and = [pred.name.split('_')[0] for pred in pred_and]
     for pred in pred_and:
@@ -430,6 +436,7 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], s
         venn_sets_and.append(attacked_points_and[pred.name])
 
     total_or = len(set.union(*venn_sets_or))
+    total_and = len(set.union(*venn_sets_and))
 
     # plot venn diagram for the or set
     plt.figure(figsize=(10, 8))
@@ -454,8 +461,6 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], s
     plt.savefig(os.path.join(save_path, "union.pdf"))
     plt.close()
 
-    total_and = len(set.union(*venn_sets_and))
-
     # plot venn diagram for the and set
     plt.figure(figsize=(10, 8))
     ax = plt.gca()
@@ -473,6 +478,7 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], s
         if text:
             text.set_fontsize(16)
             text.set_fontweight('bold')
+
 
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, "intersection.pdf"))
@@ -532,15 +538,13 @@ def plot_venn_for_all_attacks(pred_or: List[Predictions], pred_and: List[Predict
         plt.close()
 
 
-def compare_models(pred_dict: Dict[str, List[Predictions]], FPR: float, architecture: str, save_path: str) -> Dict[
-    str, float]:
+def compare_models(pred_dict: Dict[str, List[Predictions]], FPR: float, architecture: str, save_path: str):
     """
     Compare the models by listing the number of attacked points of every instance of each attack.
-    Save results in both CSV and LaTeX-formatted txt files.
+    Save results in both CSV and txt files.
     :param pred_dict: dictionary of Predictions from different attacks.
     :param architecture: architecture of the model.
     :param save_path: path to save the comparison results.
-    :return: dictionary of the number of attacked points for each attack.
     """
     # Dictionary for matching the attack names
     attack_name_mapping = {

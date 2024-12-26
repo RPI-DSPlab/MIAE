@@ -162,7 +162,7 @@ def plot_venn(pred_list: List[prediction.Predictions], pred_list2: List[predicti
     """
     if graph_goal == "common_tp":
         if len(pred_list) == 3:
-            venn_diagram.plot_venn_diagram(pred_list, pred_list2, graph_path, signal=False)
+            venn_diagram.plot_venn_diagram(pred_list, pred_list2, graph_path, signal=False, top_k=True)
         else:
             venn_diagram.plot_venn_for_all_attacks(pred_list, pred_list2, graph_path)
     elif graph_goal == "single_attack":
@@ -593,35 +593,25 @@ if __name__ == '__main__':
                                                     args.seed)
             pred_list = venn_diagram.single_seed_process_for_venn(pred_dict, threshold=args.threshold,
                                                                   target_fpr=args.FPR)
-            if args.threshold == 0: # FPR
-                plot_venn(pred_list, pred_list, args.graph_goal, args.graph_path)
-                pairwise_jaccard = eval_metrics(pred_list, args.graph_path, args.graph_title, "union")
-                pairwise_jaccard = eval_metrics(pred_list, args.graph_path, args.graph_title, "intersection")
-            elif args.threshold != 0: # Threshold
-                plot_venn(pred_list, pred_list, args.graph_goal, args.graph_path)
-                pairwise_jaccard = eval_metrics(pred_list, args.graph_path, args.graph_title, "union")
-                pairwise_jaccard = eval_metrics(pred_list, args.graph_path, args.graph_title, "intersection")
-            elif args.graph_goal == "pairwise":
-                pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path,
-                                                        args.seed)
-                pred_list = venn_diagram.single_seed_process_for_venn(pred_dict, threshold=args.threshold,
-                                                                      target_fpr=args.FPR)
-                if args.threshold == 0:
-                    plot_venn(pred_list, pred_list, args.graph_goal, args.graph_path)
-                    pairwise_jaccard = eval_metrics(pred_list, args.graph_path, args.graph_title, "union")
-                    pairwise_jaccard = eval_metrics(pred_list, args.graph_path, args.graph_title, "intersection")
-                elif args.threshold != 0:
-                    plot_venn(pred_list, pred_list, args.graph_goal, args.graph_path)
-                    pairwise_jaccard = eval_metrics(pred_list, args.graph_path, args.graph_title, "union")
-                    pairwise_jaccard = eval_metrics(pred_list, args.graph_path, args.graph_title, "intersection")
-            elif args.graph_goal == "dif_distribution":
-                attack_list = [args.single_attack_name]
-                pred_dict = load_diff_distribution(attack_list, args.dataset_list, args.architecture, args.data_path,
-                                                   args.FPR, args.seed, args.option)
-                for attack, pred_list in pred_dict.items():
-                    plot_venn(pred_list, [], args.graph_goal, args.graph_path)
-            else:
-                raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
+            plot_venn(pred_list, pred_list, args.graph_goal, args.graph_path)
+            eval_metrics(pred_list, args.graph_path, args.graph_title, "union")
+            eval_metrics(pred_list, args.graph_path, args.graph_title, "intersection")
+       elif args.graph_goal == "pairwise":
+            pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path,
+                                                    args.seed)
+            pred_list = venn_diagram.single_seed_process_for_venn(pred_dict, threshold=args.threshold,
+                                                                  target_fpr=args.FPR)
+            plot_venn(pred_list, pred_list, args.graph_goal, args.graph_path)
+            eval_metrics(pred_list, args.graph_path, args.graph_title, "union")
+            eval_metrics(pred_list, args.graph_path, args.graph_title, "intersection")
+       elif args.graph_goal == "dif_distribution":
+            attack_list = [args.single_attack_name]
+            pred_dict = load_diff_distribution(attack_list, args.dataset_list, args.architecture, args.data_path,
+                                               args.FPR, args.seed, args.option)
+            for attack, pred_list in pred_dict.items():
+                plot_venn(pred_list, [], args.graph_goal, args.graph_path)
+       else:
+            raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
 
     elif args.graph_type == "upset":
         if args.graph_goal == "common_tp":
