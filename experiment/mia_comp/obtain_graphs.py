@@ -170,7 +170,7 @@ def plot_venn(pred_list: List[prediction.Predictions], pred_list2: List[predicti
     elif graph_goal == "pairwise":
         paired_pred_list_or = venn_diagram.find_pairwise_preds(pred_list)
         paired_pred_list_and = venn_diagram.find_pairwise_preds(pred_list2)
-        venn_diagram.plot_venn_pairwise(paired_pred_list_or, paired_pred_list_and, graph_path)
+        venn_diagram.plot_venn_pairwise(paired_pred_list_or, paired_pred_list_and, graph_path, top_k=True)
     elif graph_goal == "dif_distribution":
         venn_diagram.plot_venn_single(pred_list, graph_path)
 

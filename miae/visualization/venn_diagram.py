@@ -286,12 +286,13 @@ def plot_venn_single_for_all_seeds(pred_list: List[Predictions], graph_title: st
 
 
 def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
-                       pred_pair_list_and: List[Tuple[Predictions, Predictions]], save_path: str):
+                       pred_pair_list_and: List[Tuple[Predictions, Predictions]], save_path: str, top_k: bool = False):
     """
     Plot Venn diagrams for each pair of predictions in the given lists including both unweighted and weighted Venn diagrams.
     :param pred_pair_list_or: list of tuples, each containing a pair of Predictions objects for union of seeds
     :param pred_pair_list_and: list of tuples, each containing a pair of Predictions objects for intersection of seeds
     :param save_path: path to save the graphs
+    :param top_k: whether the top_k is included in the attack
     """
     plt.style.use('seaborn-v0_8-paper')
     mia_color_mapping = {
@@ -301,7 +302,7 @@ def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
     }
     default_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
 
-    def pairwise(pred_1, pred_2, weighted, suffix, folder_path):
+    def pairwise(pred_1, pred_2, weighted, suffix, folder_path, top_k):
         attacked_points_1 = set(np.where((pred_1.pred_arr == 1) & (pred_1.ground_truth_arr == 1))[0])
         attacked_points_2 = set(np.where((pred_2.pred_arr == 1) & (pred_2.ground_truth_arr == 1))[0])
 
@@ -309,8 +310,12 @@ def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
         ax = plt.gca()
         ax.axis('off')
 
-        name1 = pred_1.name.split('_')[0]
-        name2 = pred_2.name.split('_')[0]
+        if top_k:
+            name1 = pred_1.name.rsplit('_', 1)[0]
+            name2 = pred_2.name.rsplit('_', 1)[0]
+        else:
+            name1 = pred_1.name.split('_')[0]
+            name2 = pred_2.name.split('_')[0]
         circle_colors = [mia_color_mapping.get(name1, default_colors[0]),
                          mia_color_mapping.get(name2, default_colors[1])]
 
@@ -347,16 +352,20 @@ def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
     for idx, (pair_or, pair_and) in enumerate(zip(pred_pair_list_or, pred_pair_list_and)):
         pred_1_or, pred_2_or = pair_or
         pred_1_and, pred_2_and = pair_and
-        name1 = pred_1_or.name.split('_')[0]
-        name2 = pred_2_or.name.split('_')[0]
+        if top_k:
+            name1 = pred_1_or.name.rsplit('_', 1)[0]
+            name2 = pred_2_or.name.rsplit('_', 1)[0]
+        else:
+            name1 = pred_1_or.name.split('_')[0]
+            name2 = pred_2_or.name.split('_')[0]
         folder_name = f"{name1}_vs_{name2}"
         folder_path = os.path.join(save_path, folder_name)
         os.makedirs(folder_path, exist_ok=True)
 
-        pairwise(pred_1_or, pred_2_or, False, "Union", folder_path)
-        pairwise(pred_1_or, pred_2_or, True, "Union", folder_path)
-        pairwise(pred_1_and, pred_2_and, False, "Intersection", folder_path)
-        pairwise(pred_1_and, pred_2_and, True, "Intersection", folder_path)
+        pairwise(pred_1_or, pred_2_or, False, "Union", folder_path, top_k)
+        pairwise(pred_1_or, pred_2_or, True, "Union", folder_path, top_k)
+        pairwise(pred_1_and, pred_2_and, False, "Intersection", folder_path, top_k)
+        pairwise(pred_1_and, pred_2_and, True, "Intersection", folder_path, top_k)
 
 
 def data_process_for_venn(pred_dict: Dict[str, List[Predictions]], threshold: Optional[float] = 0,
