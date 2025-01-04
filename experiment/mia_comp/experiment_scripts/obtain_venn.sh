@@ -1,9 +1,9 @@
 ## This script generates Venn diagrams for the MIAE experiment
-#datasets=("cifar100" "cifar10") # "cifar100" "cinic10" "cifar10"
-#archs=("resnet56" "vgg16") #"mobilenet" "wrn32_4" "vgg16"
-#mias=("losstraj" "reference" "lira") # "losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira"
-#categories=("fpr" "single_attack" "threshold") # "threshold" "fpr" "single_attack"
-#subcategories=("common_tp" "pairwise") # "common_tp"
+datasets=("cifar10" "cifar100") # "cifar100" "cinic10" "cifar10"
+archs=("resnet56") #"mobilenet" "wrn32_4" "vgg16"
+mias=("losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira") # "losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira"
+categories=("fpr") # "threshold" "fpr" "single_attack"
+subcategories=("pairwise") # "common_tp"
 
 #datasets=("purchase100" "texas100") # "purchase100" "texas100"
 #archs=("mlp_for_texas_purchase")
@@ -18,17 +18,17 @@
 #categories=("dif_distribution")
 
 # For same attack different signal
-datasets=("cifar10" "cifar100")
-archs=("resnet56")
-mias=("shokri_top_1" "shokri_top_3" "shokri_top_10")
-categories=("fpr")
-subcategories=("common_tp" "pairwise")
+#datasets=("cifar10" "cifar100")
+#archs=("resnet56")
+#mias=("top_k_shokri_top_1" "top_k_shokri_top_3" "top_k_shokri_top_10")
+#categories=("fpr")
+#subcategories=("common_tp" "pairwise")
 
 
 option=("TPR")
 seeds=(0 1 2)
-#fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
-fprs=(0.01 0.1)
+fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
+#fprs=(0.01 0.1)
 
 
 
@@ -57,7 +57,7 @@ done
 # experiment_dir="/home/data/wangz56/miae_experiment_aug_more_target_data/"
 
 # For Jacarrd similarity
-experiment_dir="/home/data/wangz56/top_k_shokri"
+experiment_dir="/home/data/wangz56/repeat_miae_standard_exp/miae_standard_exp_3"
 
 # For different distributions
 #experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"

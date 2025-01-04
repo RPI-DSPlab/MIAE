@@ -1,48 +1,34 @@
+# Configuration
 datasets=("cifar100" "cifar10")
 archs=("resnet56")
-seeds_for_file=(0)
-option=("TPR")
+seeds_for_file=(0 1 2 3)
 fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
-experiment_dir="/home/data/wangz56/miae_standard_exp"
+experiment_dir="/home/data/wangz56/repeat_miae_standard_exp"
 plot_dir="$experiment_dir/jaccard_similarity"
 mkdir -p "$plot_dir"
 
-for fpr in "${fprs[@]}"; do
-    mkdir -p "${plot_dir}/fpr_${fpr}"
-done
-
-# Generate seed list
-seedlist=""
-for seed in "${seeds_for_file[@]}"; do
-    seedlist+="${seed} "
-done
-
-# Initialize an empty list
-base_dirs=()
-
-# Construct the full paths
+# Loop through datasets and architectures to plot heatmaps
 for seed in "${seeds_for_file[@]}"; do
     for dataset in "${datasets[@]}"; do
         for arch in "${archs[@]}"; do
-          if [ "$seed" -eq 0 ]; then
-              tmp_dir="${experiment_dir}/graphs/venn/fpr/pairwise/${dataset}/${arch}/TPR"
-          else
-              tmp_dir="${experiment_dir}/miae_standard_exp_${seed}/graphs/venn/fpr/pairwise/${dataset}/${arch}/TPR"
-          fi
-          if [ -d "$tmp_dir" ]; then
-              base_dirs+=("$tmp_dir")
-          else
-              echo "Directory $tmp_dir does not exist."
-          fi
+            echo "Processing dataset: $dataset, architecture: $arch"
+            base_dirs=()
+            dir_path="${experiment_dir}/miae_standard_exp_${seed}/graphs/venn/fpr/pairwise/${dataset}/${arch}/TPR"
+
+            if [ -d "$dir_path" ]; then
+                base_dirs+=("$dir_path")
+            else
+                echo "Warning: Directory $dir_path does not exist."
+            fi
+
+            # Join the base directories into a single string
+            base_dirs_string=$(printf " %s" "${base_dirs[@]}")
+            base_dirs_string=${base_dirs_string:1}  # Remove leading space
+
+            # Plot heatmap using the Python script
+            python ../obtain_jaccard.py --fpr "${fprs[@]}" \
+                                        --base_dir "${base_dirs_string}" \
+                                        --plot_dir "${plot_dir}/${dataset}/${arch}"
         done
     done
 done
-
-# Join the base directories into a single string separated by spaces
-base_dirs_string=$(printf " %s" "${base_dirs[@]}")
-base_dirs_string=${base_dirs_string:1}  # Remove leading space
-
-
-python ../obtain_jaccard.py --fpr "${fprs[@]}" \
-                         --base_dir "${base_dirs_string}" \
-                         --plot_dir "${plot_dir}"

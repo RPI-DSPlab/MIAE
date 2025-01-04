@@ -82,6 +82,8 @@ def save_statistics(stat: Dict[float, Dict[str, List[Tuple[Tuple[str, str], str]
     for fpr, process_dict in stat.items():
         file_name = f"fpr_{fpr}/Jaccard_fpr_{fpr}.csv"
         full_path = os.path.join(save_dir, file_name)
+        if not os.path.exists(os.path.dirname(full_path)):
+            os.makedirs(os.path.dirname(full_path))
         with open(full_path, 'w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(["Process Option", "Pair 1", "Pair 2", "Value"])
