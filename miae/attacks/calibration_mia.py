@@ -138,17 +138,16 @@ class CalibrationAttack(MiAttack):
         set_seed(self.aux_info.seed)
 
         # create directories:
+        for path in [self.aux_info.save_path, self.aux_info.log_path, self.aux_info.shadow_model_path]:
+            if path is not None and not os.path.exists(path):
+                os.makedirs(path)
+        train_set_len = int(len(auxiliary_dataset) * self.aux_info.shadow_train_ratio)
+        test_set_len = len(auxiliary_dataset) - train_set_len
+        train_set, test_set = dataset_split(auxiliary_dataset, [train_set_len, test_set_len])
+
+        CalibrationUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
+
         if self.aux_info.num_shadow_models == 1:
-            for path in [self.aux_info.save_path, self.aux_info.log_path]:
-                if path is not None and not os.path.exists(path):
-                    os.makedirs(path)
-            train_set_len = int(len(auxiliary_dataset) * self.aux_info.shadow_train_ratio)
-            test_set_len = len(auxiliary_dataset) - train_set_len
-            train_set, test_set = dataset_split(auxiliary_dataset, [train_set_len, test_set_len])
-
-            # log the start of the attack
-            CalibrationUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
-
             # train the shadow model
             self.shadow_model = self.target_model_access.untrained_model
             if os.path.exists(self.aux_info.save_path + '/shadow_model.pth'):
@@ -164,11 +163,11 @@ class CalibrationAttack(MiAttack):
                     raise NotImplementedError("the model doesn't have .initialize_weights method")
                 
                 self.shadow_model = CalibrationUtil.train_shadow_model(self.shadow_model, trainloader, testloader, self.aux_info)
-                torch.save(self.shadow_model, self.aux_info.save_path + '/shadow_model.pth')
+                torch.save(self.shadow_model, self.aux_info.shadow_model_path + '/shadow_model.pth')
 
         else:
             # creating non-overlapping shadow datasets
-            sub_shadow_dataset_list = ShokriUtil.split_dataset(auxiliary_dataset, self.aux_info.num_shadow_models)
+            sub_shadow_dataset_list = ShokriUtil.split_dataset(train_set, self.aux_info.num_shadow_models)
             # log/print the shadow dataset sizes
             ShokriUtil.log(self.aux_info, f"Shadow dataset[0] size: {sub_shadow_dataset_list[0].__len__()}")
             for i in range(self.aux_info.num_shadow_models):
@@ -249,10 +248,17 @@ class CalibrationAttack(MiAttack):
 
         CalibrationUtil.log(self.aux_info, "Start membership inference...", print_flag=True)
 
-        # load the attack models
+        # load models
         self.target_model_access.to_device(self.aux_info.device)
-        shadow_model_loss = CalibrationUtil.get_loss(target_data, self.shadow_model, self.aux_info.device)
         target_model_loss = CalibrationUtil.get_loss(target_data, self.target_model_access, self.aux_info.device)
+        if self.aux_info.num_shadow_models == 1:
+            shadow_model_loss = CalibrationUtil.get_loss(target_data, self.shadow_model, self.aux_info.device)
+        else:
+            shadow_model_loss = []
+            for shadow_model in self.shadow_models:
+                shadow_model_loss.append(CalibrationUtil.get_loss(target_data, shadow_model, self.aux_info.device))
+            shadow_model_loss = np.mean(shadow_model_loss, axis=0)
+            
         calibrated_loss = target_model_loss - shadow_model_loss
         losses_threshold_diff = calibrated_loss - self.threshold
 

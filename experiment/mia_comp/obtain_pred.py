@@ -229,7 +229,8 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
     if args.attack == "calibration":
         return calibration_mia.CalibrationAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
-             'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path})
+             'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path, 
+             'num_shadow_models': 13})
     if args.attack == "shokri":
         return shokri_mia.ShokriAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
@@ -239,7 +240,7 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
         return top_k_shokri_mia.TopKShokriAuxiliaryInfo(
             {'device': device, 'shadow_seed_base': 50*args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path,
-             'top_k': 3})
+             'top_k': 1})
     if args.attack == "lira":
         if args.dataset == "purchase100" or args.dataset == "texas100":
             n_augmentation = 1

@@ -10,7 +10,7 @@ script_out_dir=$DATA_DIR
 
 # for each seed
 for sd in "${seeds[@]}"; do
-    log_file="${script_out_dir}/output_${sd}.log"
+    log_file="${script_out_dir}/output_${sd}_shokri_top_k.log"
     
     # Remove the log file if it exists
     if [ -f "$log_file" ]; then

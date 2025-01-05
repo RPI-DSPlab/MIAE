@@ -310,13 +310,13 @@ if __name__ == "__main__":
     parser.add_argument('--datasets', nargs='+', default=["cifar100", "cinic10", "cifar10"], help='List of datasets to process.')
     parser.add_argument('--attack_list', nargs='+', default=["losstraj", "reference", "lira", "calibration"], help='List of attacks to process.')
     parser.add_argument('--seeds', nargs='+', type=int, default=[0, 1, 2, 3, 4, 5], help='List of seeds to use.')
-    parser.add_argument('--models', nargs='+', type=str, default="resnet56", help='Model name.')
+    parser.add_argument('--models', nargs='+', type=str, default="vgg16", help='Model name.')
     parser.add_argument('--path_to_data', type=str, default=f'{DATA_DIR}/miae_experiment_aug_more_target_data', help='Path to the data directory.')
     parser.add_argument('--num_fpr_for_table_ensemble', type=int, default=100, help='Number of FPR values to ensemble for table.')
     args = parser.parse_args()
 
-    # additional_command = ["show all multi attack", "don't show single instance", "don't show multi instance"]
-    additional_command = []
+    additional_command = ["show all multi attack", "don't show single instance", "don't show multi instance"]
+    # additional_command = []
 
 
     datasets = args.datasets
