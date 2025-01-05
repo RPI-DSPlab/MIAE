@@ -1,35 +1,38 @@
-## This script generates Venn diagrams for the MIAE experiment
+# This script generates Venn diagrams for the MIAE experiment
 datasets=("cifar10" "cifar100") # "cifar100" "cinic10" "cifar10"
 archs=("resnet56") #"mobilenet" "wrn32_4" "vgg16"
 mias=("losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira") # "losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira"
 categories=("fpr") # "threshold" "fpr" "single_attack"
 subcategories=("pairwise") # "common_tp"
+top_k=0
 
 #datasets=("purchase100" "texas100") # "purchase100" "texas100"
 #archs=("mlp_for_texas_purchase")
 #mias=("losstraj" "reference" "shokri" "yeom" "calibration" "lira")
 #categories=("fpr" "threshold" "single_attack")
 #subcategories=("pairwise")
+#top_k=0
 
 # For different distributions
 #datasets=("cifar10" "cinic10")
 #archs=("resnet56")
 #mias=("shokri" "yeom")
 #categories=("dif_distribution")
+#top_k=0
 
 # For same attack different signal
 #datasets=("cifar10" "cifar100")
 #archs=("resnet56")
-#mias=("top_k_shokri_top_1" "top_k_shokri_top_3" "top_k_shokri_top_10")
+#mias=("shokri_top_1" "shokri_top_3" "shokri_top_10")
 #categories=("fpr")
 #subcategories=("common_tp" "pairwise")
+#top_k=1
 
 
 option=("TPR")
-seeds=(0 1 2)
+seeds=(0 1 2 3 4)
 fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 #fprs=(0.01 0.1)
-
 
 
 # Prepare the parameter lists for the experiment
@@ -54,7 +57,7 @@ for dataset in "${datasets[@]}"; do
 done
 
 
-# experiment_dir="/home/data/wangz56/miae_experiment_aug_more_target_data/"
+ experiment_dir="/home/data/wangz56/repeat_miae_standard_exp/miae_standard_exp_3"
 
 # For Jacarrd similarity
 #experiment_dir="/home/data/wangz56/top_k_shokri_new"
@@ -130,7 +133,8 @@ for category in "${categories[@]}"; do
                                                 --graph_title "$graph_title" \
                                                 --graph_path "$graph_path" \
                                                 --seed ${seedlist} \
-                                                --opt ${opt}
+                                                --opt ${opt} \
+                                                --top_k ${top_k}
                     done
                 done
             done
@@ -170,7 +174,8 @@ for category in "${categories[@]}"; do
                                                     --graph_title "$graph_title" \
                                                     --graph_path "$graph_path" \
                                                     --seed ${seedlist} \
-                                                    --opt ${opt}
+                                                    --opt ${opt} \
+                                                    --top_k ${top_k}
                         done
                     done
                 done
@@ -203,7 +208,8 @@ for category in "${categories[@]}"; do
                                                     --graph_title "$graph_title" \
                                                     --graph_path "$graph_path" \
                                                     --seed ${seedlist} \
-                                                    --opt ${opt}
+                                                    --opt ${opt}  \
+                                                    --top_k ${top_k}
                         done
                     done
                 done
@@ -234,7 +240,8 @@ for category in "${categories[@]}"; do
                                                 --graph_path "$graph_path" \
                                                 --seed ${seedlist} \
                                                 --dataset_list ${datasetlist} \
-                                                --opt ${opt}
+                                                --opt ${opt} \
+                                                --top_k ${top_k}
                     done
                 done
             done
@@ -263,7 +270,8 @@ for category in "${categories[@]}"; do
                                             --graph_title "$graph_title" \
                                             --graph_path "$graph_path" \
                                             --seed ${seedlist} \
-                                            --opt ""
+                                            --opt "" \
+                                            --top_k ${top_k}
                 done
             done
         done
