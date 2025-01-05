@@ -57,7 +57,7 @@ done
 # experiment_dir="/home/data/wangz56/miae_experiment_aug_more_target_data/"
 
 # For Jacarrd similarity
-experiment_dir="/home/data/wangz56/repeat_miae_standard_exp/miae_standard_exp_3"
+#experiment_dir="/home/data/wangz56/top_k_shokri_new"
 
 # For different distributions
 #experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"

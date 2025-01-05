@@ -11,7 +11,6 @@ mkdir -p "$plot_dir"
 for seed in "${seeds_for_file[@]}"; do
     for dataset in "${datasets[@]}"; do
         for arch in "${archs[@]}"; do
-            echo "Processing dataset: $dataset, architecture: $arch"
             base_dirs=()
             dir_path="${experiment_dir}/miae_standard_exp_${seed}/graphs/venn/fpr/pairwise/${dataset}/${arch}/TPR"
 
