@@ -1,10 +1,10 @@
 # This script generates Venn diagrams for the MIAE experiment
-datasets=("cifar10" "cifar100") # "cifar100" "cinic10" "cifar10"
-archs=("resnet56") #"mobilenet" "wrn32_4" "vgg16"
-mias=("losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira") # "losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira"
-categories=("fpr") # "threshold" "fpr" "single_attack"
-subcategories=("pairwise") # "common_tp"
-top_k=0
+#datasets=("cifar10" "cifar100") # "cifar100" "cinic10" "cifar10"
+#archs=("resnet56") #"mobilenet" "wrn32_4" "vgg16"
+#mias=("losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira") # "losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira"
+#categories=("fpr") # "threshold" "fpr" "single_attack"
+#subcategories=("pairwise") # "common_tp"
+#top_k=0
 
 #datasets=("purchase100" "texas100") # "purchase100" "texas100"
 #archs=("mlp_for_texas_purchase")
@@ -21,18 +21,33 @@ top_k=0
 #top_k=0
 
 # For same attack different signal
-#datasets=("cifar10" "cifar100")
-#archs=("resnet56")
-#mias=("shokri_top_1" "shokri_top_3" "shokri_top_10")
-#categories=("fpr")
-#subcategories=("common_tp" "pairwise")
-#top_k=1
+datasets=("cifar10")
+archs=("resnet56")
+mias=("shokri_top_1" "shokri_top_3" "shokri_top_10")
+categories=("fpr")
+subcategories=("common_tp" "pairwise")
+top_k=1
 
 
+# experiment_dir="/home/data/wangz56/repeat_miae_standard_exp/miae_standard_exp_3"
+#option=("TPR")
+#seeds=(0 1 2 3 4)
+#fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
+
+# For Jacarrd similarity
+experiment_dir="/home/data/wangz56/top_k_shokri_new"
 option=("TPR")
-seeds=(0 1 2 3 4)
-fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
+seeds=(0 1 2)
+fprs=(0.01 0.1)
+
+# For different distributions
+#experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"
+#option=("TPR")
+#seeds=(0 1 2)
+##fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 #fprs=(0.01 0.1)
+
+
 
 
 # Prepare the parameter lists for the experiment
@@ -56,14 +71,6 @@ for dataset in "${datasets[@]}"; do
     datasetlist+="${dataset} "
 done
 
-
- experiment_dir="/home/data/wangz56/repeat_miae_standard_exp/miae_standard_exp_3"
-
-# For Jacarrd similarity
-#experiment_dir="/home/data/wangz56/top_k_shokri_new"
-
-# For different distributions
-#experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"
 
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"

@@ -534,8 +534,12 @@ if __name__ == '__main__':
     args.single_attack_name = name_mapping.get(args.single_attack_name, args.single_attack_name)
 
     # Deal with Top_k
-    if args.top_k == 0: topK = False
-    elif args.top_k == 1: topK = True
+    topK = None
+    if args.top_k == 0:
+        topK = False
+    elif args.top_k == 1:
+        topK = True
+        print(f"top_k is set to True")
 
     if args.graph_type == "venn" and len(args.seed) > 1:
         if args.graph_goal == "single_attack":

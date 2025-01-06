@@ -286,7 +286,7 @@ def plot_venn_single_for_all_seeds(pred_list: List[Predictions], graph_title: st
 
 
 def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
-                       pred_pair_list_and: List[Tuple[Predictions, Predictions]], save_path: str, top_k: bool = False):
+                       pred_pair_list_and: List[Tuple[Predictions, Predictions]], save_path: str, top_k: bool):
     """
     Plot Venn diagrams for each pair of predictions in the given lists including both unweighted and weighted Venn diagrams.
     :param pred_pair_list_or: list of tuples, each containing a pair of Predictions objects for union of seeds
@@ -311,8 +311,10 @@ def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
         ax.axis('off')
 
         if top_k:
-            name1 = pred_1.name.rsplit('_', 1)[0]
-            name2 = pred_2.name.rsplit('_', 1)[0]
+            # name1 = pred_1.name.rsplit('_', 1)[0]
+            # name2 = pred_2.name.rsplit('_', 1)[0]
+            name1 = pred_1.name.split("_")[1] + "_" + pred_1.name.split("_")[2]
+            name2 = pred_2.name.split("_")[1] + "_" + pred_2.name.split("_")[2]
         else:
             name1 = pred_1.name.split('_')[0]
             name2 = pred_2.name.split('_')[0]
@@ -353,8 +355,10 @@ def plot_venn_pairwise(pred_pair_list_or: List[Tuple[Predictions, Predictions]],
         pred_1_or, pred_2_or = pair_or
         pred_1_and, pred_2_and = pair_and
         if top_k:
-            name1 = pred_1_or.name.rsplit('_', 1)[0]
-            name2 = pred_2_or.name.rsplit('_', 1)[0]
+            # name1 = pred_1_or.name.rsplit('_', 1)[0]
+            # name2 = pred_2_or.name.rsplit('_', 1)[0]
+            name1 = pred_1_or.name.split("_")[1] + "_" + pred_1_or.name.split("_")[2]
+            name2 = pred_2_or.name.split("_")[1] + "_" + pred_2_or.name.split("_")[2]
         else:
             name1 = pred_1_or.name.split('_')[0]
             name2 = pred_2_or.name.split('_')[0]
@@ -426,7 +430,8 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], s
     if signal:
         venn_labels_or = [pred.name.rsplit('_', 1)[0] for pred in pred_or]
     elif top_k:
-        venn_labels_or = [pred.name.rsplit('_', 1)[0] for pred in pred_or]
+        venn_labels_or = [pred.name.split("_")[1] + "_" + pred.name.split("_")[2] for pred in pred_or]
+        # venn_labels_or = [pred.name.rsplit('_', 1)[0] for pred in pred_or]
     else:
         venn_labels_or = [pred.name.split('_')[0] for pred in pred_or]
     for pred in pred_or:
@@ -437,7 +442,8 @@ def plot_venn_diagram(pred_or: List[Predictions], pred_and: List[Predictions], s
     if signal:
         venn_labels_and = [pred.name.rsplit('_', 1)[0] for pred in pred_and]
     elif top_k:
-        venn_labels_and = [pred.name.rsplit('_', 1)[0] for pred in pred_and]
+        venn_labels_and = [pred.name.split("_")[1] + "_" + pred.name.split("_")[2] for pred in pred_and]
+        # venn_labels_and = [pred.name.rsplit('_', 1)[0] for pred in pred_and]
     else:
         venn_labels_and = [pred.name.split('_')[0] for pred in pred_and]
     for pred in pred_and:
