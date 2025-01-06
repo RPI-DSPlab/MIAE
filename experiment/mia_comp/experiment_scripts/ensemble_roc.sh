@@ -4,9 +4,10 @@ DATA_DIR="/home/data/wangz56"
 
 data_dir="${DATA_DIR}/miae_standard_exp"
 
-datasets="cifar10 cifar100 cinic10"
+# datasets="cifar10 cifar100 cinic10"
+datasets="texas100 purchase100"
 # archs="resnet56 wrn32_4 vgg16 mobilenet"
-archs="resnet56"
+archs="mlp_for_texas_purchase"
 mias="lira reference losstraj calibration"
 seeds="0 1 2 3 4 5"
 

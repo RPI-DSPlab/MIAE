@@ -12,11 +12,9 @@ fi
 
 echo "obtain_pred.sh seed = $seed"
 
-# data_dir="${DATA_DIR}/miae_standard_exp/target"
-data_dir="${DATA_DIR}/top_k_shokri_new/target"
+data_dir="${DATA_DIR}/miae_standard_exp/target"
 
-# preds_dir="${DATA_DIR}/miae_standard_exp/preds_sd${seed}"
-preds_dir="${DATA_DIR}/top_k_shokri_new/preds_sd${seed}"
+preds_dir="${DATA_DIR}/miae_standard_exp/preds_sd${seed}"
 
 target_model_path="$data_dir/target_models"
 
@@ -25,15 +23,15 @@ prepare_path="${preds_dir}/prepare_sd${seed}"
 mkdir -p "$preds_dir"
 
 
-# datasets=("purchase100" "texas100")
+datasets=("purchase100" "texas100")
 # datasets=("cifar10" "cifar100" "cinic10")
-datasets=("cifar10" "cifar100")
+# datasets=("cifar10")
 # archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-archs=("resnet56")
-# archs=("mlp_for_texas_purchase")
+# archs=("resnet56")
+archs=("mlp_for_texas_purchase")
 # archs=("resnet56" "vgg16")
 # mias=("lira" "reference" "shokri" "losstraj" "calibration" "yeom" "aug")
-mias=("top_k_shokri")
+mias=("lira" "reference")
 
 
 
@@ -65,7 +63,7 @@ fi
       mkdir -p "$preds_dir/$dataset/$arch/lira_shadow_ckpts"
 
         for mia in "${mias[@]}"; do
-            result_dir="$preds_dir/$dataset/$arch/${mia}_top_1"
+            result_dir="$preds_dir/$dataset/$arch/${mia}"
             # if the predictions are already saved, skip
             if [ -f "$result_dir/pred_$mia.npy" ]; then
                 echo "Predictions already saved for $dataset $arch $mia at $result_dir/pred_$mia.npy"

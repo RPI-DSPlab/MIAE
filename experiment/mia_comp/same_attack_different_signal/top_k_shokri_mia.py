@@ -82,6 +82,7 @@ class TopKShokriAttack(ShokriAttack):
                     try:
                         set_seed((self.aux_info.seed + i)*100) # *100 to avoid overlapping of different instances
                         shadow_model_i.initialize_weights()
+                        ShokriUtil.log(self.aux_info, f"Shadow model initialized with seed: {(self.aux_info.seed + i)*100}")
                     except:
                         raise NotImplementedError("the model doesn't have .initialize_weights method")
 

@@ -238,9 +238,9 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
              "shadow_diff_init" : True})
     if args.attack == "top_k_shokri":
         return top_k_shokri_mia.TopKShokriAuxiliaryInfo(
-            {'device': device, 'shadow_seed_base': 50*args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
+            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path,
-             'top_k': 1})
+             'top_k': 10})
     if args.attack == "lira":
         if args.dataset == "purchase100" or args.dataset == "texas100":
             n_augmentation = 1

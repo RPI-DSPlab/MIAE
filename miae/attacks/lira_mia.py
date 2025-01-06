@@ -297,12 +297,18 @@ class LIRAUtil(MIAUtils):
         mean_in = np.median(dat_in, 1)
         mean_out = np.median(dat_out, 1)
 
+        # Ensure no NaNs or Infs in means and stds
+        mean_in = np.nan_to_num(mean_in, nan=0.0)
+        mean_out = np.nan_to_num(mean_out, nan=0.0)
         if fix_variance:
             std_in = np.std(dat_in)
             std_out = np.std(dat_in)
         else:
             std_in = np.std(dat_in, 1)
             std_out = np.std(dat_out, 1)
+
+        std_in = np.nan_to_num(std_in, nan=1.0)
+        std_out = np.nan_to_num(std_out, nan=1.0)
 
         prediction = []
 

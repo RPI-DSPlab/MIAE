@@ -6,11 +6,11 @@ seeds=("$@")
 
 DATA_DIR="/home/data/wangz56"
 
-script_out_dir=$DATA_DIR
+script_out_dir=$DATA_DIR``
 
 # for each seed
 for sd in "${seeds[@]}"; do
-    log_file="${script_out_dir}/output_${sd}_shokri_top_k.log"
+    log_file="${script_out_dir}/output_${sd}.log"
     
     # Remove the log file if it exists
     if [ -f "$log_file" ]; then
@@ -19,7 +19,7 @@ for sd in "${seeds[@]}"; do
     fi
 
     # Launch the experiment and save output to log file
-    CUDA_VISIBLE_DEVICES=0 ./experiment_scripts/obtain_pred.sh "$sd" > "$log_file" 2>&1 &
+    CUDA_VISIBLE_DEVICES=0 ./experiment_scripts/obtain_pred_top_k_shokri.sh "$sd" > "$log_file" 2>&1 &
 done
 
 # Wait for all background processes to complete
