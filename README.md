@@ -23,7 +23,7 @@ We have implemented seven membership inference attacks within MIAE, ranging from
 ---
 ## Set up the environment
 ```bash
-conda create --name miae --file miae_conda_env.txt
+conda env create -f miae_env.yml
 conda activate miae
 ```
 

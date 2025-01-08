@@ -88,6 +88,7 @@ class ReferenceAuxiliaryInfo(AuxiliaryInfo):
         self.num_shadow_models = config.get('num_shadow_models', 29)  # paper default is 29
         self.shadow_path = config.get('shadow_path', f"{self.save_path}/weights/shadow/")
         self.query_batch_size = config.get('query_batch_size', 512)
+        self.shadow_diff_init = config.get('shadow_diff_init', False)
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
@@ -259,8 +260,8 @@ class ReferenceAttack(MiAttack):
         super().__init__(target_model_access, auxiliary_info)
         self.auxiliary_dataset = None
         self.shadow_scores, self.shadow_keeps = None, None
-        self.auxiliary_info = auxiliary_info
-        self.config = self.auxiliary_info.config
+        self.aux_info = auxiliary_info
+        self.config = self.aux_info.config
         self.target_model_access = target_model_access
 
     def prepare(self, auxiliary_dataset):
@@ -273,9 +274,12 @@ class ReferenceAttack(MiAttack):
         self.auxiliary_dataset = auxiliary_dataset
 
         # create directories
-        for dir in [self.auxiliary_info.save_path, self.auxiliary_info.shadow_path, self.auxiliary_info.log_path]:
+        for dir in [self.aux_info.save_path, self.aux_info.shadow_path, self.aux_info.log_path]:
             if dir is not None:
                 os.makedirs(dir, exist_ok=True)
+
+        ReferenceUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
+        ReferenceUtil.log(self.aux_info, "Finish preparing the attack...", print_flag=True)
         self.prepared = True
         
 
@@ -288,10 +292,12 @@ class ReferenceAttack(MiAttack):
         """
         TEST = False  # if True, we save scores and keep to the file
 
+        ReferenceUtil.log(self.aux_info, "Start membership inference...", print_flag=True)
+
         shadow_model = self.target_model_access.get_untrained_model()
         # concatenate the target dataset and the auxiliary dataset
         shadow_target_concat_set = ConcatDataset([self.auxiliary_dataset, dataset])
-        LIRAUtil.train_shadow_models(shadow_model, shadow_target_concat_set, info=self.auxiliary_info)
+        LIRAUtil.train_shadow_models(shadow_model, shadow_target_concat_set, info=self.aux_info)
 
         # given the model, calculate the score and generate the kept index data
 
@@ -301,7 +307,7 @@ class ReferenceAttack(MiAttack):
                 self.shadow_losses = torch.from_numpy(np.load('shadow_losses.npy'))
                 self.shadow_keeps = torch.from_numpy(np.load('shadow_keeps.npy'))
             else:
-                self.shadow_losses, self.shadow_keeps = ReferenceUtil.process_shadow_models(self.auxiliary_info,
+                self.shadow_losses, self.shadow_keeps = ReferenceUtil.process_shadow_models(self.aux_info,
                                                                                             shadow_target_concat_set,
                                                                                             shadow_model)
                 # Convert the list of tensors to a single tensor
@@ -313,7 +319,7 @@ class ReferenceAttack(MiAttack):
                 # np.savetxt('shadow_scores.txt', self.shadow_scores.numpy())
                 np.save('shadow_keeps.npy', self.shadow_keeps)
         else:
-            self.shadow_losses, self.shadow_keeps = ReferenceUtil.process_shadow_models(self.auxiliary_info,
+            self.shadow_losses, self.shadow_keeps = ReferenceUtil.process_shadow_models(self.aux_info,
                                                                                         shadow_target_concat_set,
                                                                                         shadow_model)
             # Convert the list of tensors to a single tensor
@@ -321,12 +327,13 @@ class ReferenceAttack(MiAttack):
             self.shadow_keeps = torch.cat(self.shadow_keeps, dim=0)
 
         # obtaining target_score, which is the prediction of the target model
-        target_losses = ReferenceUtil.process_target_model(self.target_model_access, self.auxiliary_info,
+        target_losses = ReferenceUtil.process_target_model(self.target_model_access, self.aux_info,
                                                       shadow_target_concat_set)
         target_losses = torch.cat(target_losses, dim=0)
 
         predictions = ReferenceUtil.reference_mia(self.shadow_losses, target_losses)
 
 
+        ReferenceUtil.log(self.aux_info, "Finish membership inference...", print_flag=True)
         # return the predictions on the target data
         return -predictions[-len(dataset):]

@@ -1,7 +1,10 @@
-experiment_dir='/data/public/comp_mia_data/miae_experiment_aug_more_target_data'
-plot_dir='/data/public/comp_mia_data/miae_experiment_aug_more_target_data/graphs_eli/auc'
-#experiment_dir="/home/public/comp_mia_data/repeat_exp_set/miae_experiment_aug_more_target_data_3"
-tmp_dir="/home/public/comp_mia_data"
+# modify this to set up directory:
+DATA_DIR="/home/data/wangz56"
+
+
+experiment_dir='${DATA_DIR}/miae_experiment_aug_more_target_data'
+plot_dir='${DATA_DIR}/miae_experiment_aug_more_target_data/graphs_eli/auc'
+tmp_dir='${DATA_DIR}'
 #plot_dir="$tmp_dir/repeat_graphs/auc"
 
 datasets=("cifar10")

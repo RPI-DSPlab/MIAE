@@ -18,7 +18,7 @@ from typing import List, Optional, Union
 
 from miae.utils.set_seed import set_seed
 from miae.utils.dataset_utils import get_num_classes, dataset_split
-from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack
+from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils
 
 
 class AttackMLP(torch.nn.Module):
@@ -75,7 +75,6 @@ class LosstrajAuxiliaryInfo(AuxiliaryInfo):
         self.lr = config.get('lr', 0.1)
         self.momentum = config.get('momentum', 0.9)
         self.weight_decay = config.get('weight_decay', 0.0001)
-
         self.attack_model = attack_model
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
@@ -103,7 +102,7 @@ class LosstrajModelAccess(ModelAccess):
         super().__init__(model, untrained_model, model_type)
 
 
-class LosstrajUtil:
+class LosstrajUtil(MIAUtils):
     @classmethod
     def model_distillation(cls, teacher_model_access: LosstrajModelAccess, distillation_dataset: TensorDataset,
                            auxiliary_info: LosstrajAuxiliaryInfo, teacher_type="target"):
@@ -258,7 +257,7 @@ class LosstrajUtil:
 
     @classmethod
     def train_shadow_model(cls, shadow_model, shadow_train_dataset, shadow_test_dataset,
-                           auxiliary_info: LosstrajAuxiliaryInfo) -> LosstrajModelAccess:
+                           auxiliary_info: LosstrajAuxiliaryInfo, seed) -> LosstrajModelAccess:
         """
         Train the shadow model if the shadow model is not at auxiliary_info.shadow_model_path.
         :param shadow_model: the shadow model.
@@ -267,6 +266,13 @@ class LosstrajUtil:
         :param auxiliary_info: the auxiliary information.
         :return: model access to the shadow model.
         """
+
+        try:
+            set_seed(seed)
+            shadow_model.initialize_weights()
+        except:
+            raise NotImplementedError("the model doesn't have .initialize_weights method")
+
 
         print(
             f"obtaining shadow model with trainset len: {len(shadow_train_dataset)} and testset len: {len(shadow_test_dataset)}")
@@ -524,12 +530,12 @@ class LosstrajAttack(MiAttack):
         self.shadow_train_dataset = None
         self.distillation_test_dataset = None
         self.distillation_train_dataset = None
-        self.auxiliary_info = auxiliary_info
+        self.aux_info = auxiliary_info
         self.target_model_access = target_model_access
         self.num_classes = auxiliary_info.num_classes
 
         # directories:
-        for directory in [self.auxiliary_info.save_path, self.auxiliary_info.distill_models_path]:
+        for directory in [self.aux_info.save_path, self.aux_info.distill_models_path]:
             if not os.path.exists(directory):
                 os.makedirs(directory)
 
@@ -545,25 +551,27 @@ class LosstrajAttack(MiAttack):
             print("the attack is already prepared!")
             return
 
-        if get_num_classes(auxiliary_dataset) != self.auxiliary_info.num_classes:
+        if get_num_classes(auxiliary_dataset) != self.aux_info.num_classes:
             raise ValueError(
                 "The number of classes in the auxiliary dataset does not match the number of classes in the auxiliary information!")
 
-        attack_model = self.auxiliary_info.attack_model
+        attack_model = self.aux_info.attack_model
 
         # saving config
-        with open(self.auxiliary_info.save_path + '/losstraj_attack_config.json', 'w') as f:
-            json.dump(self.auxiliary_info.save_config_to_dict(), f)
+        with open(self.aux_info.save_path + '/losstraj_attack_config.json', 'w') as f:
+            json.dump(self.aux_info.save_config_to_dict(), f)
+
+        LosstrajUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
 
         # set the seed
-        set_seed(self.auxiliary_info.seed)
-        print(f"LOSSTRAJ: setting seed to {self.auxiliary_info.seed}")
-        if self.auxiliary_info.log_path is not None:
-            self.auxiliary_info.logger.info(f"LOSSTRAJ: setting seed to {self.auxiliary_info.seed}")
+        set_seed(self.aux_info.seed)
+        print(f"LOSSTRAJ: setting seed to {self.aux_info.seed}")
+        if self.aux_info.log_path is not None:
+            self.aux_info.logger.info(f"LOSSTRAJ: setting seed to {self.aux_info.seed}")
         # determine the length of the distillation dataset and the shadow dataset
-        distillation_train_len = int(len(auxiliary_dataset) * self.auxiliary_info.distillation_dataset_ratio)
+        distillation_train_len = int(len(auxiliary_dataset) * self.aux_info.distillation_dataset_ratio)
         shadow_dataset_len = len(auxiliary_dataset) - distillation_train_len
-        shadow_train_len = int(shadow_dataset_len * self.auxiliary_info.shadow_train_test_split_ratio)
+        shadow_train_len = int(shadow_dataset_len * self.aux_info.shadow_train_test_split_ratio)
         shadow_test_len = shadow_dataset_len - shadow_train_len
 
         self.distillation_train_dataset, self.shadow_train_dataset, self.shadow_test_dataset = dataset_split(
@@ -571,62 +579,62 @@ class LosstrajAttack(MiAttack):
 
         # step 1: train shadow model, distill the shadow model and save the distilled models at each epoch
         print("PREPARE: Training shadow model...")
-        if self.auxiliary_info.log_path is not None:
-            self.auxiliary_info.logger.info("PREPARE: Training shadow model...")
+        if self.aux_info.log_path is not None:
+            self.aux_info.logger.info("PREPARE: Training shadow model...")
 
         self.shadow_model = self.target_model_access.get_untrained_model()
         self.shadow_model_access = LosstrajUtil.train_shadow_model(self.shadow_model, self.shadow_train_dataset,
                                                                    self.shadow_test_dataset,
-                                                                   self.auxiliary_info)
+                                                                   self.aux_info, self.aux_info.seed)
         print("PREPARE: Distilling shadow model...")
-        if self.auxiliary_info.log_path is not None:
-            self.auxiliary_info.logger.info("PREPARE: Distilling shadow model...")
-        LosstrajUtil.model_distillation(self.shadow_model_access, self.distillation_train_dataset, self.auxiliary_info,
+        if self.aux_info.log_path is not None:
+            self.aux_info.logger.info("PREPARE: Distilling shadow model...")
+        LosstrajUtil.model_distillation(self.shadow_model_access, self.distillation_train_dataset, self.aux_info,
                                         teacher_type="shadow")
 
         # step 2: distill the target model and save the distilled models at each epoch
         print("PREPARE: Distilling target model...")
-        if self.auxiliary_info.log_path is not None:
-            self.auxiliary_info.logger.info("PREPARE: Distilling target model...")
-        LosstrajUtil.model_distillation(self.target_model_access, self.distillation_train_dataset, self.auxiliary_info,
+        if self.aux_info.log_path is not None:
+            self.aux_info.logger.info("PREPARE: Distilling target model...")
+        LosstrajUtil.model_distillation(self.target_model_access, self.distillation_train_dataset, self.aux_info,
                                         teacher_type="target")
 
         # step 3: obtain the loss trajectory of the shadow model and train the attack model
         print("PREPARE: Obtaining loss trajectory of the shadow model...")
-        if self.auxiliary_info.log_path is not None:
-            self.auxiliary_info.logger.info("PREPARE: Obtaining loss trajectory of the shadow model...")
-        if not os.path.exists(self.auxiliary_info.shadow_losstraj_path):
-            os.makedirs(self.auxiliary_info.shadow_losstraj_path)
+        if self.aux_info.log_path is not None:
+            self.aux_info.logger.info("PREPARE: Obtaining loss trajectory of the shadow model...")
+        if not os.path.exists(self.aux_info.shadow_losstraj_path):
+            os.makedirs(self.aux_info.shadow_losstraj_path)
 
-        if not os.path.exists(self.auxiliary_info.shadow_losstraj_path + '/shadow_train_loss_traj.npy'):
+        if not os.path.exists(self.aux_info.shadow_losstraj_path + '/shadow_train_loss_traj.npy'):
             shadow_train_loss_trajectory = LosstrajUtil.get_loss_trajectory(
                 self.shadow_train_dataset,
                 self.target_model_access.get_untrained_model(),
-                self.auxiliary_info,
+                self.aux_info,
                 model_type="shadow")
             original_shadow_traj = LosstrajUtil.get_loss(self.shadow_train_dataset, self.shadow_model_access,
-                                                         self.auxiliary_info).reshape(-1, 1)
+                                                         self.aux_info).reshape(-1, 1)
             shadow_train_loss_trajectory = np.concatenate([shadow_train_loss_trajectory, original_shadow_traj], axis=1)
-            np.save(self.auxiliary_info.shadow_losstraj_path + '/shadow_train_loss_traj.npy',
+            np.save(self.aux_info.shadow_losstraj_path + '/shadow_train_loss_traj.npy',
                     np.array(shadow_train_loss_trajectory))
         else:
             shadow_train_loss_trajectory = np.load(
-                self.auxiliary_info.shadow_losstraj_path + '/shadow_train_loss_traj.npy', allow_pickle=True)
+                self.aux_info.shadow_losstraj_path + '/shadow_train_loss_traj.npy', allow_pickle=True)
 
-        if not os.path.exists(self.auxiliary_info.shadow_losstraj_path + '/shadow_test_loss_traj.npy'):
+        if not os.path.exists(self.aux_info.shadow_losstraj_path + '/shadow_test_loss_traj.npy'):
             shadow_test_loss_trajectory = LosstrajUtil.get_loss_trajectory(
                 self.shadow_test_dataset,
                 self.shadow_model,
-                self.auxiliary_info,
+                self.aux_info,
                 model_type="shadow")
             original_shadow_traj = LosstrajUtil.get_loss(self.shadow_test_dataset, self.shadow_model_access,
-                                                         self.auxiliary_info).reshape(-1, 1)
+                                                         self.aux_info).reshape(-1, 1)
             shadow_test_loss_trajectory = np.concatenate([shadow_test_loss_trajectory, original_shadow_traj], axis=1)
-            np.save(self.auxiliary_info.shadow_losstraj_path + '/shadow_test_loss_traj.npy',
+            np.save(self.aux_info.shadow_losstraj_path + '/shadow_test_loss_traj.npy',
                     np.array(shadow_test_loss_trajectory))
         else:
             shadow_test_loss_trajectory = np.load(
-                self.auxiliary_info.shadow_losstraj_path + '/shadow_test_loss_traj.npy', allow_pickle=True)
+                self.aux_info.shadow_losstraj_path + '/shadow_test_loss_traj.npy', allow_pickle=True)
 
         # create the dataset for the attack model
         train_membership = np.ones(len(shadow_train_loss_trajectory))
@@ -638,13 +646,14 @@ class LosstrajAttack(MiAttack):
         attack_dataset = TensorDataset(traj_data, attack_membership)
 
         print("PREPARE: Training attack model...")
-        if self.auxiliary_info.log_path is not None:
-            self.auxiliary_info.logger.info("PREPARE: Training attack model...")
-        self.attack_model = attack_model(self.auxiliary_info.distillation_epochs + 1)
+        if self.aux_info.log_path is not None:
+            self.aux_info.logger.info("PREPARE: Training attack model...")
+        self.attack_model = attack_model(self.aux_info.distillation_epochs + 1)
         self.attack_model = LosstrajUtil.train_attack_model(attack_dataset,
-                                                            self.auxiliary_info, self.attack_model)
+                                                            self.aux_info, self.attack_model)
 
         self.prepared = True
+        LosstrajUtil.log(self.aux_info, "Finish preparing the attack...", print_flag=True)
 
     def infer(self, dataset) -> np.ndarray:
         """
@@ -655,23 +664,27 @@ class LosstrajAttack(MiAttack):
         if not self.prepared:
             raise ValueError("The attack is not prepared yet!")
 
-        set_seed(self.auxiliary_info.seed)
+        set_seed(self.aux_info.seed)
+
+        LosstrajUtil.log(self.aux_info, "Start membership inference...", print_flag=True)
 
         # obtain the loss trajectory of the target model
         print("INFER: Obtaining loss trajectory of the target model...")
         target_loss_trajectory = LosstrajUtil.get_loss_trajectory(dataset,
                                                                   self.target_model_access.get_untrained_model(),
-                                                                  self.auxiliary_info, model_type="target")
+                                                                  self.aux_info, model_type="target")
 
-        original_target_traj = LosstrajUtil.get_loss(dataset, self.target_model_access, self.auxiliary_info).reshape(-1,
+        original_target_traj = LosstrajUtil.get_loss(dataset, self.target_model_access, self.aux_info).reshape(-1,
                                                                                                                      1)
         target_loss_trajectory = np.concatenate([target_loss_trajectory, original_target_traj], axis=1)
 
         # infer the membership
         data_to_infer = np.array(target_loss_trajectory)
         data_to_infer = torch.tensor(data_to_infer, dtype=torch.float32)
-        target_pred = self.attack_model(data_to_infer.to(self.auxiliary_info.device))
+        target_pred = self.attack_model(data_to_infer.to(self.aux_info.device))
 
         target_pred = target_pred.detach().cpu().numpy()
         target_pred = -np.transpose(target_pred)[0]
+
+        LosstrajUtil.log(self.aux_info, "Finish membership inference...", print_flag=True)
         return target_pred

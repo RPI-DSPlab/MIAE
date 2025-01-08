@@ -1,8 +1,11 @@
-experiment_dir='/data/public/comp_mia_data/multiseed_convergence'
+# modify this to set up directory:
+DATA_DIR="/home/data/wangz56"
 
-plot_dir='/data/public/comp_mia_data/multiseed_convergence/graphs/multiseed_convergence'
+experiment_dir="${DATA_DIR}/miae_standard_exp"
 
-datasets=("cifar10")
+plot_dir="${DATA_DIR}/miae_standard_exp/multiseed_convergence"
+
+datasets=("cifar10" "cifar100")
 archs=("resnet56")
 mias=("losstraj" "shokri" "yeom" "lira" "aug" "calibration" "reference")
 fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)

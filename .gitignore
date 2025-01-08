@@ -166,3 +166,12 @@ miae/samples/
 *.pkl
 *.json
 *.txt
+experiment/mia_comp/data/
+experiment/testing-mia/data/
+experiment/testing-mia/attack/
+
+*.pt
+*.npy
+*.pth
+*.png
+*.out

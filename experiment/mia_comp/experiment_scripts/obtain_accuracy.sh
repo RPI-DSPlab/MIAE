@@ -1,3 +1,6 @@
+# modify this to set up directory:
+DATA_DIR="/home/data/wangz56"
+
 # This script generates the accuracy for the MIAE experiment
 
 # Get the datasets, architectures, MIAs and categories
@@ -31,7 +34,7 @@ for opt in "${processopt[@]}"; do
     optlist+="${opt} "
 done
 
-experiment_dir="/data/public/comp_mia_data/miae_experiment_aug_more_target_data"
+experiment_dir="${DATA_DIR}/miae_experiment_aug_more_target_data"
 accuracy_dir="$experiment_dir/accuracy"
 mkdir -p "$accuracy_dir"
 
@@ -43,8 +46,6 @@ else
     echo "Error: Failed to create directory '$accuracy_dir'."
     exit 1
 fi
-
-cd /home/zhangc26/MIAE/experiment/mia_comp
 
 # Run the experiment
 for dataset in "${datasets[@]}"; do

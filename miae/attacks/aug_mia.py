@@ -267,6 +267,8 @@ class AugAttack(MiAttack):
         if self.prepared:
             print("The attack has already prepared!")
             return
+
+        AugUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
         set_seed(self.aux_info.seed)
         # 1. Train a shadow model
         train_set_len = int(len(auxiliary_dataset) * self.aux_info.shadow_train_ratio)
@@ -280,6 +282,13 @@ class AugAttack(MiAttack):
             shadow_model = torch.load(self.aux_info.shadow_model_path + '/shadow_model.pth')
         else:
             AugUtil.log(self.aux_info, "Training shadow model", print_flag=True)
+
+            try:
+                set_seed(self.aux_info.seed)
+                shadow_model.initialize_weights()
+            except:
+                raise NotImplementedError("the model doesn't have .initialize_weights method")
+
             shadow_model = AugUtil.train_shadow_model(shadow_model, trainloader, testloader, self.aux_info)
             torch.save(shadow_model, self.aux_info.shadow_model_path + '/shadow_model.pth')
 
@@ -366,6 +375,7 @@ class AugAttack(MiAttack):
                            f"{self.aux_info.attack_model_path}/attack_model_{label}.pt")
 
         self.prepared = True
+        AugUtil.log(self.aux_info, "Finish preparing the attack...", print_flag=True)
 
     def infer(self, target_data) -> np.ndarray:
         """
@@ -377,6 +387,8 @@ class AugAttack(MiAttack):
         set_seed(self.aux_info.seed)
         if not self.prepared:
             raise ValueError("The attack has not been prepared yet!")
+        
+        AugUtil.log(self.aux_info, "Start membership inference...", print_flag=True)
 
         # load the attack models
         labels = np.unique(self.attack_dataset.class_labels)
@@ -415,5 +427,7 @@ class AugAttack(MiAttack):
                 member_pred = self.attack_model_dict[label](torch.tensor(data[i]).unsqueeze(0).to(self.aux_info.device))
                 member_pred = member_pred.cpu().detach().numpy()
                 membership.append(member_pred.reshape(-1))
+
+        AugUtil.log(self.aux_info, "Finish membership inference...", print_flag=True)
 
         return np.array(np.transpose(membership)[1])

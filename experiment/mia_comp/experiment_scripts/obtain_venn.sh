@@ -1,3 +1,12 @@
+# modify this to set up directory:
+DATA_DIR="/home/data/wangz56"
+
+## This script generates Venn diagrams for the MIAE experiment
+# datasets=("cifar100" "cinic10" "cifar10") # "cifar100" "cinic10" "cifar10"
+# archs=("resnet56" "mobilenet" "wrn32_4" "vgg16") #"mobilenet" "wrn32_4" "vgg16"
+# mias=("losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira") # "losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira"
+# categories=("fpr" "threshold" "single_attack") # "threshold" "fpr" "single_attack"
+# subcategories=("pairwise") # "common_tp"
 # This script generates Venn diagrams for the MIAE experiment
 #datasets=("cifar10" "cifar100") # "cifar100" "cinic10" "cifar10"
 #archs=("resnet56") #"mobilenet" "wrn32_4" "vgg16"
@@ -18,7 +27,6 @@
 #archs=("resnet56")
 #mias=("shokri" "yeom")
 #categories=("dif_distribution")
-#top_k=0
 
 # For same attack different signal
 datasets=("cifar10")
@@ -29,13 +37,8 @@ subcategories=("common_tp" "pairwise")
 top_k=1
 
 
-# experiment_dir="/home/data/wangz56/repeat_miae_standard_exp/miae_standard_exp_3"
-#option=("TPR")
-#seeds=(0 1 2 3 4)
-#fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
-
 # For Jacarrd similarity
-experiment_dir="/home/data/wangz56/top_k_shokri_new"
+experiment_dir="${DATA_DIR}/top_k_shokri_new"
 option=("TPR")
 seeds=(0 1 2)
 fprs=(0.01 0.1)
@@ -102,7 +105,6 @@ for category in "${categories[@]}"; do
     fi
 done
 
-cd /home/zhangc26/MIAE/experiment/mia_comp
 
 # Generate Venn diagrams for the MIAE experiment when the goal is common_tp
 for category in "${categories[@]}"; do

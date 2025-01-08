@@ -13,12 +13,10 @@ import torch
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import ConcatDataset, DataLoader, Subset, Dataset
 import torch.nn as nn
-from torchvision.transforms import transforms
 from tqdm import tqdm
 
 from miae.attacks.base import ModelAccessType, AuxiliaryInfo, ModelAccess, MiAttack, MIAUtils
 from miae.utils.dataset_utils import get_xy_from_dataset
-from torch.cuda.amp import GradScaler, autocast
 from miae.utils.set_seed import set_seed
 
 
@@ -67,7 +65,8 @@ class LiraAuxiliaryInfo(AuxiliaryInfo):
         self.online = config.get('online', True)
         self.fix_variance = config.get('fix_variance', True)
         self.query_batch_size = config.get('query_batch_size', 256)
-        self.shadow_diff_init = config.get('shadow_diff_init', True) # whether to re-init every shadow model
+        self.shadow_diff_init = config.get('shadow_diff_init', False) # whether to re-init every shadow model
+        self.augmentation_query = config.get('augmentation_query', 18)
 
         # if log_path is None, no log will be saved, otherwise, the log will be saved to the log_path
         self.log_path = config.get('log_path', None)
@@ -298,12 +297,18 @@ class LIRAUtil(MIAUtils):
         mean_in = np.median(dat_in, 1)
         mean_out = np.median(dat_out, 1)
 
+        # Ensure no NaNs or Infs in means and stds
+        mean_in = np.nan_to_num(mean_in, nan=0.0)
+        mean_out = np.nan_to_num(mean_out, nan=0.0)
         if fix_variance:
             std_in = np.std(dat_in)
             std_out = np.std(dat_in)
         else:
             std_in = np.std(dat_in, 1)
             std_out = np.std(dat_out, 1)
+
+        std_in = np.nan_to_num(std_in, nan=1.0)
+        std_out = np.nan_to_num(std_out, nan=1.0)
 
         prediction = []
 
@@ -317,12 +322,12 @@ class LIRAUtil(MIAUtils):
         return np.array(prediction)
 
     @classmethod
-    def _generate_logits(cls, model, data_loader, device):
+    def _generate_logits(cls, model, data_loader, augmentation, device):
         """
         warpper function for get_signal_lira
         """
         model_access = LiraModelAccess(model, model)
-        return model_access.get_signal_lira(data_loader, device, 18)
+        return model_access.get_signal_lira(data_loader, device, augmentation=augmentation)
 
     @classmethod
     def process_shadow_models(cls, info: LiraAuxiliaryInfo, auxiliary_dataset: Dataset, shadow_model_arch) \
@@ -355,6 +360,7 @@ class LIRAUtil(MIAUtils):
                 # print(shadow_model_arch, model_path)
                 scores, mean_acc = cls._calculate_score(cls._generate_logits(model,
                                                                              fullsetloader,
+                                                                             info.augmentation_query,
                                                                              info.device).cpu().numpy(),
                                                         fullset_targets)
                 cls.log(info, f"Model {index} mean acc: {mean_acc}", print_flag=True)
@@ -392,7 +398,7 @@ class LIRAUtil(MIAUtils):
         cls.log(info, f"processing target model", print_flag=True)
         target_model_access.to_device(info.device)
         scores, mean_acc = cls._calculate_score(
-            target_model_access.get_signal_lira(dataset_loader, info.device, 18).cpu().numpy(), fullset_targets)
+            target_model_access.get_signal_lira(dataset_loader, info.device, info.augmentation_query).cpu().numpy(), fullset_targets)
 
         # Convert the numpy array to a PyTorch tensor and add a new dimension
         scores = torch.unsqueeze(torch.from_numpy(scores), 0)
@@ -446,8 +452,8 @@ class LiraAttack(MiAttack):
         super().__init__(target_model_access, auxiliary_info)
         self.auxiliary_dataset = None
         self.shadow_scores, self.shadow_keeps = None, None
-        self.auxiliary_info = auxiliary_info
-        self.config = self.auxiliary_info.config
+        self.aux_info = auxiliary_info
+        self.config = self.aux_info.config
         self.target_model_access = target_model_access
 
     def prepare(self, auxiliary_dataset):
@@ -456,16 +462,18 @@ class LiraAttack(MiAttack):
 
         :param auxiliary_dataset: The auxiliary dataset to be used for the attack.
         """
+        LIRAUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
         self.auxiliary_dataset = auxiliary_dataset
 
         # create directories
-        for dir in [self.auxiliary_info.save_path, self.auxiliary_info.shadow_path, self.auxiliary_info.log_path]:
+        for dir in [self.aux_info.save_path, self.aux_info.shadow_path, self.aux_info.log_path]:
             if dir is not None:
                 os.makedirs(dir, exist_ok=True)
 
-        if self.auxiliary_info.online is False:
+        if self.aux_info.online is False:
             raise NotImplementedError("LIRA does not support offline training yet.")
         self.prepared = True
+        LIRAUtil.log(self.aux_info, "Finish preparing the attack...", print_flag=True)
 
     def infer(self, dataset: torch.utils.data.Dataset) -> np.ndarray:
         """
@@ -476,12 +484,14 @@ class LiraAttack(MiAttack):
         """
         TEST = False  # if True, we save scores and keep to the file
 
-        set_seed(self.auxiliary_info.seed)
+        LIRAUtil.log(self.aux_info, "Start membership inference...", print_flag=True)
+
+        set_seed(self.aux_info.seed)
 
         shadow_model = self.target_model_access.get_untrained_model()
         # concatenate the target dataset and the auxiliary dataset
         shadow_target_concat_set = ConcatDataset([self.auxiliary_dataset, dataset])
-        LIRAUtil.train_shadow_models(shadow_model, shadow_target_concat_set, info=self.auxiliary_info)
+        LIRAUtil.train_shadow_models(shadow_model, shadow_target_concat_set, info=self.aux_info)
 
         # given the model, calculate the score and generate the kept index data
 
@@ -491,7 +501,7 @@ class LiraAttack(MiAttack):
                 self.shadow_scores = torch.from_numpy(np.load('shadow_scores_lira.npy'))
                 self.shadow_keeps = torch.from_numpy(np.load('shadow_keeps_lira.npy'))
             else:
-                self.shadow_scores, self.shadow_keeps = LIRAUtil.process_shadow_models(self.auxiliary_info,
+                self.shadow_scores, self.shadow_keeps = LIRAUtil.process_shadow_models(self.aux_info,
                                                                                        shadow_target_concat_set,
                                                                                        shadow_model)
                 # Convert the list of tensors to a single tensor
@@ -503,7 +513,7 @@ class LiraAttack(MiAttack):
                 # np.savetxt('shadow_scores.txt', self.shadow_scores.numpy())
                 np.save('shadow_keeps_lira.npy', self.shadow_keeps)
         else:
-            self.shadow_scores, self.shadow_keeps = LIRAUtil.process_shadow_models(self.auxiliary_info,
+            self.shadow_scores, self.shadow_keeps = LIRAUtil.process_shadow_models(self.aux_info,
                                                                                    shadow_target_concat_set,
                                                                                    shadow_model)
             # Convert the list of tensors to a single tensor
@@ -511,12 +521,14 @@ class LiraAttack(MiAttack):
             self.shadow_keeps = torch.cat(self.shadow_keeps, dim=0)
 
         # obtaining target_score, which is the prediction of the target model
-        target_scores = LIRAUtil.process_target_model(self.target_model_access, self.auxiliary_info,
+        target_scores = LIRAUtil.process_target_model(self.target_model_access, self.aux_info,
                                                       shadow_target_concat_set)
         target_scores = torch.cat(target_scores, dim=0)
 
         predictions = LIRAUtil.lira_mia(np.array(self.shadow_keeps), np.array(self.shadow_scores),
-                                        np.array(target_scores), fix_variance=self.auxiliary_info.fix_variance)
+                                        np.array(target_scores), fix_variance=self.aux_info.fix_variance)
 
+        LIRAUtil.log(self.aux_info, "Finish membership inference...", print_flag=True)
+        
         # return the predictions on the target data
         return -predictions[-len(dataset):]

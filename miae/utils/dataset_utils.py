@@ -1,11 +1,9 @@
 import torch
 import numpy as np
 from torch.utils.data import Dataset
-from typing import List
-from copy import deepcopy
+from typing import Tuple
 
-
-def get_xy_from_dataset(dataset: Dataset) -> (np.ndarray, np.ndarray):
+def get_xy_from_dataset(dataset: Dataset) -> Tuple[np.ndarray, np.ndarray]:
     """
     Get x and y from a dataset
     :param dataset: dataset
@@ -32,7 +30,7 @@ def get_num_classes(dataset: torch.utils.data.TensorDataset) -> int:
     :param dataset: dataset
     :return: number of classes
     """
-    labels = [label for _, label in dataset]
+    labels = [int(label) for _, label in dataset]
     unique_classes = set(labels)
     return len(unique_classes)
 

@@ -32,8 +32,11 @@ COLUMNWIDTH_INCH = 0.01384 * COLUMNWIDTH
 TEXTWIDTH = 506.295
 TEXTWIDTH_INCH = 0.01384 * TEXTWIDTH
 
-mia_name_mapping = {"losstraj": "losstraj", "shokri": "Class-NN", "yeom": "LOSS", "lira": "LIRA", "aug": "aug", "calibration": "calibrated-loss", "reference": "reference"}
-mia_color_mapping = {"losstraj": '#1f77b4', "shokri": '#ff7f0e', "yeom": '#2ca02c', "lira": '#d62728', "aug": '#9467bd', "calibration": '#8c564b', "reference": '#e377c2'}
+mia_name_mapping = {"losstraj": "losstraj", "shokri": "Class-NN", "yeom": "LOSS", "lira": "LiRA", "aug": "aug", "calibration": "loss-cali", "reference": "reference"}
+mia_color_mapping = {
+    "losstraj": '#1f77b4', "shokri": '#ff7f0e', "yeom": '#2ca02c', "lira": '#d62728', "aug": '#9467bd', "calibration": '#8c564b', "reference": '#e377c2',
+    "losstraj": '#1f77b4', "Class-NN": '#ff7f0e', "LOSS": '#2ca02c', "LiRA": '#d62728', "aug": '#9467bd', "loss-cali": '#8c564b', "reference": '#e377c2'
+                     }
 
 plt.style.use('seaborn-v0_8-paper')
 # set fontsize
@@ -63,7 +66,7 @@ def load_and_create_predictions(attack: List[str], dataset: str, architecture: s
         "losstraj": "losstraj",
         "shokri": "Class-NN",
         "yeom": "LOSS",
-        "lira": "LIRA",
+        "lira": "LiRA",
         "aug": "aug",
         "calibration": "loss-cali",
         "reference": "reference"
@@ -131,7 +134,7 @@ def load_diff_distribution(attack_list: List[str], dataset_list: List[str], arch
         "losstraj": "losstraj",
         "shokri": "Class-NN",
         "yeom": "LOSS",
-        "lira": "LIRA",
+        "lira": "LiRA",
         "aug": "aug",
         "calibration": "loss-cali",
         "reference": "reference"
@@ -378,7 +381,7 @@ def multi_seed_convergence(predictions: Dict[str, List[prediction.Predictions]],
 
         for idx, (attack, y) in enumerate(y_dict.items()):  # y here is the data to plot on the y-axis
             color = mia_color_mapping[attack]
-            plt.plot(y, label=mia_name_mapping[attack], color=color, markerfacecolor='none')
+            plt.plot(y, label=attack, color=color, markerfacecolor='none')
             # annotate the last point
             if y_axis_option == "Number of True Positives":  # integer values
                 plt.annotate(f"{int(y[-1])}", (num_seed - 1, y[-1]), textcoords="offset points", xytext=(0, 5),
@@ -403,77 +406,6 @@ def multi_seed_convergence(predictions: Dict[str, List[prediction.Predictions]],
         save_dir = f"{graph_path}/{attack_fpr}/{y_axis_option.replace(' ', '_')}.pdf"
         plot_convergence(y_dict, num_seed, y_axis_option, save_dir)
 
-
-def single_attack_seed_ensemble(predictions: Dict[str, List[prediction.Predictions]], graph_title: str, graph_path: str,
-                                num_seeds: int, skip: int = 2):
-    """
-    This Function is outdated. For ensemble attack analysis, look at the ensemble directory.
-    ensemble attacks from multiple seeds and plot the roc/auc curve for each attack and ensemble method with different number of seeds
-    :param predictions: Dict[str, List[Predictions]]: dictionary with attack names as keys and corresponding Predictions objects list as values
-    :param graph_title: str: title of the graph
-    :param graph_path: str: path to save the graph
-    :param num_seeds: int: number of seeds to ensemble
-    :param skip: int: number of seeds to skip for each ensemble plotting
-    """
-    gt_arr = predictions[list(predictions.keys())[0]][0]
-    # 0. create predictions for different fprs
-    predictions_fpred = {}  # {attack: [[pred_{fpr1}_numsd1, pred_{fpr2}_numsd1, ...], [pred_{fpr1}_numsd2, pred_{fpr2}_numsd2, ...], ...]}
-    for attack, pred_list in predictions.items():  # for each attack
-        predictions_fpred[attack] = []
-        for i in range(0, num_seeds):  # for each number of seeds
-            # adjust the prediction to the fpr threshold for many different fprs
-            predictions_fpred[attack].append(prediction.sample_and_adjust_fpr(pred_list[i]))
-
-    num_fprs = len(predictions_fpred[list(predictions_fpred.keys())[0]])
-
-    # 1. plot comparison between different number of seeds used on a ROC curve, do it for each attack and for each ensemble method
-    for ensemble_method in ["HC", "HP", "majority",
-                            "avg"]:  # High Coverage, High Precision, and majority voting (these are hard ensemble methods)
-        for attack, pred_list in predictions.items():
-            ensemble_pred = []  # [ensemble_sd1, ensemble_sd2, ...] for each number of seeds
-            num_seeds_list = []
-            name_list = []
-            for i in range(0, num_seeds, skip):  # for different number of seeds
-                if ensemble_method in ["HC", "HP", "majority"]:  # hard ensemble methods
-                    ensemble_pred.append([])
-                    for j in range(num_fprs):  # for each fpr
-                        preds_same_fpr = [l[j] for l in predictions_fpred[attack][:i + 1]]
-                        ensemble_pred[-1].append(
-                            prediction.multi_seed_ensemble(preds_same_fpr, ensemble_method))
-
-                else:  # soft ensemble methods
-                    ensemble_pred.append(
-                        prediction.multi_seed_ensemble(pred_list[:i + 1], ensemble_method))
-
-                num_seeds_list.append(i + 1)
-                name_list.append(attack + f"_{ensemble_method}_numsd{i + 1}")
-
-            title = f"{graph_title} {attack} {ensemble_method}"
-            miae.eval_methods.prediction.plot_auc(ensemble_pred, name_list, title, None,
-                                                  graph_path + f"_{attack}_{ensemble_method}.png")
-
-    # 2. plot comparison between different ensemble methods used on a ROC curve, do it for each attack with max number of seeds
-    for attack, pred_list in predictions.items():  # each attack has its own roc graph for different ensemble methods
-        ensemble_pred = []  # [ensemble_method1, ensemble_method2, ...] for each ensemble method
-        name_list = []
-        for ensemble_method in ["HC", "HP", "majority", "avg"]:
-            if ensemble_method in ["HC", "HP", "majority"]:
-                ensemble_pred.append([])
-                for j in range(num_fprs):
-                    preds_same_fpr = [l[j] for l in predictions_fpred[attack]]
-                    ensemble_pred[-1].append(
-                        prediction.multi_seed_ensemble(preds_same_fpr, ensemble_method))
-            else:
-                ensemble_pred.append(
-                    prediction.multi_seed_ensemble(pred_list, ensemble_method))
-            name_list.append(attack + f"_{ensemble_method}")
-
-        # add the original attack to the ensemble_pred
-        ensemble_pred.append(pred_list[0])
-        name_list.append(attack + " original")
-        title = f"{graph_title} {attack}"
-        miae.eval_methods.prediction.plot_auc(ensemble_pred, name_list, title, None,
-                                              graph_path + f"_{attack}_different_ensemble.png")
 
 
 if __name__ == '__main__':
@@ -526,7 +458,7 @@ if __name__ == '__main__':
         "losstraj": "losstraj",
         "shokri": "Class-NN",
         "yeom": "LOSS",
-        "lira": "LIRA",
+        "lira": "LiRA",
         "aug": "aug",
         "calibration": "loss-cali",
         "reference": "reference"
@@ -659,8 +591,8 @@ if __name__ == '__main__':
         plot_hardness_distribution_unique(pred_dict, hardness, args.graph_title, args.graph_path, args.fpr)
 
     elif args.graph_type == "multi_seed_convergence_intersection":
-        pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR,
-                                           args.seed)
+        pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path,
+                                                args.seed)
         for fpr in args.fpr:
             graph_title = args.graph_title + f" FPR = {fpr}"
             graph_path = args.graph_path
@@ -673,11 +605,6 @@ if __name__ == '__main__':
             graph_title = args.graph_title + f" FPR = {fpr}"
             graph_path = args.graph_path
             multi_seed_convergence(pred_dict, graph_title, graph_path, "union", fpr)
-
-    elif args.graph_type == "single_attack_seed_ensemble": # outdated
-        pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path,
-                                                args.seed)
-        single_attack_seed_ensemble(pred_dict, args.graph_title, args.graph_path, len(args.seed), skip=args.skip)
 
     else:
         raise ValueError(f"Invalid graph type: {args.graph_type}")

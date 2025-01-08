@@ -42,16 +42,16 @@ class TargetDataset():
         return cls(name, target_trainset, target_testset, aux_set, index_to_data, membership, dir=target_data_dir)
 
 
-class ExperiementSet():
+class ExperimentSet():
     """
-    A class to store a set of attack experiement. A set of experiments is defined by the target dataset and
+    A class to store a set of attack experiment. A set of experiments is defined by the target dataset and
     multi-instances attack predictions on the target dataset.
     """
     def __init__(self, target_dataset: TargetDataset, attack_preds: Dict[str, List[Predictions]], adjusted_fpr=None):
         """
         target_dataset: the target dataset object
         attack_preds: a dictionary mapping attack names to a list of Predictions. 
-        adjusted_fpr: the FPR used to adjust the FPR for all preds in the experiement. If None, no adjustment is made.
+        adjusted_fpr: the FPR used to adjust the FPR for all preds in the experiment. If None, no adjustment is made.
         """
         self.target_dataset = target_dataset
         self.attack_preds = attack_preds
@@ -60,7 +60,7 @@ class ExperiementSet():
     @classmethod
     def from_dir(cls, target_dataset: TargetDataset, attack_list: List[str], pred_path: str, sd_list, model, fpr_to_adjust=None):
         """
-        alternative constructor to load the experiement set from a directory
+        alternative constructor to load the experiment set from a directory
         """
         attack_preds = dict()
         ret_list = read_preds(pred_path, "", sd_list, target_dataset.dataset_name, model, attack_list, target_dataset.membership)
@@ -74,15 +74,33 @@ class ExperiementSet():
                 attack_preds[a].append(curr_pred)
         return cls(target_dataset, attack_preds, fpr_to_adjust)
     
-    def retrive_preds(self, attack_name: str, seed: int) -> Predictions:
+    
+    def batch_adjust_fpr(self, fpr_to_adjust):
         """
-        retrive the predictions for a specific attack and seed
+        adjust the FPR of all predictions in the experiment set
+        """
+        for attack_name in self.attack_preds.keys():
+            for seed in range(len(self.attack_preds[attack_name])):
+                self.attack_preds[attack_name][seed] = Predictions(self.attack_preds[attack_name][seed].adjust_fpr(fpr_to_adjust), self.attack_preds[attack_name][seed].ground_truth_arr, self.attack_preds[attack_name][seed].name)
+        self.adjusted_fpr = fpr_to_adjust
+    
+    
+    def get_attack_names(self) -> List[str]:
+        """
+        return the list of attack names in the experiment set
+        """
+        return list(self.attack_preds.keys())
+        
+    
+    def retrieve_preds(self, attack_name: str, seed: int) -> Predictions:
+        """
+        retrieve the predictions for a specific attack and seed
         """
         return self.attack_preds[attack_name][seed]
 
     def get_preds_stability(self, attack_name: str) -> Predictions:
         """
-        retrive the stability of the prediction for a specific attack. The stability is the intersection of the
+        retrieve the intersection(stability) of the prediction for a specific attack. The stability is the intersection of the
         TP of the predictions of all seeds.
         """
         list_of_base_pred = [self.attack_preds[attack_name][seed].pred_arr for seed in range(len(self.attack_preds[attack_name]))]
@@ -91,7 +109,7 @@ class ExperiementSet():
     
     def get_preds_coverage(self, attack_name: str) -> Predictions:
         """
-        retrive the coverage of the prediction for a specific attack. The coverage is the union of the
+        retrieve the union(coverage) of the prediction for a specific attack. The coverage is the union of the
         TP of the predictions of all seeds.
         """
         list_of_base_pred = [self.attack_preds[attack_name][seed].pred_arr for seed in range(len(self.attack_preds[attack_name]))]
@@ -126,6 +144,38 @@ class ExperiementSet():
             curr_pred_unique = np.logical_and(curr_pred, np.logical_not(other_attack_preded))
             ret_list.append(Predictions(curr_pred_unique, self.get_preds_stability(attack_names[base_pred_idx]).ground_truth_arr, list_of_base_pred_name[base_pred_idx] + "_unique_TP"))
         return ret_list
+    
+    def attack_pair_wise_jaccard_similarity(self, attack_name: str) -> float:
+        """
+        calculate the pair-wise Jaccard similarity between the predictions of the attack
+
+        Similarity is calculated as:
+
+        Similarity(A) = frac{1}{binom{n}{2}} \sum_{i < j}  J(A_i, A_j)
+
+        For more detail on this, check our paper.
+
+        :param attack_name: the name of the attack
+
+        :return: the Jaccard similarity between the predictions of the attack
+        """
+        # check if the attack exists, and the predictions should be hard predictions
+        if not attack_name in self.attack_preds.keys():
+            raise ValueError(f"The attack {attack_name} is not found in the experiment set.")
+        for seed in range(len(self.attack_preds[attack_name])):
+            if not self.attack_preds[attack_name][seed].is_hard():
+                raise ValueError(f"The predictions for {attack_name} is not hard prediction.")
+        if seed < 2:
+            raise ValueError(f"The attack {attack_name} has less than 2 seeds. Cannot calculate the similarity.")
+
+        n = len(self.attack_preds[attack_name])
+        total_sim = 0
+        for i in range(n):
+            for j in range(i+1, n):
+                total_sim += self.attack_preds[attack_name][i].jaccard_similarity(self.attack_preds[attack_name][j])
+        return total_sim / (n * (n - 1) / 2)
+
+
 
 
 def read_pred(preds_path: str, extend_name: str, sd: int, dataset: str, model: str,

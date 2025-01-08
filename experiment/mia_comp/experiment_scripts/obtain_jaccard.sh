@@ -1,9 +1,13 @@
 # Configuration
 datasets=("cifar100" "cifar10")
+# modify this to set up directory:
+DATA_DIR="/home/data/wangz56"
+
 archs=("resnet56")
 seeds_for_file=(0 1 2 3)
 fprs=(0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
-experiment_dir="/home/data/wangz56/repeat_miae_standard_exp"
+experiment_dir="${DATA_DIR}/repeat_miae_standard_exp"
+plot_dir="$experiment_dir/jaccard_similarity"
 plot_dir="$experiment_dir/jaccard_similarity"
 mkdir -p "$plot_dir"
 
