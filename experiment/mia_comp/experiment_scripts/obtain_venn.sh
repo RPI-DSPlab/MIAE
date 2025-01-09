@@ -1,59 +1,57 @@
+# This script generates Venn diagrams for the MIAE experiment under different settings
+
 # modify this to set up directory:
 DATA_DIR="/home/data/wangz56"
 
-## This script generates Venn diagrams for the MIAE experiment
-# datasets=("cifar100" "cinic10" "cifar10") # "cifar100" "cinic10" "cifar10"
-# archs=("resnet56" "mobilenet" "wrn32_4" "vgg16") #"mobilenet" "wrn32_4" "vgg16"
-# mias=("losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira") # "losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira"
-# categories=("fpr" "threshold" "single_attack") # "threshold" "fpr" "single_attack"
-# subcategories=("pairwise") # "common_tp"
-# This script generates Venn diagrams for the MIAE experiment
-#datasets=("cifar10" "cifar100") # "cifar100" "cinic10" "cifar10"
-#archs=("resnet56") #"mobilenet" "wrn32_4" "vgg16"
+# Define experiment parameters set 1 for standard MIAE
+#datasets=("cifar100" "cinic10" "cifar10") # "cifar100" "cinic10" "cifar10"
+#archs=("resnet56" "mobilenet" "wrn32_4" "vgg16") #"mobilenet" "wrn32_4" "vgg16"
 #mias=("losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira") # "losstraj" "reference" "shokri" "yeom" "calibration" "aug" "lira"
-#categories=("fpr") # "threshold" "fpr" "single_attack"
+#categories=("fpr" "threshold" "single_attack") # "threshold" "fpr" "single_attack"
 #subcategories=("pairwise") # "common_tp"
 #top_k=0
+#experiment_dir="${DATA_DIR}/mia_standard_exp"
+#option=("TPR")
+#seeds=(0 1 2 3 4)
+#fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 
+# Define experiment parameters set 2 for standard MIAE
 #datasets=("purchase100" "texas100") # "purchase100" "texas100"
 #archs=("mlp_for_texas_purchase")
 #mias=("losstraj" "reference" "shokri" "yeom" "calibration" "lira")
 #categories=("fpr" "threshold" "single_attack")
 #subcategories=("pairwise")
 #top_k=0
+#experiment_dir="${DATA_DIR}/mia_standard_exp"
+#option=("TPR")
+#seeds=(0 1 2 3 4)
+#fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 
-# For different distributions
+#Define experiment parameters set 3 for different distributions
 #datasets=("cifar10" "cinic10")
 #archs=("resnet56")
 #mias=("shokri" "yeom")
 #categories=("dif_distribution")
-
-# For same attack different signal
-datasets=("cifar10")
-archs=("resnet56")
-mias=("shokri_top_1" "shokri_top_3" "shokri_top_10")
-categories=("fpr")
-subcategories=("common_tp" "pairwise")
-top_k=1
-
-
-# For Jacarrd similarity
-experiment_dir="${DATA_DIR}/top_k_shokri_new"
-option=("TPR")
-seeds=(0 1 2)
-fprs=(0.01 0.1)
-
-# For different distributions
-#experiment_dir="/data/public/comp_mia_data/same_attack_different_signal"
+#top_k=0
+#experiment_dir="${DATA_DIR}/same_attack_different_signal"
 #option=("TPR")
 #seeds=(0 1 2)
 ##fprs=(0 0.001 0.01 0.1 0.2 0.3 0.4 0.5 0.8)
 #fprs=(0.01 0.1)
 
+# # Define experiment parameters set 4 for same attack different signal
+#datasets=("cifar10")
+#archs=("resnet56")
+#mias=("shokri_top_1" "shokri_top_3" "shokri_top_10")
+#categories=("fpr")
+#subcategories=("common_tp" "pairwise")
+#top_k=1
+#experiment_dir="${DATA_DIR}/top_k_shokri_new"
+#option=("TPR")
+#seeds=(0 1 2)
+#fprs=(0.01 0.1)
 
 
-
-# Prepare the parameter lists for the experiment
 mialist=""
 for mia in "${mias[@]}"; do
     mialist+="${mia} "
@@ -78,7 +76,6 @@ done
 graph_dir="$experiment_dir/graphs"
 mkdir -p "$graph_dir"
 
-# Check if directory creation was successful
 if [ -d "$graph_dir" ]; then
     echo "Successfully created directory '$graph_dir'."
 else
@@ -106,7 +103,7 @@ for category in "${categories[@]}"; do
 done
 
 
-# Generate Venn diagrams for the MIAE experiment when the goal is common_tp
+# Main loop: Generate Venn diagrams for each experimental category
 for category in "${categories[@]}"; do
     if [ "$category" == "threshold" ]; then
         for dataset in "${datasets[@]}"; do
