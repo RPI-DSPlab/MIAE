@@ -248,60 +248,96 @@ def table_roc_main(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_en
     
 
     
-    # Plotting the data from df with seaborn
-    plt.figure()
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    sns.set_context("paper")
 
     # Plot Single Instance
     if "don't show single instance" not in additional_command:
         single_instance_df = roc_df[roc_df['Ensemble Level'] == 'Single Instance']
-        sns.lineplot(data=single_instance_df, x='FPR', y='TPR', hue='Attack', style='Ensemble Level', dashes=[(2, 2)], markers=marker, palette=mia_color_mapping, errorbar=None)
+        sns.lineplot(
+            ax=ax,
+            data=single_instance_df,
+            x='FPR',
+            y='TPR',
+            hue='Attack',
+            style='Ensemble Level',
+            dashes=[(2, 2)],
+            markers=marker,
+            palette=mia_color_mapping
+        )
 
     # Plot Multi Instances
     if "don't show multi instance" not in additional_command:
         multi_instance_df = roc_df[roc_df['Ensemble Level'] == 'Multi Instances']
-        sns.lineplot(data=multi_instance_df, x='FPR', y='TPR', hue='Attack', style='Ensemble Level', dashes=[(1, 0)], markers=marker, palette=mia_color_mapping, errorbar=None)
+        sns.lineplot(
+            ax=ax,
+            data=multi_instance_df,
+            x='FPR',
+            y='TPR',
+            hue='Attack',
+            style='Ensemble Level',
+            dashes=[(1, 0)],
+            markers=marker,
+            palette=mia_color_mapping
+        )
 
     # Plot Multi Attacks (ensemble of all attacks)
     multi_attacks_df = roc_df[roc_df['Ensemble Level'] == 'Multi Attacks']
     longest_name = max(multi_attacks_df['Attack'], key=len)
-
-    if "show all multi attack" not in additional_command: # by default, only show the longest attack name (using all attacks)
+    if "show all multi attack" not in additional_command:
         multi_attacks_df = multi_attacks_df[multi_attacks_df['Attack'] == longest_name]
-        if marker:
-            sns.lineplot(data=multi_attacks_df, x='FPR', y='TPR', color='black', marker='o', label='Multi Attacks (All)')
-        else:
-            sns.lineplot(data=multi_attacks_df, x='FPR', y='TPR', color='black', label='Multi Attacks (All)')
+        sns.lineplot(
+            ax=ax,
+            data=multi_attacks_df,
+            x='FPR',
+            y='TPR',
+            color='black',
+            marker='o' if marker else None,
+            label='Multi Attacks (All)'
+        )
     else:
-        if marker:
-            sns.lineplot(data=multi_attacks_df, x='FPR', y='TPR', hue='Attack', style='Ensemble Level', markers=marker, errorbar=None)
-        else:
-            sns.lineplot(data=multi_attacks_df, x='FPR', y='TPR', hue='Attack', style='Ensemble Level', errorbar=None)
+        sns.lineplot(
+            ax=ax,
+            data=multi_attacks_df,
+            x='FPR',
+            y='TPR',
+            hue='Attack',
+            style='Ensemble Level',
+            markers=marker if marker else False
+        )
 
-    plt.plot([0, 1], [0, 1], ls='--', color='gray')
+    ax.plot([0, 1], [0, 1], ls='--', color='gray')
 
     if log_scale:
-        plt.xlim(1e-4, 1)
-        plt.ylim(1e-5, 1)
+        ax.set_xlim(1e-4, 1)
+        ax.set_ylim(1e-4, 1)
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+    else:
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
 
-        plt.xscale('log')
-        plt.yscale('log')
-    else: 
-        plt.xlim(0, 1)
-        plt.ylim(0, 1)
+    ax.set_xlabel('FPR')
+    ax.set_ylabel('TPR')
 
-    plt.xlabel('False Positive Rate (FPR)')
-    plt.ylabel('True Positive Rate (TPR)')
+    handles, labels = ax.get_legend_handles_labels()
+    current_legend = ax.get_legend()
+    if current_legend is not None:
+        current_legend.remove()
 
-    plt.legend()
-
-    plt.tight_layout()
-
-    # Save the plot
     filename = f"{ds.dataset_name}_{ensemble_method}_roc_plot_liner.pdf" if not log_scale else f"{ds.dataset_name}_{ensemble_method}_roc_plot_log.pdf"
     plt.savefig(save_dir + '/' + filename, format="pdf", bbox_inches='tight')
-    plt.close()
-    
     print(f"Saved plot at {save_dir + '/' + filename}")
+    plt.close(fig)
+
+    # Create separate legend figure with all handles
+    legend_fig, legend_ax = plt.subplots(figsize=(3, 2))
+    legend_ax.axis('off')
+    legend_ax.legend(handles, labels, loc='center', frameon=False, ncol=1)
+    legend_filename = f"{ds.dataset_name}_{ensemble_method}_roc_legend_liner.pdf" if not log_scale else f"{ds.dataset_name}_{ensemble_method}_roc_legend_log.pdf"
+    legend_fig.savefig(save_dir + '/' + legend_filename, format="pdf", bbox_inches='tight')
+    plt.close(legend_fig)
+    print(f"Saved legend at {save_dir + '/' + legend_filename}")
 
 
 
@@ -333,13 +369,14 @@ if __name__ == "__main__":
 
     
     for model in models:
-        for num_seed in range(2, len(seeds)+1):
+        # for num_seed in range(2, len(seeds)+1):
+        for num_seed in [6]:
             seeds_consider = seeds[:num_seed]
             for ds in target_datasets:
                 for ensemble_method in ["intersection", "union", "majority_vote"]:
                     print(f"Processing {ds.dataset_name} with {num_seed} seeds and ensemble method {ensemble_method} and model {model}")
-                    # save_dir = f"{path_to_data}/ensemble_roc_all_multi_attack/{model}/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
-                    save_dir = f"{path_to_data}/ensemble_roc/{model}/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
+                    save_dir = f"{path_to_data}/ensemble_roc_all_multi_attack/{model}/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
+                    # save_dir = f"{path_to_data}/ensemble_roc/{model}/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
                     os.makedirs(save_dir, exist_ok=True)
 
                     table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=True, overwrite=False, marker=False, additional_command=additional_command)
