@@ -1,6 +1,7 @@
+# Description: This script is used to generate the upset plots for the MIAE experiment.
+
 # modify this to set up directory:
 DATA_DIR="/home/data/wangz56"
-# This script generates UpSet diagrams for the MIAE experiment
 datasets=("cifar10")
 archs=("resnet56")
 mias=("losstraj" "lira" "reference")
@@ -25,7 +26,6 @@ option=("TPR")
 seeds=(0 1 2 3 4 5)
 fprs=(0.01)
 
-# Prepare the parameter lists for the experiment
 mialist=""
 for mia in "${mias[@]}"; do
     mialist+="${mia} "
@@ -40,8 +40,6 @@ fprlist=""
 for fpr in "${fprs[@]}"; do
     fprlist+="${fpr} "
 done
-
-
 
 experiment_dir="${DATA_DIR}/miae_experiment_aug_more_target_data"
 graph_dir="$experiment_dir/graphs"
@@ -73,7 +71,7 @@ for category in "${categories[@]}"; do
 done
 
 
-# Generate Venn diagrams for the MIAE experiment when the goal is common_tp
+# Generate the upset plots for the MIAE experiment
 for category in "${categories[@]}"; do
     if [ "$category" == "threshold" ]; then
         for dataset in "${datasets[@]}"; do
