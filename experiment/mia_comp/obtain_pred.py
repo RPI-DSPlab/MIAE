@@ -35,7 +35,7 @@ from scipy.sparse import csr_matrix
 from experiment.mia_comp.same_attack_different_signal import top_k_shokri_mia
 
 
-def get_dataset(dataset_name, aug, targetset_ratio, train_test_ratio, shuffle_seed=1) -> tuple:
+def get_dataset(dataset_name, aug, targetset_ratio, train_test_ratio, data_dir, shuffle_seed=1) -> tuple:
     """
     Get the datasets for the target model and MIA
     :param datset_name: name of the dataset
@@ -54,7 +54,7 @@ def get_dataset(dataset_name, aug, targetset_ratio, train_test_ratio, shuffle_se
         num_classes = 100
         input_size = 32
     elif dataset_name == "cinic10":
-        dataset = datasets.get_cinic10(aug)
+        dataset = datasets.get_cinic10(data_dir, aug)
         num_classes = 10
         input_size = 32
     elif dataset_name == "purchase100":
@@ -361,7 +361,8 @@ if __name__ == '__main__':
         # initialize the dataset
         target_trainset, target_testset, aux_set, num_classes, input_size = get_dataset(args.dataset, args.data_aug,
                                                                                         args.target_set_ratio,
-                                                                                        args.train_test_ratio, args.shuffle_seed)
+                                                                                        args.train_test_ratio, args.dataset_file_root,  
+                                                                                        args.shuffle_seed)
         dataset_save_path = os.path.join(args.data_path, f"{args.dataset}")
         if not os.path.exists(dataset_save_path):
             os.makedirs(dataset_save_path)

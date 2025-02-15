@@ -57,6 +57,7 @@ plt.rcParams["axes.labelweight"] = "bold"
 mia_name_mapping = {"losstraj": "losstraj", "shokri": "Class-NN", "yeom": "LOSS", "lira": "LiRA", "aug": "aug", "calibration": "calibrated-loss", "reference": "reference"}
 mia_color_mapping = {"losstraj": '#1f77b4', "shokri": '#ff7f0e', "yeom": '#2ca02c', "lira": '#d62728', "aug": '#9467bd', "calibration": '#8c564b', "reference": '#e377c2'}
 
+ensemble_name_mapping = {"intersection": "Stability", "union": "Coverage", "majority_vote": "Majority Vote"}
 
 
 
@@ -129,7 +130,7 @@ def ensemble_with_base_FPR(experiment_set: ExperimentSet, ensemble_method: str, 
 
     attack_names = experiment_set.get_attack_names()
     for attack in attack_names:
-        single_instance[attack] = experiment_set.retrieve_preds(attack, 0)
+        single_instance[attack] = experiment_set.retrieve_preds(attack, 1)
     
     for attack in attack_names:
         all_instances = [experiment_set.retrieve_preds(attack, seed) for seed in seed_list]
@@ -325,7 +326,7 @@ def table_roc_main(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_en
     if current_legend is not None:
         current_legend.remove()
 
-    filename = f"{ds.dataset_name}_{ensemble_method}_roc_plot_liner.pdf" if not log_scale else f"{ds.dataset_name}_{ensemble_method}_roc_plot_log.pdf"
+    filename = f"{ds.dataset_name}_{ensemble_method}_roc_plot_linear.pdf" if not log_scale else f"{ds.dataset_name}_{ensemble_method}_roc_plot_log.pdf"
     plt.savefig(save_dir + '/' + filename, format="pdf", bbox_inches='tight')
     print(f"Saved plot at {save_dir + '/' + filename}")
     plt.close(fig)
@@ -334,10 +335,68 @@ def table_roc_main(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_en
     legend_fig, legend_ax = plt.subplots(figsize=(3, 2))
     legend_ax.axis('off')
     legend_ax.legend(handles, labels, loc='center', frameon=False, ncol=1)
-    legend_filename = f"{ds.dataset_name}_{ensemble_method}_roc_legend_liner.pdf" if not log_scale else f"{ds.dataset_name}_{ensemble_method}_roc_legend_log.pdf"
+    legend_filename = f"{ds.dataset_name}_{ensemble_method}_roc_legend_linear.pdf" if not log_scale else f"{ds.dataset_name}_{ensemble_method}_roc_legend_log.pdf"
     legend_fig.savefig(save_dir + '/' + legend_filename, format="pdf", bbox_inches='tight')
     plt.close(legend_fig)
     print(f"Saved legend at {save_dir + '/' + legend_filename}")
+
+def compare_ensemble_curves(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_ensemble, ensemble_methods,
+                   log_scale: bool = True, overwrite: bool = False, marker=False, verbose: bool = False,
+                   additional_command: List[str] = None
+                     ):              
+                   
+    """
+    Compare the ROC curves of different ensemble methods (with all 4 attacks) for the same dataset.
+
+    Make sure for selected ensemble methods, the ROC curves are already generated.
+    """
+
+    df = pd.DataFrame(columns=["Attack", "FPR", "TPR", "Ensemble Method"])
+
+    # iterate through all ensemble methods and add to the dataframe for only all attacks
+    for ensemble_method in ensemble_methods:
+        path_to_roc_df = f"{save_dir}/{model}/{ds.dataset_name}/{len(seeds)}_seeds/{ensemble_method}/ensemble_tpr_fpr.pkl"
+        roc_df = pd.read_pickle(path_to_roc_df)
+        # find longest name
+        longest_name = max(roc_df['Attack'], key=len)
+        multi_attacks_df = roc_df[roc_df['Attack'] == longest_name]
+        # adding the ensemble method to the dataframe
+        multi_attacks_df.loc[:, 'Ensemble Method'] = ensemble_name_mapping[ensemble_method]
+        df = pd.concat([df, multi_attacks_df])
+
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    sns.set_context("paper")
+
+
+    # Plot Multi Attacks (ensemble of all attacks)
+    longest_name = max(df['Attack'], key=len)
+    sns.lineplot(
+        ax=ax,
+        data=df,
+        x='FPR',
+        y='TPR',
+        hue='Ensemble Method'
+    )
+
+    ax.plot([0, 1], [0, 1], ls='--', color='gray')
+
+    if log_scale:
+        ax.set_xlim(1e-4, 1)
+        ax.set_ylim(1e-4, 1)
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+    else:
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+
+    ax.set_xlabel('FPR')
+    ax.set_ylabel('TPR')
+
+    filename = f"{ds.dataset_name}_ensemble_comparison_roc_plot_linear.pdf" if not log_scale else f"{ds.dataset_name}_ensemble_comparison_roc_plot_log.pdf"
+    plt.savefig(save_dir + '/' + filename, format="pdf", bbox_inches='tight')
+    print(f"Saved plot at {save_dir + '/' + filename}")
+    plt.close(fig)
+
 
 
 
@@ -351,8 +410,8 @@ if __name__ == "__main__":
     parser.add_argument('--num_fpr_for_table_ensemble', type=int, default=100, help='Number of FPR values to ensemble for table.')
     args = parser.parse_args()
 
-    additional_command = ["show all multi attack", "don't show single instance", "don't show multi instance"]
-    # additional_command = []
+    # additional_command = ["show all multi attack", "don't show single instance", "don't show multi instance"]
+    additional_command = []
 
 
     datasets = args.datasets
@@ -369,17 +428,23 @@ if __name__ == "__main__":
 
     
     for model in models:
-        # for num_seed in range(2, len(seeds)+1):
-        for num_seed in [6]:
+        for num_seed in range(2, len(seeds)+1):
+        # for num_seed in [6]:
             seeds_consider = seeds[:num_seed]
             for ds in target_datasets:
                 for ensemble_method in ["intersection", "union", "majority_vote"]:
                     print(f"Processing {ds.dataset_name} with {num_seed} seeds and ensemble method {ensemble_method} and model {model}")
-                    save_dir = f"{path_to_data}/ensemble_roc_all_multi_attack/{model}/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
+                    save_dir = f"{path_to_data}/ensemble_roc_base/{model}/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
                     # save_dir = f"{path_to_data}/ensemble_roc/{model}/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
                     os.makedirs(save_dir, exist_ok=True)
 
                     table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=True, overwrite=False, marker=False, additional_command=additional_command)
                     table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=False, overwrite=False, marker=False, additional_command=additional_command)
+
+                # compare the ensemble methods
+                save_dir = f"{path_to_data}/ensemble_roc_base/"
+                ensemble_methods = ["intersection", "union", "majority_vote"]
+                compare_ensemble_curves(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_methods, log_scale=True, overwrite=False, marker=False, additional_command=additional_command)
+                compare_ensemble_curves(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_methods, log_scale=False, overwrite=False, marker=False, additional_command=additional_command)
 
         
