@@ -216,7 +216,7 @@ class Predictions:
             print(f"prediction {self.name} has no positive samples")
         return TP / (TP + FP)
     
-    def jaccard_similarity(self, other_pred) -> float:
+    def jaccard_similarity(self, other_pred, **kwargs) -> float:
         """
         Compute the Jaccard similarity between two predictions.
         Jaccard similarity = Intersection / Union
@@ -226,8 +226,17 @@ class Predictions:
         if not other_pred.is_hard():
             raise ValueError("Jaccard similarity metric requires hard label predictions")
 
-        intersection = np.sum((self.predictions_to_labels() == 1) & (other_pred.predictions_to_labels() == 1))
-        union = np.sum((self.predictions_to_labels() == 1) | (other_pred.predictions_to_labels() == 1))
+        if "canary_indices" in kwargs:
+            # focus on the canary indices of the predictions
+            canary_indices = kwargs["canary_indices"]
+            self_pred_arr = self.predictions_to_labels()[canary_indices]
+            other_pred_arr = other_pred.predictions_to_labels()[canary_indices]
+        else:
+            self_pred_arr = self.predictions_to_labels()
+            other_pred_arr = other_pred.predictions_to_labels()
+
+        intersection = np.sum((self_pred_arr == 1) & (other_pred_arr == 1))
+        union = np.sum((self_pred_arr == 1) | (other_pred_arr == 1))
         return intersection / union
 
 

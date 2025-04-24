@@ -19,6 +19,7 @@ NOTE: Scripts in this directory that are not explicitly mentioned in the section
     - [`max_ensemble_low_fpr.ipynb`](#max_ensemble_low_fpripynb)
     - [`ensemble_roc.py`](#ensemble_rocpy)
     - [`ensemble_performance.ipynb`](#ensemble_performanceipynb)
+    - [`shadow_attack_threshold_exp.ipynb` # expired](#shadow_attack_threshold_expipynb--expired)
     - [`same_attack_different_signal/same_attack_different_signal.ipynb`](#same_attack_different_signalsame_attack_different_signalipynb)
     - [`disparity_empirical_analysis.ipynb`](#disparity_empirical_analysisipynb)
 
@@ -127,13 +128,18 @@ This directory contains the code for the ensemble strategies proposed in the pap
    This notebook is designed to performs Coverage Ensemble and Stability Ensemble. It starts with thresholding the predictions of the base instances at the same low FPR, then ensemble the predictions follows our paper's definition of 2 step ensemble approach.
 
 ### `ensemble_roc.py` 
-   Ensemble roc samples n thresholds for n FPRs for each base instance. Then each attack goes through the steps of ensemble in `max_ensemble_low_fpr.ipynb` for n times with different thresholds to get n samples for each ensemble TPR@FPR. It also calculates the AUC and ACC for each ensemble.
+   Ensemble roc samples n thresholds for n FPRs for each base instance. Then each attack goes through the steps of ensemble in `max_ensemble_low_fpr.ipynb` for n times with different thresholds to get n samples for each ensemble TPR@FPR. It also calculates the AUC, ACC and TPR@Low FPR for each ensemble.
+
+
+### `ensemble_performance.ipynb` 
+
+This notebook is designed to compare the performance of the ensemble strategies proposed in the paper. It organize the performance result (TPR@low FPR, auc, acc) with respect to the number of instances used in the ensemble. 
+
+### `shadow_attack_threshold_exp.ipynb` # expired
+
+This notebook is designed to see whether the threshold of attack for a fpr on the auxilary dataset could generalize well on the test set.
 
 ___
-
-### `ensemble_performance.ipynb`
-
-This notebook is designed to compare the performance of the ensemble strategies proposed in the paper. It organize the performance result with respect to the number of instances used in the ensemble. 
 
 ### `same_attack_different_signal/same_attack_different_signal.ipynb`
 
@@ -141,4 +147,4 @@ This notebook is designed to compare the performance of the same attack on diffe
 
 ### `disparity_empirical_analysis.ipynb`
 
-THis notebook is designed to analyze the disparity of MIAs in the empirical study. Corresponding to the paper's *Output Distribution of A-Vulnerable Samples:*.
+THis notebook is designed to analyze the disparity of MIAs in the empirical study. Corresponding to the paper's *Output Distribution of A-Unique Samples*.

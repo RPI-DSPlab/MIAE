@@ -51,6 +51,17 @@ DATA_DIR="/home/data/wangz56"
 #seeds=(0 1 2)
 #fprs=(0.01 0.1)
 
+# Define experiment parameters set comparing LiRA online vs offline
+datasets=("cifar10")
+archs=("resnet56")
+mias=("lira" "lira_offline")
+categories=("fpr")
+subcategories=("common_tp" "pairwise")
+experiment_dir="${DATA_DIR}/miae_standard_exp"
+option=("TPR")
+top_k=0 # means we are not consider any top k variation
+seeds=(0 1 2 3 4 5)
+fprs=(0.01 0.1)
 
 mialist=""
 for mia in "${mias[@]}"; do
@@ -73,7 +84,7 @@ for dataset in "${datasets[@]}"; do
 done
 
 
-graph_dir="$experiment_dir/graphs"
+graph_dir="$experiment_dir/venn_lira_online_vs_offline"
 mkdir -p "$graph_dir"
 
 if [ -d "$graph_dir" ]; then

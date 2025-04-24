@@ -271,7 +271,7 @@ class LIRAUtil(MIAUtils):
         Implements the core logic of the LIRA membership inference attack.
 
         Args:
-        keep (np.ndarray): An array indicating which samples to keep.
+        keep (np.ndarray): An array indicating In samples.
         scores (np.ndarray): An array containing the scores of the samples.
         check_scores (np.ndarray): An array containing the scores of the samples for target model.
         in_size (int):
@@ -317,6 +317,51 @@ class LIRAUtil(MIAUtils):
             pr_out = -scipy.stats.norm.logpdf(sc, mean_out, std_out + 1e-30)
             score = pr_in - pr_out
 
+            prediction.extend(score.mean(1))
+
+        return np.array(prediction)
+
+    @classmethod
+    def lira_mia_offline(cls, keep, scores, check_scores, in_size=100000, out_size=100000,
+                        fix_variance=True):
+        """
+        Implements the LIRA membership inference attack in an offline setting using the scores and 
+        ground truth answer from check_keep to predict whether examples in check_scores were training data.
+        
+        Args:
+        keep (np.ndarray): An array indicating IN samples on the shadow model.
+        scores (np.ndarray): An array containing the scores of the aux dataset from the shadow models
+        check_scores (np.ndarray): An array containing the scores of the samples for target model.
+        in_size (int): 
+        out_size (int): 
+        fix_variance (bool): If True, fixes the variance across all samples.
+        """
+        dat_out = []
+
+        for j in range(scores.shape[1]):
+            dat_out.append(scores[~keep[:, j], j, :])
+
+        # Limit the number of samples for training and testing
+        out_size = min(min(map(len, dat_out)), out_size)
+
+        # Slice the data to fit the sizes
+        dat_out = np.array([x[:out_size] for x in dat_out])
+
+        # Calculate median for training and test data
+        mean_out = np.median(dat_out, 1)
+
+        # Fix the variance if requested
+        if fix_variance:
+            std_out = np.std(dat_out)
+        else:
+            std_out = np.std(dat_out, 1)
+
+        std_out = np.nan_to_num(std_out, nan=1.0)
+
+
+        prediction = []
+        for sc in check_scores:
+            score = scipy.stats.norm.logpdf(sc, mean_out, std_out + 1e-30)
             prediction.extend(score.mean(1))
 
         return np.array(prediction)
@@ -462,6 +507,7 @@ class LiraAttack(MiAttack):
 
         :param auxiliary_dataset: The auxiliary dataset to be used for the attack.
         """
+        set_seed(self.aux_info.seed)
         LIRAUtil.log(self.aux_info, "Start preparing the attack...", print_flag=True)
         self.auxiliary_dataset = auxiliary_dataset
 
@@ -470,8 +516,21 @@ class LiraAttack(MiAttack):
             if dir is not None:
                 os.makedirs(dir, exist_ok=True)
 
-        if self.aux_info.online is False:
-            raise NotImplementedError("LIRA does not support offline training yet.")
+        """
+        the snippet below is for the disjoint case mentioned in the LiRA paper
+        """
+
+        # if self.aux_info.online is False: # lira offline
+        #     shadow_model = self.target_model_access.get_untrained_model()
+        #     LIRAUtil.train_shadow_models(shadow_model, self.auxiliary_dataset, info=self.aux_info)
+        #     self.shadow_scores, self.shadow_keeps = LIRAUtil.process_shadow_models(self.aux_info,
+        #                                                                            self.auxiliary_dataset,
+        #                                                                            shadow_model)
+        #     # Convert the list of tensors to a single tensor
+        #     self.shadow_scores = torch.cat(self.shadow_scores, dim=0)
+        #     self.shadow_keeps = torch.cat(self.shadow_keeps, dim=0)
+
+            
         self.prepared = True
         LIRAUtil.log(self.aux_info, "Finish preparing the attack...", print_flag=True)
 
@@ -482,8 +541,6 @@ class LiraAttack(MiAttack):
         :param dataset: The target data points to be inferred.
         :return: The inferred membership status of the data point.
         """
-        TEST = False  # if True, we save scores and keep to the file
-
         LIRAUtil.log(self.aux_info, "Start membership inference...", print_flag=True)
 
         set_seed(self.aux_info.seed)
@@ -494,41 +551,32 @@ class LiraAttack(MiAttack):
         LIRAUtil.train_shadow_models(shadow_model, shadow_target_concat_set, info=self.aux_info)
 
         # given the model, calculate the score and generate the kept index data
+        self.shadow_scores, self.shadow_keeps = LIRAUtil.process_shadow_models(self.aux_info,
+                                                                                shadow_target_concat_set,
+                                                                                shadow_model)
+        # Convert the list of tensors to a single tensor
+        self.shadow_scores = torch.cat(self.shadow_scores, dim=0)
+        self.shadow_keeps = torch.cat(self.shadow_keeps, dim=0)
 
-        if TEST:
-            # if we find the scores and keep from the file, we don't need to calculate it again
-            if os.path.exists('shadow_scores_lira.npy') and os.path.exists('shadow_keeps_lira.npy'):
-                self.shadow_scores = torch.from_numpy(np.load('shadow_scores_lira.npy'))
-                self.shadow_keeps = torch.from_numpy(np.load('shadow_keeps_lira.npy'))
-            else:
-                self.shadow_scores, self.shadow_keeps = LIRAUtil.process_shadow_models(self.aux_info,
-                                                                                       shadow_target_concat_set,
-                                                                                       shadow_model)
-                # Convert the list of tensors to a single tensor
-                self.shadow_scores = torch.cat(self.shadow_scores, dim=0)
-                self.shadow_keeps = torch.cat(self.shadow_keeps, dim=0)
-                np.save('shadow_scores_lira.npy', self.shadow_scores)
 
-                # save it as txt for debugging
-                # np.savetxt('shadow_scores.txt', self.shadow_scores.numpy())
-                np.save('shadow_keeps_lira.npy', self.shadow_keeps)
-        else:
-            self.shadow_scores, self.shadow_keeps = LIRAUtil.process_shadow_models(self.aux_info,
-                                                                                   shadow_target_concat_set,
-                                                                                   shadow_model)
-            # Convert the list of tensors to a single tensor
-            self.shadow_scores = torch.cat(self.shadow_scores, dim=0)
-            self.shadow_keeps = torch.cat(self.shadow_keeps, dim=0)
-
-        # obtaining target_score, which is the prediction of the target model
+        # obtaining target_score, which is the score of target datapoints on the target model
         target_scores = LIRAUtil.process_target_model(self.target_model_access, self.aux_info,
-                                                      shadow_target_concat_set)
+                                                    shadow_target_concat_set)
         target_scores = torch.cat(target_scores, dim=0)
 
-        predictions = LIRAUtil.lira_mia(np.array(self.shadow_keeps), np.array(self.shadow_scores),
-                                        np.array(target_scores), fix_variance=self.aux_info.fix_variance)
+        if self.aux_info.online: # online
+            predictions = LIRAUtil.lira_mia(np.array(self.shadow_keeps), np.array(self.shadow_scores),
+                                            np.array(target_scores), fix_variance=self.aux_info.fix_variance)
+
+            predictions = -predictions[-len(dataset):]
+
+        else: # offline
+            predictions = LIRAUtil.lira_mia_offline(np.array(self.shadow_keeps), np.array(self.shadow_scores),
+                                                    np.array(target_scores), fix_variance=self.aux_info.fix_variance)
+
+            predictions = predictions[-len(dataset):]
 
         LIRAUtil.log(self.aux_info, "Finish membership inference...", print_flag=True)
         
         # return the predictions on the target data
-        return -predictions[-len(dataset):]
+        return predictions

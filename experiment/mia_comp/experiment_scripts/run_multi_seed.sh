@@ -19,7 +19,7 @@ for sd in "${seeds[@]}"; do
     fi
 
     # Launch the experiment and save output to log file
-    CUDA_VISIBLE_DEVICES=0 ./experiment_scripts/obtain_pred_top_k_shokri.sh "$sd" > "$log_file" 2>&1 &
+    CUDA_VISIBLE_DEVICES=1 ./experiment_scripts/obtain_pred.sh "$sd" > "$log_file" 2>&1 &
 done
 
 # Wait for all background processes to complete

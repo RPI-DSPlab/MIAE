@@ -76,6 +76,7 @@ def get_dataset(dataset_name, aug, targetset_ratio, train_test_ratio, data_dir, 
                                                                   [int(len(target_set) * train_test_ratio),
                                                                    len(target_set) - int(
                                                                        len(target_set) * train_test_ratio)], shuffle_seed)
+    
 
     return target_trainset, target_testset, aux_set, num_classes, input_size
 
@@ -197,7 +198,7 @@ def get_target_model_access(args, target_model, untrained_target_model) -> mia_b
         return shokri_mia.ShokriModelAccess(deepcopy(target_model), untrained_target_model)
     if args.attack == "top_k_shokri":
         return top_k_shokri_mia.TopKShokriModelAccess(deepcopy(target_model), untrained_target_model)
-    if args.attack == "lira":
+    if args.attack == "lira" or args.attack == "lira_offline":
         return lira_mia.LiraModelAccess(deepcopy(target_model), untrained_target_model)
     if args.attack == "reference":
         return reference_mia.ReferenceModelAccess(deepcopy(target_model), untrained_target_model)
@@ -230,7 +231,7 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
         return calibration_mia.CalibrationAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path, 
-             'num_shadow_models': 13})
+             'num_shadow_models': 1})
     if args.attack == "shokri":
         return shokri_mia.ShokriAuxiliaryInfo(
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
@@ -241,15 +242,21 @@ def get_aux_info(args, device: str, num_classes: int) -> mia_base.AuxiliaryInfo:
             {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
              'batch_size': args.batch_size, 'lr': 0.1, 'epochs': args.attack_epochs, 'log_path': args.result_path,
              'top_k': 10})
-    if args.attack == "lira":
+    if args.attack == "lira" or args.attack == "lira_offline":
         if args.dataset == "purchase100" or args.dataset == "texas100":
             n_augmentation = 1
         else:
             n_augmentation = 18
-        return lira_mia.LiraAuxiliaryInfo(
-            {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
-            'batch_size': args.batch_size, 'lr': 0.1, "num_shadow_models": 20, 'epochs': args.attack_epochs, 'log_path': args.result_path,
-             'shadow_path': args.lira_shadow_path, 'shadow_diff_init': True, "augmentation_query": n_augmentation})
+        if args.attack == "lira":
+            return lira_mia.LiraAuxiliaryInfo(
+                {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
+                'batch_size': args.batch_size, 'lr': 0.1, "num_shadow_models": 20, 'epochs': args.attack_epochs, 'log_path': args.result_path,
+                'shadow_path': args.lira_shadow_path, 'shadow_diff_init': True, "augmentation_query": n_augmentation, "online": True})
+        else:
+            return lira_mia.LiraAuxiliaryInfo(
+                {'device': device, 'seed': args.seed, 'save_path': args.preparation_path, 'num_classes': num_classes,
+                'batch_size': args.batch_size, 'lr': 0.1, "num_shadow_models": 20, 'epochs': args.attack_epochs, 'log_path': args.result_path,
+                'shadow_path': args.lira_shadow_path, 'shadow_diff_init': True, "augmentation_query": n_augmentation, "online": False})
 
     if args.attack == "reference":
         return reference_mia.ReferenceAuxiliaryInfo(
@@ -287,7 +294,7 @@ def get_attack(args, aux_info: mia_base.AuxiliaryInfo, target_model_access: mia_
         return shokri_mia.ShokriAttack(target_model_access, aux_info)
     if args.attack == "top_k_shokri":
         return top_k_shokri_mia.TopKShokriAttack(target_model_access, aux_info)
-    if args.attack == "lira":
+    if args.attack == "lira" or args.attack == "lira_offline":
         return lira_mia.LiraAttack(target_model_access, aux_info)
     if args.attack == "reference":
         return reference_mia.ReferenceAttack(target_model_access, aux_info)
@@ -319,7 +326,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_target_model', type=bool, default=False, help='whether to train the target model')
 
     # mandatory arguments
-    parser.add_argument('--attack', type=str, default=None, help='MIA type: [losstraj, yeom, shokri ,lira, aug, calibration, top_k_shokri, reference]')
+    parser.add_argument('--attack', type=str, default=None, help='MIA type: [losstraj, yeom, shokri ,lira, aug, calibration, top_k_shokri, reference, lira_offline]')
     parser.add_argument('--target_model', type=str, default=None,
                         help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet, mlp]')
     parser.add_argument('--dataset', type=str, default=None, help='dataset: [cifar10, cifar100, cinic10, purchase100, texas100]')
@@ -338,6 +345,8 @@ if __name__ == '__main__':
                         help='whether to delete the preparation files after training')
     parser.add_argument('--shuffle_seed', type=int, default=1, help='seed for shuffling the dataset')
 
+    parser.add_argument('--canaries', type=int, default=0, help='number of canaries to use for the attack')
+
     # optional arguments (eg. training hyperparameters)
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument('--data_aug', type=bool, default=False, help='whether to use data augmentation')
@@ -348,6 +357,9 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=2, help='number of workers')
     parser.add_argument('--device', type=str, default='cuda', help='device to train the model')
     args = parser.parse_args()
+
+    if args.canaries > 0:
+        print("Note: current script is running experiment with canaries")
 
     # set seed
     set_seed(args.seed)
@@ -363,7 +375,14 @@ if __name__ == '__main__':
                                                                                         args.target_set_ratio,
                                                                                         args.train_test_ratio, args.dataset_file_root,  
                                                                                         args.shuffle_seed)
+        
+        if args.canaries > 0:
+            target_trainset, canary_indices = dataset_utils.add_canaries(target_trainset, args.canaries, num_classes, args.shuffle_seed)
+
         dataset_save_path = os.path.join(args.data_path, f"{args.dataset}")
+        if args.canaries > 0: # canary dataset saved in a separate folder
+            dataset_save_path = os.path.join(args.data_path, f"{args.dataset}_canaries_{args.canaries}")
+
         if not os.path.exists(dataset_save_path):
             os.makedirs(dataset_save_path)
 
@@ -374,7 +393,6 @@ if __name__ == '__main__':
             pickle.dump(target_testset, f)
         with open(os.path.join(dataset_save_path, "aux_set.pkl"), "wb") as f:
             pickle.dump(aux_set, f)
-
 
         # concat the target trainset and testset and then attack
         dataset_to_attack = ConcatDataset([target_trainset, target_testset])
@@ -393,9 +411,14 @@ if __name__ == '__main__':
         # save the membership
         np.save(os.path.join(dataset_save_path, "attack_set_membership.npy"), target_membership)
 
+        if args.canaries > 0:
+            np.save(os.path.join(dataset_save_path, "canary_indices.npy"), canary_indices)
+
         exit(0)
 
     dataset_save_path = os.path.join(args.data_path, f"{args.dataset}")
+    if args.canaries > 0: # canary dataset saved in a separate folder
+        dataset_save_path = os.path.join(args.data_path, f"{args.dataset}_canaries_{args.canaries}")
     # load the dataset
     with open(os.path.join(dataset_save_path, "target_trainset.pkl"), "rb") as f:
         target_trainset = pickle.load(f)

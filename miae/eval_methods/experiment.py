@@ -61,6 +61,9 @@ class ExperimentSet():
     def from_dir(cls, target_dataset: TargetDataset, attack_list: List[str], pred_path: str, sd_list, model, fpr_to_adjust=None):
         """
         alternative constructor to load the experiment set from a directory
+
+        when fpr_to_adjust is not None, the FPR of all predictions in the experiment set will be adjusted to the given FPR.
+        if fpr_to_adjust is None, no adjustment is made, predictions are soft (MIA scores)
         """
         attack_preds = dict()
         ret_list = read_preds(pred_path, "", sd_list, target_dataset.dataset_name, model, attack_list, target_dataset.membership)
@@ -145,7 +148,7 @@ class ExperimentSet():
             ret_list.append(Predictions(curr_pred_unique, self.get_preds_stability(attack_names[base_pred_idx]).ground_truth_arr, list_of_base_pred_name[base_pred_idx] + "_unique_TP"))
         return ret_list
     
-    def attack_pair_wise_jaccard_similarity(self, attack_name: str) -> float:
+    def attack_pair_wise_jaccard_similarity(self, attack_name: str, **kwargs) -> float:
         """
         calculate the pair-wise Jaccard similarity between the predictions of the attack
 
@@ -168,13 +171,18 @@ class ExperimentSet():
         if seed < 2:
             raise ValueError(f"The attack {attack_name} has less than 2 seeds. Cannot calculate the similarity.")
 
+        if "canary_indices" in kwargs:
+            canary_indices = kwargs["canary_indices"] # these are the indices of the canary samples in the trainset
+
         n = len(self.attack_preds[attack_name])
         total_sim = 0
         for i in range(n):
             for j in range(i+1, n):
-                total_sim += self.attack_preds[attack_name][i].jaccard_similarity(self.attack_preds[attack_name][j])
+                if "canary_indices" in kwargs:
+                    total_sim += self.attack_preds[attack_name][i].jaccard_similarity(self.attack_preds[attack_name][j], canary_indices=canary_indices)
+                else:
+                    total_sim += self.attack_preds[attack_name][i].jaccard_similarity(self.attack_preds[attack_name][j])
         return total_sim / (n * (n - 1) / 2)
-
 
 
 

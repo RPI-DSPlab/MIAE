@@ -54,10 +54,66 @@ plt.rc('axes', labelsize=8)
 plt.rcParams["font.weight"] = "bold"
 plt.rcParams["axes.labelweight"] = "bold"
 
-mia_name_mapping = {"losstraj": "losstraj", "shokri": "Class-NN", "yeom": "LOSS", "lira": "LiRA", "aug": "aug", "calibration": "calibrated-loss", "reference": "reference"}
-mia_color_mapping = {"losstraj": '#1f77b4', "shokri": '#ff7f0e', "yeom": '#2ca02c', "lira": '#d62728', "aug": '#9467bd', "calibration": '#8c564b', "reference": '#e377c2'}
+mia_name_mapping = {"losstraj": "losstraj", "shokri": "Class-NN", "yeom": "LOSS", "lira": "LiRA", "lira_offline": "LiRA (Offline)", "aug": "aug", "calibration": "calibrated-loss", "reference": "reference"}
+mia_color_mapping = {"losstraj": '#1f77b4', "shokri": '#ff7f0e', "yeom": '#2ca02c', "lira": '#d62728', "aug": '#9467bd', "calibration": '#8c564b', "reference": '#e377c2', "lira_offline": '#ff7f0e'}
 
 ensemble_name_mapping = {"intersection": "Stability", "union": "Coverage", "majority_vote": "Majority Vote"}
+
+
+
+import numpy as np
+
+def interp_closest(x, fprs, tprs):
+    """
+    Return the TPR from fp corresponding to the FPR in xp that is closest to x,
+    along with the closest FPR value found.
+
+    This function mimics the interface of np.interp but instead of linear interpolation,
+    it selects the observed value whose FPR is nearest to the target x.
+
+    Parameters
+    ----------
+    x : float or array_like
+        The target FPR value(s) at which to evaluate.
+    fprs : 1-D array_like
+        The list of FPR values.
+    tprs : 1-D array_like
+        The list of TPR values corresponding to xp.
+
+    Returns
+    -------
+    tpr_result, fpr_result : tuple
+        - tpr_result: The TPR value(s) corresponding to the FPR closest to x.
+        - fpr_result: The closest FPR value(s) found in xp.
+    
+    Raises
+    ------
+    ValueError
+        If xp and fp do not have the same shape.
+
+    Examples
+    --------
+    >>> fpr = np.array([0.0, 0.0005, 0.002, 0.01])
+    >>> tpr = np.array([0.0, 0.3, 0.7, 1.0])
+    >>> tpr_val, fpr_val = interp_closest(0.001, fpr, tpr)
+    >>> print(tpr_val)   # 0.3
+    >>> print(fpr_val)   # 0.0005
+    """
+    fprs = np.asarray(fprs)
+    tprs = np.asarray(tprs)
+    x = np.asarray(x)
+
+    if fprs.shape != tprs.shape:
+        raise ValueError("xp and fp must have the same shape.")
+
+    # Handle scalar x
+    if x.ndim == 0:
+        idx = np.argmin(np.abs(fprs - x))
+        return tprs[idx], fprs[idx]
+    else:
+        distances = np.abs(x[:, None] - fprs[None, :])
+        indices = np.argmin(distances, axis=1)
+        return tprs[indices], fprs[indices]
 
 
 
@@ -177,7 +233,7 @@ def sweep(fpr, tpr) -> Tuple[np.ndarray, np.ndarray, float, float]:
 
 def table_roc_main(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_ensemble, ensemble_method,
                    log_scale: bool = True, overwrite: bool = False, marker=False, verbose: bool = False,
-                   additional_command: List[str] = None
+                   additional_command: List[str] = None, no_interp = False
                    ):
     """
     This main function would ensemble attacks at some specified FPR values,
@@ -185,7 +241,7 @@ def table_roc_main(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_en
     different FPRs.
 
     :param ds: TargetDataset object
-    :param log_scale: whether to use log scale for FPR values
+    
     """
 
     fprs_for_base = np.logspace(-6, 0, num=num_fpr_for_table_ensemble) if log_scale else np.linspace(0, 1, num=num_fpr_for_table_ensemble)
@@ -219,7 +275,7 @@ def table_roc_main(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_en
         roc_df.to_pickle(path_to_roc_df)
 
         # Another dataframe to store auc
-        attack_perf_df = DataFrame(columns=["Attack", "Ensemble Level", "AUC", "ACC", "TPR@0.001FPR"])
+        attack_perf_df = DataFrame(columns=["Attack", "Ensemble Level", "AUC", "ACC", "TPR@0.001FPR", "FPR"])
         
         # find all pairs of (attack, ensemble_level) in tpr_fpr_df
         attack_ensemble_set = set([(row["Attack"], row["Ensemble Level"]) for _, row in roc_df.iterrows()])
@@ -234,11 +290,15 @@ def table_roc_main(ds, save_dir, seeds, attack_list, model, num_fpr_for_table_en
                 tpr.append(entry[1]["TPR"])
             
             _, _, auc, acc = sweep(fpr, tpr)
+            if no_interp == False:
+                fpr_to_save = 0.001
+                TPRat0001FPR = np.interp(0.001, fpr, tpr)
 
-            TPRat0001FPR = np.interp(0.001, fpr, tpr)
+            if no_interp: # in this  case, we want actual datapoint instead of interpolated
+                TPRat0001FPR, fpr_to_save = interp_closest(0.001, fpr, tpr)
             
             attack_perf_df = pd.concat([attack_perf_df, DataFrame([{"Attack": attack, "Ensemble Level": ensemble_level, "AUC": auc, 
-                                                                    "ACC": acc, "TPR@0.001FPR": TPRat0001FPR}])], ignore_index=True)
+                                                                    "ACC": acc, "TPR@0.001FPR": TPRat0001FPR, "FPR": fpr_to_save}])], ignore_index=True)
             if verbose:
                 print(f"Attack: {attack}, Ensemble Level: {ensemble_level}, AUC: {auc}, ACC: {acc}, TPR@0.001FPR: {TPRat0001FPR}")
         
@@ -408,6 +468,7 @@ if __name__ == "__main__":
     parser.add_argument('--models', nargs='+', type=str, default="vgg16", help='Model name.')
     parser.add_argument('--path_to_data', type=str, default=f'{DATA_DIR}/miae_experiment_aug_more_target_data', help='Path to the data directory.')
     parser.add_argument('--num_fpr_for_table_ensemble', type=int, default=100, help='Number of FPR values to ensemble for table.')
+    parser.add_argument('--no_interp', type=str, help='Use actual data point instead of interpolated value.')
     args = parser.parse_args()
 
     # additional_command = ["show all multi attack", "don't show single instance", "don't show multi instance"]
@@ -420,6 +481,7 @@ if __name__ == "__main__":
     models = args.models
     path_to_data = args.path_to_data
     pred_path = path_to_data
+    no_interp = bool(args.no_interp)
 
     target_datasets = []
     for ds in datasets:
@@ -434,17 +496,17 @@ if __name__ == "__main__":
             for ds in target_datasets:
                 for ensemble_method in ["intersection", "union", "majority_vote"]:
                     print(f"Processing {ds.dataset_name} with {num_seed} seeds and ensemble method {ensemble_method} and model {model}")
-                    save_dir = f"{path_to_data}/ensemble_roc_base/{model}/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
+                    save_dir = f"{path_to_data}/ensemble_roc_base_sd_1/{model}/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
                     # save_dir = f"{path_to_data}/ensemble_roc/{model}/{ds.dataset_name}/{num_seed}_seeds/{ensemble_method}"
                     os.makedirs(save_dir, exist_ok=True)
 
-                    table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=True, overwrite=False, marker=False, additional_command=additional_command)
-                    table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=False, overwrite=False, marker=False, additional_command=additional_command)
+                    table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=True, overwrite=False, marker=False, additional_command=additional_command, no_interp=no_interp)
+                    table_roc_main(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_method, log_scale=False, overwrite=False, marker=False, additional_command=additional_command, no_interp=no_interp)
 
-                # compare the ensemble methods
-                save_dir = f"{path_to_data}/ensemble_roc_base/"
-                ensemble_methods = ["intersection", "union", "majority_vote"]
-                compare_ensemble_curves(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_methods, log_scale=True, overwrite=False, marker=False, additional_command=additional_command)
-                compare_ensemble_curves(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_methods, log_scale=False, overwrite=False, marker=False, additional_command=additional_command)
+                # # compare the ensemble methods
+                # save_dir = f"{path_to_data}/ensemble_roc_base_sd_1/"
+                # ensemble_methods = ["intersection", "union", "majority_vote"]
+                # compare_ensemble_curves(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_methods, log_scale=True, overwrite=False, marker=False, additional_command=additional_command)
+                # compare_ensemble_curves(ds, save_dir, seeds_consider, attack_list, model, args.num_fpr_for_table_ensemble, ensemble_methods, log_scale=False, overwrite=False, marker=False, additional_command=additional_command)
 
         

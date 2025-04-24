@@ -29,8 +29,8 @@ targetset_ratio = 0.5  # percentage of training set to be used for training/test
 train_test_ratio = 0.5  # percentage of training set to be used for training any model that uses a test set
 lr = 0.1
 target_train_epochs = 50
-attack_epochs = 30
-num_classes = 100
+attack_epochs = 50
+num_classes = 10
 
 current_dir = os.getcwd()
 target_model_dir = os.path.join(current_dir, "target_model")
@@ -206,7 +206,12 @@ def main():
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/merlin', 'num_classes': num_classes, 'batch_size': batch_size})
     lira_aux_info = lira_mia.LiraAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira', 'num_classes': num_classes, 'batch_size': batch_size,
-             'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/lira', "num_shadow_models": 20, "augmentation_query": 1})
+             'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/lira', "num_shadow_models": 20, "augmentation_query": 18,
+             'online': True})
+    lira_offline_aux_info = lira_mia.LiraAuxiliaryInfo(
+            {'device': device, 'seed': seed, 'save_path': attack_dir+'/lira_offline', 'num_classes': num_classes, 'batch_size': batch_size,
+             'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/lira_offline', "num_shadow_models": 20, "augmentation_query": 18,
+             'online': False})
     reference_aux_info = reference_mia.ReferenceAuxiliaryInfo(
             {'device': device, 'seed': seed, 'save_path': attack_dir+'/reference', 'num_classes': num_classes, 'batch_size': batch_size,
              'lr': lr, 'epochs': attack_epochs, 'log_path': attack_dir+'/reference', "num_shadow_models": 20})
@@ -250,8 +255,9 @@ def main():
         # losstraj_mia.LosstrajAttack(losstraj_target_model_access, losstraj_aux_info),
         # merlin_mia.MerlinAttack(merlin_target_model_access, merlin_aux_info),
         # lira_mia.LiraAttack(lira_target_model_access, lira_aux_info),
+        lira_mia.LiraAttack(lira_target_model_access, lira_offline_aux_info),
         # aug_mia.AugAttack(aug_target_model_access, aug_aux_info),
-        calibration_mia.CalibrationAttack(calibration_target_model_access, calibration_aux_info),
+        # calibration_mia.CalibrationAttack(calibration_target_model_access, calibration_aux_info),
         # shokri_mia.ShokriAttack(shokri_target_model_access, shokri_aux_info),
         # top_k_shokri_mia.TopKShokriAttack(top_k_shokri_target_model_access, top_k_shokri_aux_info)
         # yeom_mia.YeomAttack(yeom_target_model_access, yeom_aux_info),
