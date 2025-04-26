@@ -3,6 +3,9 @@
 # modify this to set up directory:
 DATA_DIR="/home/data/wangz56"
 
+# ---------- Experiment Parameters ----------
+# |     uncomment the one you want to run   |
+# -------------------------------------------
 # Define experiment parameters set 1 for standard MIAE
 #datasets=("cifar100" "cinic10" "cifar10") # "cifar100" "cinic10" "cifar10"
 #archs=("resnet56" "mobilenet" "wrn32_4" "vgg16") #"mobilenet" "wrn32_4" "vgg16"
@@ -52,16 +55,22 @@ DATA_DIR="/home/data/wangz56"
 #fprs=(0.01 0.1)
 
 # Define experiment parameters set comparing LiRA online vs offline
-datasets=("cifar10")
-archs=("resnet56")
-mias=("lira" "lira_offline")
-categories=("fpr")
-subcategories=("common_tp" "pairwise")
-experiment_dir="${DATA_DIR}/miae_standard_exp"
-option=("TPR")
-top_k=0 # means we are not consider any top k variation
-seeds=(0 1 2 3 4 5)
-fprs=(0.01 0.1)
+#datasets=("cifar10")
+#archs=("resnet56")
+#mias=("lira" "lira_offline")
+#categories=("fpr")
+#subcategories=("common_tp" "pairwise")
+#experiment_dir="${DATA_DIR}/miae_standard_exp"
+#option=("TPR")
+#top_k=0 # means we are not consider any top k variation
+#seeds=(0 1 2 3 4 5)
+#fprs=(0.01 0.1)
+
+
+# ------------------------------
+# |       actual scripts       |
+# |       do not modify        |
+# ------------------------------
 
 mialist=""
 for mia in "${mias[@]}"; do

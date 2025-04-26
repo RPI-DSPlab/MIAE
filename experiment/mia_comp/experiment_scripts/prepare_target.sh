@@ -2,19 +2,22 @@
 DATA_DIR="/home/data/wangz56"
 
 # This script is used to partition the dataset into target dataset and shadow dataset, then train the target model
-seed=0
-# for repeat training, we do shuffle_seed from 2 to 4. for repeat training 0 and regular training, we do shuffle_seed=1
-shuffle_seed=4
-data_dir="${DATA_DIR}/repeat_miae_standard_exp/miae_standard_exp_3/target"
+seed=0 # keep seed = 0
+# for repeat training, we do shuffle_seed from 2 to 4 to reshuffle the target-auxiliary dataset partition
+
+# for regular training, we do shuffle_seed from 1
+shuffle_seed=1
+data_dir="${DATA_DIR}/repeat_miae_standard_exp/target"
+#data_dir="${DATA_DIR}/repeat_miae_standard_exp/miae_standard_exp_0/target"
 mkdir -p "$data_dir"
 
 
-#datasets=("cifar10" "cifar100" "cinic10" "purchase100, taxes100")
-datasets=("purchase100" "texas100")
+datasets=("cifar10" "cifar100" "cinic10" "purchase100, taxes100")
+#datasets=("purchase100" "texas100")
 
 
-# archs=("resnet56" "wrn32_4" "vgg16" "mobilenet" "mlp_for_texas_purchase")
-archs=("mlp_for_texas_purchase")
+ archs=("resnet56" "wrn32_4" "vgg16" "mobilenet" "mlp_for_texas_purchase")
+#archs=("mlp_for_texas_purchase")
 
 prepare_path="${DATA_DIR}/prepare_sd${seed}"
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# run it by bash run_multi_seed.sh {0..5}
+# run it by: `bash run_multi_seed.sh {0..5}`
 # List of arguments
 seeds=("$@")
 

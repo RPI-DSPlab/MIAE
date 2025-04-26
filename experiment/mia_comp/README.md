@@ -32,16 +32,14 @@ NOTE: Scripts in this directory that are not explicitly mentioned in the section
 
 ⚠️ **NOTE**: To be able to set up the directory correctly, please replace the `DATA_DIR` in all the scripts with the path to the directory where you want to store the attack predictions and results. We also recommend to run all scripts (especially those bash script) in the `miae/experiment/mia_comp` directory. 
 
+⚠️ **NOTE**: Most bash scripts has different config set by commenting/uncommenting the lines. For example, in `experiment_scripts/obtain_venn.sh`, you can set the config of the venn diagram by commenting and uncommenting the lines. The same applies to other bash scripts.
+
 
 ## Set up the environment
 ```bash
 conda env create -f miae_env.yml
 conda activate miae
 ```
-
-
-
-
 
 -------------------
 ## Preparing Predictions of Multi-instances MIAs
@@ -67,7 +65,13 @@ Usage:
     ```bash
    bash experiment_scripts/obtain_pred.sh [seed]
    ```
-   where the last number is the seed of that instance.
+   where the [seed] is the seed of that instance.
+
+to launch multiple instances at one time:
+```bash
+   bash run_multi_seed.sh {0..5}
+   ```
+   0..5 is the range of the seeds you want to run.
 
 -------------------
 ## Comparing MIAs
@@ -103,22 +107,9 @@ The code is divided into three primary categories: Data Loading, Plot Diagram, a
    ```bash
    bash experiment_scripts/obtain_jaccard.sh
    ```
-
-
-### `obtain_accuracy.py` # expired
-   The `obtain_accuracy.py` is designed to save the accuracy of different MIAs under TPR@FPRs and balanced accuracy.
-   ```bash
-    bash experiment_scripts/obtain_accuracy.sh
-   ```
-
-### `ensemble.py` # expired
-   The `ensemble.py` is designed to adaptively ensemble the MIAs based on the performance of the individual MIAs or the target model's output on different samples
-   ```bash
-    python ensemble.py
-   ```
    
 ### `process_CINIC10.ipynb`
-   The `process_CINIC10.ipynb` is designed to process the CINIC10 dataset 30,000 ImageNet samples and 30,000 CIFAR10 samples.
+   The `process_CINIC10.ipynb` is designed to process the CINIC10 dataset 30,000 ImageNet samples and 30,000 CIFAR10 samples. Run it to make sure cinic10 is available in the `DATA_DIR`. 
 
 ## `/ensemble` Directory
 
@@ -130,14 +121,9 @@ This directory contains the code for the ensemble strategies proposed in the pap
 ### `ensemble_roc.py` 
    Ensemble roc samples n thresholds for n FPRs for each base instance. Then each attack goes through the steps of ensemble in `max_ensemble_low_fpr.ipynb` for n times with different thresholds to get n samples for each ensemble TPR@FPR. It also calculates the AUC, ACC and TPR@Low FPR for each ensemble.
 
-
 ### `ensemble_performance.ipynb` 
 
-This notebook is designed to compare the performance of the ensemble strategies proposed in the paper. It organize the performance result (TPR@low FPR, auc, acc) with respect to the number of instances used in the ensemble. 
-
-### `shadow_attack_threshold_exp.ipynb` # expired
-
-This notebook is designed to see whether the threshold of attack for a fpr on the auxilary dataset could generalize well on the test set.
+This notebook is designed to compare the performance of the ensemble strategies proposed in the paper. It organizes the performance result (TPR@low FPR, auc, acc) with respect to the number of instances used in the ensemble. 
 
 ___
 

@@ -1,8 +1,6 @@
 # modify this to set up directory:
 DATA_DIR="/home/data/wangz56"
 
-
-
 # This script is used to obtain the predictions of the attack on the target models
 seed=0
 
@@ -23,16 +21,13 @@ prepare_path="${preds_dir}/prepare_sd${seed}"
 mkdir -p "$preds_dir"
 
 
-datasets=("purchase100" "texas100")
-# datasets=("cifar10" "cifar100" "cinic10")
+#datasets=("purchase100" "texas100")
+ datasets=("cifar10" "cifar100" "cinic10")
 # datasets=("cifar10")
-# archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
+ archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
 # archs=("resnet56")
-archs=("mlp_for_texas_purchase")
-# archs=("resnet56" "vgg16")
-# mias=("lira" "reference" "shokri" "losstraj" "calibration" "yeom" "aug")
-mias=("lira" "reference")
-
+#archs=("mlp_for_texas_purchase")
+ mias=("lira" "reference" "shokri" "losstraj" "calibration" "yeom" "aug")
 
 
 
