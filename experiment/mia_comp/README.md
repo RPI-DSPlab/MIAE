@@ -25,7 +25,8 @@ NOTE: Scripts in this directory that are not explicitly mentioned in the section
 
 ## Abstract
 
-> Membership inference attacks not only demonstrate a significant threat to the privacy of machine learning models but are also widely utilized as tools for privacy assessment, auditing, and machine unlearning. While prior research has focused primarily on developing new attacks with improved performance metrics such as AUC and TPR@low FPR, it often overlooks the disparities among different attacks and their reliability, which are crucial when MIAs are employed as privacy tools. This paper proposes a systematic evaluation of membership inference attacks from a novel perspective, highlighting significant issues of instability and disparity. We delve into the potential impacts and causes of these issues through extensive evaluations and discuss their implications. Furthermore, we introduce two ensemble strategies that harness the strengths of multiple existing attacks, and our experiment demonstrates their advantages in enhancing the effectiveness of membership inference.
+> Membership inference attacks (MIAs) pose a significant threat to the privacy of machine learning models and are widely used as tools for privacy assessment, auditing, and machine unlearning. While prior MIA research has primarily focused on performance metrics such as AUC, accuracy, and TPR@low FPR—either by developing new methods to enhance these metrics or using them to evaluate privacy solutions—we found that it overlooks the disparities among different attacks. These disparities, both between distinct attack methods and between multiple instantiations of the same method, have crucial implications for the reliability and completeness of MIAs as privacy evaluation tools. In this paper, we systematically investigate these disparities through a novel framework based on coverage and stability analysis. Extensive experiments reveal significant disparities in MIAs, their potential causes, and their broader implications for privacy evaluation.
+To address these challenges, we propose an ensemble framework with three distinct strategies to harness the strengths of state-of-the-art MIAs while accounting for their disparities. This framework not only enables the construction of more powerful attacks but also provides a more robust and comprehensive methodology for privacy evaluation.
 
 
 
@@ -39,6 +40,13 @@ NOTE: Scripts in this directory that are not explicitly mentioned in the section
 ```bash
 conda env create -f miae_env.yml
 conda activate miae
+```
+
+## Quick fix for relative imports
+
+go to the root directory of the repo and run:
+```bash
+pip install -e miae
 ```
 
 -------------------

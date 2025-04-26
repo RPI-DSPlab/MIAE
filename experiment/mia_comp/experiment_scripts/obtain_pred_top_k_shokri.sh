@@ -1,7 +1,7 @@
 # a modified version of obtain_pred.sh that has a different directory structure
 
 # modify this to set up directory:
-DATA_DIR="/home/data/wangz56"
+DATA_DIR="data"
 
 
 

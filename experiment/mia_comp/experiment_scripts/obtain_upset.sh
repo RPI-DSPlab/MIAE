@@ -1,7 +1,7 @@
 # Description: This script is used to generate the upset plots for the MIAE experiment.
 
 # modify this to set up directory:
-DATA_DIR="/home/data/wangz56"
+DATA_DIR="data"
 datasets=("cifar10")
 archs=("resnet56")
 mias=("losstraj" "lira" "reference")
