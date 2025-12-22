@@ -31,14 +31,14 @@ To implement a new attack, create a new file in this directory. In this file, de
 For examples of how to implement an attack, see the existing attack implementations in this directory.
 
 ## Attacks
-| filename             | Attack                  | Paper                                                                                  |
-|----------------------|-------------------------|----------------------------------------------------------------------------------------|
-| `aug_mia.py`         | Augmentation Attack     | Label-Only Membership Inference Attacks, PMLR 2021                                     |
-| `calibration_mia.py` | Calibration Loss Attack | On the Importance of Difficulty Calibration in Membership Inference Attacks, ICLR 2022 |
-| `lira_mia`           | LiRA Attack             | Membership Inference Attacks From First Principles", S&P 2022                          |
-| `shokri_mia.py`      | Class-NN Attack         | Membership Inference Attacks Against Machine Learning Models, IEEE S&P 2017            |
-| `losstraj_mia.py`    | Loss Trajectory Attack  | Membership Inference Attacks by Exploiting Loss Trajectory, CCS 2022                   |
-| `reference_mia.py`   | Reference Attack        | Enhanced Membership Inference Attacks against Machine Learning Models, CCS 2022        |
+| filename             | Attack                  | Paper         | ready                                                                         |
+|----------------------|-------------------------|----------------------------------------------------------------------------------------| ---------|
+| `aug_mia.py`         | Augmentation Attack     | Label-Only Membership Inference Attacks, PMLR 2021                                     |✅|
+| `calibration_mia.py` | Calibration Loss Attack | On the Importance of Difficulty Calibration in Membership Inference Attacks, ICLR 2022 | ✅|
+| `lira_mia`           | LiRA Attack             | Membership Inference Attacks From First Principles", S&P 2022                          | ✅|
+| `shokri_mia.py`      | Class-NN Attack         | Membership Inference Attacks Against Machine Learning Models, IEEE S&P 2017            | ✅|
+| `losstraj_mia.py`    | Loss Trajectory Attack  | Membership Inference Attacks by Exploiting Loss Trajectory, CCS 2022                   | ✅|
+| `reference_mia.py`   | Reference Attack        | Enhanced Membership Inference Attacks against Machine Learning Models, CCS 2022        | ✅|
 | `yeom_mia.py`        | LOSS Attack             | Privacy Risk in Machine Learning: Analyzing the Connection to Overfitting, IEEE S&P 2018|
 
 Any attack file not listed here are not fully implemented yet.
