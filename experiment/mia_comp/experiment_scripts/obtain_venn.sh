@@ -1,7 +1,7 @@
 # This script generates Venn diagrams for the MIAE experiment under different settings
 
 # modify this to set up directory:
-DATA_DIR="/home/data/wangz56"
+DATA_DIR="data"
 
 # ---------- Experiment Parameters ----------
 # |     uncomment the one you want to run   |

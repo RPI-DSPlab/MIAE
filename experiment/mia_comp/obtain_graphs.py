@@ -1,6 +1,6 @@
 """
 This file is used to obtain the graphs of MIA experiments on a specific target model, dataset and seeds.
-The graphs include: Venn diagrams; AUC graphs; Hardness distribution graphs
+The graphs include: Venn diagrams; AUC graphs;
 
 Three types of venn diagrams:
 1. Venn diagram of the single attack with different seeds  ==> to check how stable the attack is with different seeds
@@ -16,12 +16,8 @@ import numpy as np
 import sys
 sys.path.append(os.path.join(os.getcwd(), "..", ".."))
 
-import miae.eval_methods.sample_hardness
 import miae.eval_methods.prediction as prediction
-import miae.eval_methods.sample_hardness as SampleHardness
 import miae.visualization.venn_diagram as venn_diagram
-import miae.visualization.upset_diagram as upset_diagram
-
 import miae.eval_methods.prediction
 from miae.eval_methods import experiment
 
@@ -242,70 +238,6 @@ def plot_auc(predictions: Dict[str, prediction.Predictions], graph_title: str, g
     prediction.plot_auc(prediction_list, attack_names, graph_title, fprs, graph_path)
 
 
-def plot_hardness_distribution(
-        predictions: Dict[str, List[prediction.Predictions]] or Dict[str, prediction.Predictions],
-        hardness: SampleHardness,
-        graph_title: str, graph_path: str, fpr_list: List[float] = None):
-    """
-    plot the hardness distribution of the different attacks
-    :param predictions: List[Predictions]: list of Predictions objects
-    :param graph_title: str: title of the graph
-    :param graph_path: str: path to save the graph
-    :param hardness: str: type of hardness: [il, pd]
-    :return: None
-    """
-    attack_names, prediction_list = [], []
-    for attack, pred in predictions.items():
-        attack_names.append(attack)
-        prediction_list.append(pred)
-
-        if fpr_list is None:  # prediction is determined by 0.5 threshold
-            attack_tp = pred.get_tp()
-            hardness.plot_distribution_pred_TP(attack_tp, save_path=graph_path + f"_vs_{attack}_tp.png",
-                                               title=graph_title + f" {attack} TP")
-
-        else:  # prediction is determined by fpr threshold
-            for fpr in fpr_list:
-                attack_tp = prediction.union_tp(pred, fpr)
-                hardness.plot_distribution_pred_TP(attack_tp, save_path=graph_path + f"_vs_{attack}_tp_fpr{fpr}.png",
-                                                   title=graph_title + f" {attack} TP at {fpr} FPR")
-
-def plot_hardness_distribution_unique(
-        predictions: Dict[str, List[prediction.Predictions]] or Dict[str, prediction.Predictions],
-        hardness: SampleHardness,
-        graph_title: str, graph_path: str, fpr_list: List[float]):
-    """
-    plot the hardness distribution of the different attacks for all attacks on one plot,
-    each color represent oen attack's uniquely attacked TP data points
-    :param predictions: List[Predictions]: list of Predictions objects
-    :param graph_title: str: title of the graph
-    :param graph_path: str: path to save the graph
-    :param hardness: str: type of hardness: [il, pd]
-    :return: None
-    """
-    attack_names, prediction_list = [], []
-    for fpr in fpr_list:
-        common_tp_across_attacks = None
-        tp_each_attack = []
-        for attack, pred in predictions.items():
-            attack_names.append(attack)
-            prediction_list.append(pred)
-            attack_tp = prediction.union_tp(pred, fpr)
-            if common_tp_across_attacks == None:  # first set to intersect
-                common_tp_across_attacks = set(attack_tp)
-            else:
-                common_tp_across_attacks = common_tp_across_attacks.intersection(set(attack_tp))
-            tp_each_attack.append(attack_tp)
-
-        # stores the tp samples that's unique to each attack
-        unqiue_tp_each_attack = [tp - common_tp_across_attacks for tp in tp_each_attack]
-
-        hardness.plot_distribution_pred_TP(unqiue_tp_each_attack,
-                                           save_path=graph_path + f"_unique_tp_each_attack_fpr{fpr}.png",
-                                           title=graph_title + f" unique TP for each attack at {fpr} FPR",
-                                           labels=attack_names, no_hardness=True)
-
-
 def multi_seed_convergence(predictions: Dict[str, List[prediction.Predictions]], graph_title: str, graph_path: str,
                            set_op, attack_fpr=None):
     """
@@ -416,7 +348,7 @@ if __name__ == '__main__':
                         help='target model arch: [resnet56, wrn32_4, vgg16, mobilenet]')
     parser.add_argument("--attacks", type=str, nargs="+", default=None, help='MIA type: [losstraj, yeom, shokri]')
     parser.add_argument("--graph_type", type=str, default="venn",
-                        help="graph_type: [venn, auc, hardness_distribution, multi_seed_convergence]")
+                        help="graph_type: [venn, auc, multi_seed_convergence]")
     parser.add_argument("--graph_title", type=str, help="Title of the graph")
     parser.add_argument("--graph_path", type=str, help="Path to save the graph")
     parser.add_argument("--data_path", type=str, help="Path to the original predictions and target dataset")
@@ -442,11 +374,6 @@ if __name__ == '__main__':
     # for convergence graph
     parser.add_argument("--fpr", type=float, nargs="+",
                         help="fprs of instances for convergence graph (coverage/stability) to be aggregating from")
-
-    # for hardness distribution graph
-    parser.add_argument("--hardness", type=str, default="None", help="Type of hardness: [il, pd, external]")
-    parser.add_argument("--hardness_path", type=str, help="Path to the hardness file")
-    parser.add_argument("--external", type=int, help="whether it’s an external hardness")
 
     # for single seed ensemble graph
     parser.add_argument("--skip", type=int, default=0, help="Number of seeds to skip for each ensemble plotting")
@@ -553,21 +480,6 @@ if __name__ == '__main__':
        else:
             raise ValueError(f"Invalid graph goal for Venn Diagram: {args.graph_goal}")
 
-    elif args.graph_type == "upset":
-        if args.graph_goal == "common_tp":
-            pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path,
-                                                    args.seed)
-            if args.threshold != 0:
-                pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=args.threshold,
-                                                                                 target_fpr=None, option=args.option)
-                df_or, df_and = upset_diagram.data_process_for_upset(pred_or_list, pred_and_list)
-                upset_diagram.plot_upset(df_or, df_and, args.graph_path)
-            elif args.threshold == 0:
-                pred_or_list, pred_and_list = venn_diagram.data_process_for_venn(pred_dict, threshold=0,
-                                                                                 target_fpr=args.FPR, option=args.option)
-                df_or, df_and = upset_diagram.data_process_for_upset(pred_or_list, pred_and_list)
-                upset_diagram.plot_upset(df_or, df_and, args.graph_path)
-
     elif args.graph_type == "auc":
         pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR,
                                            args.seed)
@@ -577,18 +489,6 @@ if __name__ == '__main__':
                 plot_auc(pred_dict_seed, args.graph_title + f" sd{seed}", args.graph_path + f"_sd{seed}.pdf", args.fpr)
             else:
                 plot_auc(pred_dict_seed, args.graph_title + f" sd{seed}", args.graph_path + f"_sd{seed}.pdf", None)
-
-    elif args.graph_type == "hardness_distribution":
-        pred_dict = load_diff_distribution(args.attacks, args.dataset_list, args.architecture, args.data_path, args.FPR,
-                                           args.seed)
-        if args.external == 0:
-            path_to_load = f"{args.hardness_path}/{args.dataset}/{args.architecture}/{args.hardness}/{args.hardness}_score.pkl"
-        else:
-            path_to_load = args.hardness_path
-        hardness_arr = SampleHardness.load_sample_hardness(path_to_load)
-        hardness = SampleHardness.SampleHardness(hardness_arr, args.hardness)
-        plot_hardness_distribution(pred_dict, hardness, args.graph_title, args.graph_path, args.fpr)
-        plot_hardness_distribution_unique(pred_dict, hardness, args.graph_title, args.graph_path, args.fpr)
 
     elif args.graph_type == "multi_seed_convergence_intersection":
         pred_dict = load_and_create_predictions(args.attacks, args.dataset, args.architecture, args.data_path,

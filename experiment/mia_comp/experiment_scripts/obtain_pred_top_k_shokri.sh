@@ -1,7 +1,7 @@
 # a modified version of obtain_pred.sh that has a different directory structure
 
 # modify this to set up directory:
-DATA_DIR="/home/data/wangz56"
+DATA_DIR="data"
 
 
 
@@ -14,9 +14,9 @@ fi
 
 echo "obtain_pred.sh seed = $seed"
 
-data_dir="${DATA_DIR}/top_k_shokri_new/target"
+data_dir="${DATA_DIR}/top_k_shokri/target"
 
-preds_dir="${DATA_DIR}/top_k_shokri_new/preds_sd${seed}"
+preds_dir="${DATA_DIR}/top_k_shokri/preds_sd${seed}"
 
 target_model_path="$data_dir/target_models"
 
@@ -26,13 +26,9 @@ mkdir -p "$preds_dir"
 
 
 # datasets=("purchase100" "texas100")
-# datasets=("cifar10" "cifar100" "cinic10")
-datasets=("cifar10")
-# archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
-archs=("resnet56")
+ datasets=("cifar10" "cifar100" "cinic10")
+ archs=("resnet56" "wrn32_4" "vgg16" "mobilenet")
 # archs=("mlp_for_texas_purchase")
-# archs=("resnet56" "vgg16")
-# mias=("lira" "reference" "shokri" "losstraj" "calibration" "yeom" "aug")
 mias=("top_k_shokri")
 
 

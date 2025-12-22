@@ -3,7 +3,7 @@ This script is used to generate ROC curve for the 2 stage ensemble in the paper.
 """
 
 # modify this to set up directory:
-DATA_DIR="/home/data/wangz56"
+DATA_DIR="data"
 
 import os
 import numpy as np

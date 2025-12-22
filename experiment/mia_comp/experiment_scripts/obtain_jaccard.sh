@@ -2,7 +2,7 @@
 # This script is used to obtain the Jaccard similarity between the TPR of the MIAE and standard attack models for different FPRs.
 
 # modify this to set up directory:
-DATA_DIR="/home/data/wangz56"
+DATA_DIR="data"
 
 # Configuration
 datasets=("cifar100" "cifar10")

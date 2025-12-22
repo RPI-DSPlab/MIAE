@@ -1,5 +1,5 @@
 # modify this to set up directory:
-DATA_DIR="/home/data/wangz56"
+DATA_DIR="data"
 
 # This script is used to obtain the predictions of the attack on the target models
 seed=0
@@ -92,6 +92,7 @@ fi
             --target_epochs "$num_epoch" \
             --data_path "$data_dir" \
             --device "cuda:0" \
+            --dataset_file_root="$data_dir" \
             --lira_shadow_path "$lira_shadow_dir"
 
             rm -r "$prepare_path"

@@ -1,5 +1,5 @@
 # modify this to set up directory:
-DATA_DIR="/home/data/wangz56"
+DATA_DIR="data"
 
 
 experiment_dir='${DATA_DIR}/miae_experiment_aug_more_target_data'

@@ -4,7 +4,7 @@
 # List of arguments
 seeds=("$@")
 
-DATA_DIR="/home/data/wangz56"
+DATA_DIR="data"
 
 script_out_dir=$DATA_DIR``
 
