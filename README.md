@@ -1,6 +1,6 @@
 # MIAE (Membership Inference Attacks and Evaluation) 
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15491989.svg)](https://doi.org/10.5281/zenodo.15491989) [![arXiv](https://img.shields.io/badge/arXiv-1234.56789-b31b1b.svg)](https://arxiv.org/abs/2506.13972)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15491989.svg)](https://doi.org/10.5281/zenodo.15491989) [![arXiv](https://img.shields.io/badge/arXiv-2506.13972-b31b1b.svg)](https://arxiv.org/abs/2506.13972)
 
 MIAE is a versatile Python framework for evaluating Membership Inference Attacks (MIAs), emphasizing the disparity of MIAs. It provides a modular interface for implementing and evaluating various MIA strategies against machine learning models.
 
